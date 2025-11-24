@@ -1,90 +1,48 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import multer from "multer";
-import Papa from "papaparse";
-import type { Address, ComparisonResult } from "@shared/schema";
+import type { ComparisonResult } from "@shared/schema";
+import { storage } from "./storage";
+import { parseFile } from "./file-parser";
 
 const upload = multer({ storage: multer.memoryStorage() });
 
-function parseCSVContent(content: string): Address[] {
-  const addresses: Address[] = [];
-  const seenAddresses = new Set<string>();
-  
-  // Split into lines and process
-  const lines = content.split(/\r?\n/);
-  
-  // Group lines into entries (each entry starts with an address or is separated by blank lines)
-  let currentEntry: string[] = [];
-  
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i].trim();
-    
-    // If we find an address, start a new entry
-    // More flexible to handle test/placeholder addresses
-    const addressMatch = line.match(/0x[a-zA-Z0-9]{40,42}/);
-    if (addressMatch) {
-      // Process previous entry if it exists
-      if (currentEntry.length > 0) {
-        const parsed = parseEntry(currentEntry.join('\n'));
-        if (parsed && !seenAddresses.has(parsed.address.toLowerCase())) {
-          addresses.push(parsed);
-          seenAddresses.add(parsed.address.toLowerCase());
-        }
-      }
-      // Start new entry
-      currentEntry = [line];
-    } else if (line) {
-      // Non-empty, non-address line - add to current entry
-      if (currentEntry.length > 0) {
-        currentEntry.push(line);
-      }
-    }
-    // Ignore blank lines - they don't end entries
-  }
-  
-  // Process last entry
-  if (currentEntry.length > 0) {
-    const parsed = parseEntry(currentEntry.join('\n'));
-    if (parsed && !seenAddresses.has(parsed.address.toLowerCase())) {
-      addresses.push(parsed);
-      seenAddresses.add(parsed.address.toLowerCase());
-    }
-  }
-  
-  return addresses;
-}
-
-function parseEntry(entryText: string): Address | null {
-  // Extract Ethereum-like address (0x followed by characters)
-  // More flexible to handle test/placeholder addresses
-  const addressMatch = entryText.match(/0x[a-zA-Z0-9]{40,42}/);
-  if (!addressMatch) return null;
-  
-  const address = addressMatch[0].trim();
-  
-  // Extract username (starts with @)
-  const usernameMatch = entryText.match(/@(\w+)/);
-  const username = usernameMatch ? usernameMatch[1] : undefined;
-  
-  // Extract points (number followed by 'pts')
-  const pointsMatch = entryText.match(/([\d,]+)\s*pts/);
-  const points = pointsMatch 
-    ? parseFloat(pointsMatch[1].replace(/,/g, '')) 
-    : undefined;
-  
-  // Extract rank (starts with #)
-  const rankMatch = entryText.match(/#(\d+)/);
-  const rank = rankMatch ? parseInt(rankMatch[1]) : undefined;
-  
-  return {
-    address,
-    username,
-    points,
-    rank,
-  };
-}
-
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Get comparison history
+  app.get("/api/comparisons", async (req, res) => {
+    try {
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : 50;
+      const comparisons = await storage.getComparisons(limit);
+      res.json(comparisons);
+    } catch (error) {
+      console.error("Error fetching comparisons:", error);
+      res.status(500).json({
+        error: "Failed to fetch comparison history",
+        message: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  });
+
+  // Get single comparison
+  app.get("/api/comparisons/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const comparison = await storage.getComparison(id);
+      
+      if (!comparison) {
+        return res.status(404).json({ error: "Comparison not found" });
+      }
+      
+      res.json(comparison);
+    } catch (error) {
+      console.error("Error fetching comparison:", error);
+      res.status(500).json({
+        error: "Failed to fetch comparison",
+        message: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  });
+
   app.post(
     "/api/compare",
     upload.fields([
@@ -101,30 +59,57 @@ export async function registerRoutes(app: Express): Promise<Server> {
           });
         }
 
-        const mintedContent = files.minted[0].buffer.toString('utf-8');
-        const eligibleContent = files.eligible[0].buffer.toString('utf-8');
-        
-        const mintedAddresses = parseCSVContent(mintedContent);
-        const eligibleAddresses = parseCSVContent(eligibleContent);
+        const mintedFile = files.minted[0];
+        const eligibleFile = files.eligible[0];
+
+        // Use the unified parser that supports CSV, JSON, and Excel
+        const mintedParsed = parseFile(mintedFile.originalname, mintedFile.buffer);
+        const eligibleParsed = parseFile(eligibleFile.originalname, eligibleFile.buffer);
 
         // Create a Set of minted addresses for fast lookup (case-insensitive)
         const mintedSet = new Set(
-          mintedAddresses.map(addr => addr.address.toLowerCase())
+          mintedParsed.addresses.map(addr => addr.address.toLowerCase())
         );
 
         // Filter eligible addresses that are NOT in the minted set
-        const notMinted = eligibleAddresses.filter(
+        const notMinted = eligibleParsed.addresses.filter(
           addr => !mintedSet.has(addr.address.toLowerCase())
         );
+
+        // Combine validation errors from both files
+        const allValidationErrors = [
+          ...mintedParsed.validationErrors.map(e => ({ ...e, file: 'minted' as const })),
+          ...eligibleParsed.validationErrors.map(e => ({ ...e, file: 'eligible' as const })),
+        ];
+
+        const totalInvalid = mintedParsed.invalidCount + eligibleParsed.invalidCount;
 
         const result: ComparisonResult = {
           notMinted,
           stats: {
-            totalEligible: eligibleAddresses.length,
-            totalMinted: mintedAddresses.length,
+            totalEligible: eligibleParsed.addresses.length,
+            totalMinted: mintedParsed.addresses.length,
             remaining: notMinted.length,
+            invalidAddresses: totalInvalid > 0 ? totalInvalid : undefined,
           },
+          validationErrors: allValidationErrors.length > 0 ? allValidationErrors : undefined,
         };
+
+        // Save comparison to database
+        try {
+          await storage.createComparison({
+            mintedFileName: mintedFile.originalname,
+            eligibleFileName: eligibleFile.originalname,
+            totalEligible: result.stats.totalEligible,
+            totalMinted: result.stats.totalMinted,
+            remaining: result.stats.remaining,
+            invalidAddresses: result.stats.invalidAddresses || null,
+            results: result as any,
+          });
+        } catch (dbError) {
+          console.error("Failed to save comparison to database:", dbError);
+          // Don't fail the request if database save fails
+        }
 
         res.json(result);
       } catch (error) {

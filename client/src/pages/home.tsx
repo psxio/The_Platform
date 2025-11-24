@@ -30,20 +30,26 @@ export default function Home() {
       else setDragOverEligible(false);
 
       const files = Array.from(e.dataTransfer.files);
-      const csvFile = files.find(file => 
+      const validFile = files.find(file => 
         file.name.endsWith('.csv') || 
-        file.name.endsWith('.txt') || 
+        file.name.endsWith('.txt') ||
+        file.name.endsWith('.json') ||
+        file.name.endsWith('.xlsx') ||
+        file.name.endsWith('.xls') ||
         file.type === 'text/csv' ||
-        file.type === 'text/plain'
+        file.type === 'text/plain' ||
+        file.type === 'application/json' ||
+        file.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+        file.type === 'application/vnd.ms-excel'
       );
 
-      if (csvFile) {
-        if (type === "minted") setMintedFile(csvFile);
-        else setEligibleFile(csvFile);
+      if (validFile) {
+        if (type === "minted") setMintedFile(validFile);
+        else setEligibleFile(validFile);
       } else {
         toast({
           title: "Invalid file type",
-          description: "Please upload a CSV or TXT file",
+          description: "Please upload a CSV, TXT, JSON, or Excel file",
           variant: "destructive",
         });
       }
@@ -66,7 +72,7 @@ export default function Home() {
     if (!mintedFile || !eligibleFile) {
       toast({
         title: "Missing files",
-        description: "Please upload both CSV files to continue",
+        description: "Please upload both files to continue",
         variant: "destructive",
       });
       return;
@@ -90,9 +96,14 @@ export default function Home() {
       const data = await response.json();
       setResults(data);
       
+      const invalidWarning = data.stats.invalidAddresses 
+        ? ` (${data.stats.invalidAddresses} invalid addresses skipped)`
+        : '';
+      
       toast({
         title: "Processing complete",
-        description: `Found ${data.stats.remaining} addresses eligible to mint`,
+        description: `Found ${data.stats.remaining} addresses eligible to mint${invalidWarning}`,
+        variant: data.stats.invalidAddresses ? "default" : "default",
       });
     } catch (error) {
       toast({
@@ -208,7 +219,7 @@ export default function Home() {
                   </div>
                   <div>
                     <p className="font-medium text-foreground mb-1">
-                      Drop CSV file here
+                      Drop file here
                     </p>
                     <p className="text-sm text-muted-foreground">
                       or click to browse
@@ -216,7 +227,7 @@ export default function Home() {
                   </div>
                   <input
                     type="file"
-                    accept=".csv,.txt,text/csv,text/plain"
+                    accept=".csv,.txt,.json,.xlsx,.xls,text/csv,text/plain,application/json,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
                     onChange={(e) => handleFileSelect(e, "minted")}
                     className="hidden"
                     id="minted-upload"
@@ -231,7 +242,7 @@ export default function Home() {
                     <FileText className="w-4 h-4 mr-2" />
                     Browse Files
                   </Button>
-                  <p className="text-xs text-muted-foreground">CSV or TXT files only</p>
+                  <p className="text-xs text-muted-foreground">CSV, TXT, JSON, or Excel files</p>
                 </div>
               )}
             </div>
@@ -289,7 +300,7 @@ export default function Home() {
                   </div>
                   <div>
                     <p className="font-medium text-foreground mb-1">
-                      Drop CSV file here
+                      Drop file here
                     </p>
                     <p className="text-sm text-muted-foreground">
                       or click to browse
@@ -297,7 +308,7 @@ export default function Home() {
                   </div>
                   <input
                     type="file"
-                    accept=".csv,.txt,text/csv,text/plain"
+                    accept=".csv,.txt,.json,.xlsx,.xls,text/csv,text/plain,application/json,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
                     onChange={(e) => handleFileSelect(e, "eligible")}
                     className="hidden"
                     id="eligible-upload"
@@ -312,7 +323,7 @@ export default function Home() {
                     <FileText className="w-4 h-4 mr-2" />
                     Browse Files
                   </Button>
-                  <p className="text-xs text-muted-foreground">CSV or TXT files only</p>
+                  <p className="text-xs text-muted-foreground">CSV, TXT, JSON, or Excel files</p>
                 </div>
               )}
             </div>
@@ -351,6 +362,32 @@ export default function Home() {
 
         {results && (
           <>
+            {results.validationErrors && results.validationErrors.length > 0 && (
+              <Card className="mb-6 border-destructive/50">
+                <CardHeader>
+                  <CardTitle className="text-destructive">Validation Warnings</CardTitle>
+                  <CardDescription>
+                    {results.stats.invalidAddresses} invalid address{results.stats.invalidAddresses !== 1 ? 'es' : ''} found and skipped
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2 max-h-48 overflow-y-auto">
+                    {results.validationErrors.slice(0, 10).map((error, idx) => (
+                      <div key={idx} className="text-sm p-2 bg-destructive/10 rounded border border-destructive/20">
+                        <span className="font-mono text-xs">{error.address}</span>
+                        <span className="text-muted-foreground ml-2">- {error.error}</span>
+                      </div>
+                    ))}
+                    {results.validationErrors.length > 10 && (
+                      <p className="text-sm text-muted-foreground">
+                        ... and {results.validationErrors.length - 10} more
+                      </p>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             <div className="grid md:grid-cols-3 gap-6 mb-8">
               <Card data-testid="card-total-eligible">
                 <CardHeader className="pb-3">

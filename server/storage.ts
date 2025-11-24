@@ -1,38 +1,38 @@
-import { type User, type InsertUser } from "@shared/schema";
-import { randomUUID } from "crypto";
-
-// modify the interface with any CRUD methods
-// you might need
+import { type Comparison, type InsertComparison, comparisons } from "@shared/schema";
+import { db } from "./db";
+import { desc, eq } from "drizzle-orm";
 
 export interface IStorage {
-  getUser(id: string): Promise<User | undefined>;
-  getUserByUsername(username: string): Promise<User | undefined>;
-  createUser(user: InsertUser): Promise<User>;
+  // Comparison history methods
+  createComparison(comparison: InsertComparison): Promise<Comparison>;
+  getComparisons(limit?: number): Promise<Comparison[]>;
+  getComparison(id: number): Promise<Comparison | undefined>;
 }
 
-export class MemStorage implements IStorage {
-  private users: Map<string, User>;
-
-  constructor() {
-    this.users = new Map();
+export class DbStorage implements IStorage {
+  async createComparison(insertComparison: InsertComparison): Promise<Comparison> {
+    const [comparison] = await db
+      .insert(comparisons)
+      .values(insertComparison)
+      .returning();
+    return comparison;
   }
 
-  async getUser(id: string): Promise<User | undefined> {
-    return this.users.get(id);
+  async getComparisons(limit: number = 50): Promise<Comparison[]> {
+    return db
+      .select()
+      .from(comparisons)
+      .orderBy(desc(comparisons.createdAt))
+      .limit(limit);
   }
 
-  async getUserByUsername(username: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(
-      (user) => user.username === username,
-    );
-  }
-
-  async createUser(insertUser: InsertUser): Promise<User> {
-    const id = randomUUID();
-    const user: User = { ...insertUser, id };
-    this.users.set(id, user);
-    return user;
+  async getComparison(id: number): Promise<Comparison | undefined> {
+    const [comparison] = await db
+      .select()
+      .from(comparisons)
+      .where(eq(comparisons.id, id));
+    return comparison;
   }
 }
 
-export const storage = new MemStorage();
+export const storage = new DbStorage();

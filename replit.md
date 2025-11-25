@@ -28,9 +28,11 @@ Preferred communication style: Simple, everyday language.
 - No global state management solution (context-based patterns where needed)
 
 **Key Design Decisions**:
-- Two-page application with navigation between Compare and History pages
+- Four-page application with navigation between Compare, Extract, Collections, and History pages
 - Drag-and-drop file upload zones with visual feedback for multiple file formats
 - Real-time file parsing and comparison with Ethereum address validation
+- Collection-based system for storing minted addresses per NFT collection
+- Dual-mode comparison: upload minted file OR select pre-stored collection
 - Statistics dashboard displaying total eligible, already minted, and remaining addresses
 - Searchable results table with download capability
 - Comparison history with persistent storage in PostgreSQL
@@ -65,9 +67,16 @@ Preferred communication style: Simple, everyday language.
 
 **API Endpoints**:
 - POST `/api/compare` - Upload and compare two files
+- POST `/api/compare-collection` - Compare eligible file against a stored collection
 - POST `/api/extract` - Extract EVM addresses from any file (PDF, CSV, TXT, JSON, Excel, HTML)
 - GET `/api/comparisons` - Retrieve comparison history (with optional limit query param)
 - GET `/api/comparisons/:id` - Retrieve specific comparison by ID
+- GET `/api/collections` - List all collections with address counts
+- POST `/api/collections` - Create a new collection
+- GET `/api/collections/:id` - Get collection details
+- DELETE `/api/collections/:id` - Delete a collection (cascades to addresses)
+- POST `/api/collections/:id/addresses` - Add addresses to a collection
+- DELETE `/api/collections/:id/addresses` - Remove addresses from a collection
 
 **Development vs Production**:
 - Development: Vite dev server with HMR and specialized error handling
@@ -77,9 +86,24 @@ Preferred communication style: Simple, everyday language.
 
 **Current Implementation**: PostgreSQL database with Drizzle ORM for persistent comparison history storage.
 
-**Database Schema**: Defined in `shared/schema.ts` with comparisons table:
+**Database Schema**: Defined in `shared/schema.ts`:
+
+Collections table:
 - id (serial): Auto-incrementing primary key
-- mintedFileName (varchar): Name of minted addresses file
+- name (text): Collection name (unique)
+- description (text, nullable): Collection description
+- createdAt (timestamp): When collection was created
+
+Minted Addresses table:
+- id (serial): Auto-incrementing primary key
+- collectionId (integer): Foreign key to collections table (cascades on delete)
+- address (text): Ethereum wallet address (lowercase normalized)
+- createdAt (timestamp): When address was added
+
+Comparisons table:
+- id (serial): Auto-incrementing primary key
+- collectionId (integer, nullable): Foreign key to collections table (if using stored collection)
+- mintedFileName (varchar): Name of minted addresses file/collection
 - eligibleFileName (varchar): Name of eligible addresses file
 - totalEligible (integer): Count of total eligible addresses
 - totalMinted (integer): Count of already minted addresses
@@ -91,6 +115,7 @@ Preferred communication style: Simple, everyday language.
 **Data Models**:
 - Address: Contains wallet address, optional username, points, and rank
 - ComparisonResult: Contains array of non-minted addresses, statistics object, and optional validation errors
+- Collection: Database record with name, description, and address count
 - Comparison: Database record with file names, statistics, and full results
 
 ### External Dependencies
@@ -141,8 +166,18 @@ Preferred communication style: Simple, everyday language.
 
 ## Recent Changes (November 25, 2025)
 
-1. **Address Extractor Feature**: New Extract page that scans any file (PDF, CSV, TXT, JSON, Excel, HTML) to automatically find and extract all EVM wallet addresses, with CSV download capability
-2. **Three-Page Navigation**: Updated UI with Compare, Extract, and History tabs
+1. **Collection-Based System**: New Collections page for managing NFT collection minted address lists
+   - Create and delete collections with names and descriptions
+   - Upload addresses via file (CSV, TXT, JSON, Excel) or paste directly
+   - Address validation and deduplication at backend level
+   - Addresses stored per collection with cascade delete
+2. **Dual-Mode Comparison**: Compare page now supports two modes
+   - File mode: Upload both minted and eligible files (original behavior)
+   - Collection mode: Select a stored collection and upload only eligible file
+   - Toggle between modes with File/Collection buttons
+3. **4444 Collection**: Pre-loaded with 592 minted addresses from attached CSV
+4. **Four-Page Navigation**: Updated UI with Compare, Extract, Collections, and History tabs
+5. **Address Extractor Feature**: New Extract page that scans any file (PDF, CSV, TXT, JSON, Excel, HTML) to automatically find and extract all EVM wallet addresses, with CSV download capability
 
 ## Previous Changes (November 24, 2025)
 

@@ -853,14 +853,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ================== USER ROLE ENDPOINTS ==================
 
-  // Update user role
+  // Generate random invite code
+  function generateInviteCode(): string {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let code = '';
+    for (let i = 0; i < 12; i++) {
+      code += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return code;
+  }
+
+  // Update user role - admin role requires valid invite code
   app.patch("/api/auth/role", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.id;
-      const { role } = req.body;
+      const { role, adminCode } = req.body;
       
       if (!role || !["web3", "content", "admin"].includes(role)) {
         return res.status(400).json({ error: "Valid role is required (web3, content, or admin)" });
+      }
+      
+      // Admin role requires a valid invite code
+      if (role === "admin") {
+        // Check for initial admin code from environment variable
+        const initialAdminCode = process.env.INITIAL_ADMIN_CODE;
+        
+        if (!adminCode) {
+          return res.status(400).json({ error: "Admin invite code is required" });
+        }
+        
+        // First check if it's the initial admin code
+        if (initialAdminCode && adminCode === initialAdminCode) {
+          // Use the initial code - it can only be used once
+          // After first use, they should generate codes for others
+        } else {
+          // Check database for valid invite code
+          const validCode = await storage.getValidAdminInviteCode(adminCode);
+          if (!validCode) {
+            return res.status(400).json({ error: "Invalid or expired admin invite code" });
+          }
+          
+          // Mark the code as used
+          await storage.useAdminInviteCode(adminCode, userId);
+        }
       }
       
       const user = await storage.updateUserRole(userId, role);
@@ -872,6 +907,89 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error updating role:", error);
       res.status(500).json({ error: "Failed to update role" });
+    }
+  });
+
+  // ================== ADMIN INVITE CODE ENDPOINTS ==================
+  // These require admin role
+
+  // Generate new admin invite code (admins only)
+  app.post("/api/admin/invite-codes", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await storage.getUser(req.user.id);
+      if (!user || user.role !== "admin") {
+        return res.status(403).json({ error: "Only admins can generate invite codes" });
+      }
+      
+      const code = generateInviteCode();
+      const inviteCode = await storage.createAdminInviteCode(code, req.user.id);
+      
+      res.status(201).json(inviteCode);
+    } catch (error) {
+      console.error("Error generating invite code:", error);
+      res.status(500).json({ error: "Failed to generate invite code" });
+    }
+  });
+
+  // Get admin's generated invite codes (admins only)
+  app.get("/api/admin/invite-codes", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await storage.getUser(req.user.id);
+      if (!user || user.role !== "admin") {
+        return res.status(403).json({ error: "Only admins can view invite codes" });
+      }
+      
+      const codes = await storage.getAdminInviteCodes(req.user.id);
+      res.json(codes);
+    } catch (error) {
+      console.error("Error fetching invite codes:", error);
+      res.status(500).json({ error: "Failed to fetch invite codes" });
+    }
+  });
+
+  // Deactivate an invite code (admins only)
+  app.delete("/api/admin/invite-codes/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await storage.getUser(req.user.id);
+      if (!user || user.role !== "admin") {
+        return res.status(403).json({ error: "Only admins can deactivate invite codes" });
+      }
+      
+      const id = parseInt(req.params.id);
+      const success = await storage.deactivateAdminInviteCode(id);
+      
+      if (!success) {
+        return res.status(404).json({ error: "Invite code not found" });
+      }
+      
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deactivating invite code:", error);
+      res.status(500).json({ error: "Failed to deactivate invite code" });
+    }
+  });
+
+  // Validate an admin code (for frontend validation before submitting)
+  app.post("/api/admin/validate-code", async (req, res) => {
+    try {
+      const { code } = req.body;
+      
+      if (!code) {
+        return res.status(400).json({ valid: false, error: "Code is required" });
+      }
+      
+      // Check initial admin code
+      const initialAdminCode = process.env.INITIAL_ADMIN_CODE;
+      if (initialAdminCode && code === initialAdminCode) {
+        return res.json({ valid: true });
+      }
+      
+      // Check database
+      const validCode = await storage.getValidAdminInviteCode(code);
+      res.json({ valid: !!validCode });
+    } catch (error) {
+      console.error("Error validating code:", error);
+      res.status(500).json({ valid: false, error: "Failed to validate code" });
     }
   });
 

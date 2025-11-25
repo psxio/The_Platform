@@ -23,9 +23,9 @@ export default function AdminCodes() {
   });
 
   const generateMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (): Promise<AdminInviteCode> => {
       const response = await apiRequest("POST", "/api/admin/invite-codes");
-      return response.json() as Promise<AdminInviteCode>;
+      return await response.json();
     },
     onSuccess: (code) => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/invite-codes"] });

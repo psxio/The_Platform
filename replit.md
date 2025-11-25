@@ -168,6 +168,8 @@ To-Do Endpoints:
    - Three roles: web3, content, admin
    - Role selection page for new users
    - Role-based navigation showing only relevant features
+   - Server-side middleware protection: `requireRole("content")` for all ContentFlowStudio endpoints
+   - Frontend route protection: All routes require authentication
 4. **ContentFlowStudio Integration**:
    - Content Tasks page with filtering and bulk actions
    - Team Directory with skills and EVM addresses
@@ -175,6 +177,10 @@ To-Do Endpoints:
 5. **Database Schema Updates**:
    - Added role field to users table
    - Added content_tasks, directory_members, deliverables tables
+6. **Security Hardening**:
+   - All protected routes redirect to sign-in page for unauthenticated users
+   - Backend API routes enforce role-based access with middleware
+   - Admin role has access to all features from both systems
 
 ## Previous Changes (November 24, 2025)
 

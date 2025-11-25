@@ -171,7 +171,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   );
 
-  // Extract EVM addresses from X (Twitter) tweets
+  // Extract EVM addresses from X (Twitter) tweets and their comments
   app.post("/api/extract-tweets", async (req, res) => {
     try {
       const { tweetUrl } = req.body;
@@ -193,34 +193,96 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(500).json({ error: "X API credentials not configured" });
       }
 
-      // Fetch tweet using X API v2
-      const response = await fetch(`https://api.twitter.com/2/tweets/${tweetId}`, {
+      const allAddresses = new Set<string>();
+      let totalProcessed = 0;
+
+      // Fetch main tweet using X API v2
+      const tweetResponse = await fetch(`https://api.twitter.com/2/tweets/${tweetId}`, {
         headers: {
           Authorization: `Bearer ${bearerToken}`,
         },
       });
 
-      if (!response.ok) {
-        const error = await response.json();
-        return res.status(response.status).json({ 
+      if (!tweetResponse.ok) {
+        const error = await tweetResponse.json();
+        return res.status(tweetResponse.status).json({ 
           error: "Failed to fetch tweet",
           details: error.errors?.[0]?.message || "Unknown error"
         });
       }
 
-      const data = await response.json();
-      const tweetText = data.data?.text || "";
+      const tweetData = await tweetResponse.json();
+      const mainTweetText = tweetData.data?.text || "";
+      
+      // Extract addresses from main tweet
+      const mainAddresses = extractEvmAddresses(mainTweetText);
+      mainAddresses.forEach(addr => allAddresses.add(addr));
+      totalProcessed += 1;
 
-      // Extract addresses from tweet text
-      const addresses = extractEvmAddresses(tweetText);
+      // Fetch replies to the tweet using search API
+      const searchQuery = `in_reply_to_tweet_id:${tweetId}`;
+      const searchParams = new URLSearchParams({
+        query: searchQuery,
+        max_results: "100", // X API v2 standard tier allows up to 100 per request
+        "tweet.fields": "text",
+      });
+
+      let nextToken: string | undefined;
+      let repliesProcessed = 0;
+
+      // Fetch multiple pages of replies
+      for (let page = 0; page < 10; page++) { // Limit to 10 pages (1000 replies max)
+        if (nextToken) {
+          searchParams.set("pagination_token", nextToken);
+        }
+
+        const repliesResponse = await fetch(
+          `https://api.twitter.com/2/tweets/search/recent?${searchParams.toString()}`,
+          {
+            headers: {
+              Authorization: `Bearer ${bearerToken}`,
+            },
+          }
+        );
+
+        if (!repliesResponse.ok) {
+          // If search fails, just continue with what we have
+          console.error("Error fetching replies:", repliesResponse.status);
+          break;
+        }
+
+        const repliesData = await repliesResponse.json();
+        const tweets = repliesData.data || [];
+
+        if (tweets.length === 0) {
+          break; // No more replies
+        }
+
+        // Extract addresses from each reply
+        for (const tweet of tweets) {
+          const replyText = tweet.text || "";
+          const replyAddresses = extractEvmAddresses(replyText);
+          replyAddresses.forEach(addr => allAddresses.add(addr));
+          repliesProcessed += 1;
+        }
+
+        // Check if there are more pages
+        nextToken = repliesData.meta?.next_token;
+        if (!nextToken) {
+          break;
+        }
+      }
+
+      totalProcessed += repliesProcessed;
+      const uniqueAddresses = Array.from(allAddresses);
 
       res.json({
-        filename: `Tweet ${tweetId}`,
-        totalFound: addresses.length,
-        addresses: addresses,
-        filesProcessed: 1,
-        filesWithAddresses: addresses.length > 0 ? 1 : 0,
-        tweetText: tweetText,
+        filename: `Tweet ${tweetId} + ${repliesProcessed} replies`,
+        totalFound: uniqueAddresses.length,
+        addresses: uniqueAddresses,
+        filesProcessed: totalProcessed,
+        filesWithAddresses: uniqueAddresses.length > 0 ? 1 : 0,
+        tweetText: mainTweetText,
       });
     } catch (error) {
       console.error("Error extracting from tweet:", error);

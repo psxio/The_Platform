@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { Upload, FileText, Download, Search, Loader2, CheckCircle, FileSearch, Folder, File } from "lucide-react";
+import { Upload, FileText, Download, Search, Loader2, CheckCircle, FileSearch, Folder, File, Twitter } from "lucide-react";
 
 interface ExtractResult {
   filename: string;
@@ -11,6 +11,7 @@ interface ExtractResult {
   addresses: string[];
   filesProcessed?: number;
   filesWithAddresses?: number;
+  tweetText?: string;
 }
 
 interface BatchProgress {
@@ -25,6 +26,8 @@ export default function Extract() {
   const [result, setResult] = useState<ExtractResult | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [batchProgress, setBatchProgress] = useState<BatchProgress | null>(null);
+  const [tweetUrl, setTweetUrl] = useState("");
+  const [isLoadingTweet, setIsLoadingTweet] = useState(false);
   const { toast } = useToast();
   const folderInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);

@@ -171,6 +171,66 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   );
 
+  // Extract EVM addresses from X (Twitter) tweets
+  app.post("/api/extract-tweets", async (req, res) => {
+    try {
+      const { tweetUrl } = req.body;
+      
+      if (!tweetUrl || typeof tweetUrl !== "string") {
+        return res.status(400).json({ error: "Tweet URL is required" });
+      }
+
+      // Extract tweet ID from URL
+      const tweetIdMatch = tweetUrl.match(/status\/(\d+)/);
+      if (!tweetIdMatch) {
+        return res.status(400).json({ error: "Invalid X (Twitter) URL format" });
+      }
+
+      const tweetId = tweetIdMatch[1];
+      const bearerToken = process.env.X_API_BEARER_TOKEN;
+
+      if (!bearerToken) {
+        return res.status(500).json({ error: "X API credentials not configured" });
+      }
+
+      // Fetch tweet using X API v2
+      const response = await fetch(`https://api.twitter.com/2/tweets/${tweetId}`, {
+        headers: {
+          Authorization: `Bearer ${bearerToken}`,
+        },
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        return res.status(response.status).json({ 
+          error: "Failed to fetch tweet",
+          details: error.errors?.[0]?.message || "Unknown error"
+        });
+      }
+
+      const data = await response.json();
+      const tweetText = data.data?.text || "";
+
+      // Extract addresses from tweet text
+      const addresses = extractEvmAddresses(tweetText);
+
+      res.json({
+        filename: `Tweet ${tweetId}`,
+        totalFound: addresses.length,
+        addresses: addresses,
+        filesProcessed: 1,
+        filesWithAddresses: addresses.length > 0 ? 1 : 0,
+        tweetText: tweetText,
+      });
+    } catch (error) {
+      console.error("Error extracting from tweet:", error);
+      res.status(500).json({ 
+        error: "Failed to extract from tweet",
+        message: error instanceof Error ? error.message : "Unknown error"
+      });
+    }
+  });
+
   app.post(
     "/api/compare",
     upload.fields([

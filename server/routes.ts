@@ -756,6 +756,63 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   );
 
+  // Portal Task endpoints
+  app.get("/api/portal-tasks", async (req, res) => {
+    try {
+      const tasks = await storage.getPortalTasks();
+      res.json(tasks);
+    } catch (error) {
+      console.error("Error fetching portal tasks:", error);
+      res.status(500).json({ error: "Failed to fetch tasks" });
+    }
+  });
+
+  app.post("/api/portal-tasks", async (req, res) => {
+    try {
+      const { title, status } = req.body;
+      if (!title) {
+        return res.status(400).json({ error: "Title is required" });
+      }
+      const task = await storage.createPortalTask({
+        title,
+        status: status || "pending"
+      });
+      res.json(task);
+    } catch (error) {
+      console.error("Error creating portal task:", error);
+      res.status(500).json({ error: "Failed to create task" });
+    }
+  });
+
+  app.patch("/api/portal-tasks/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const { status } = req.body;
+      if (!status) {
+        return res.status(400).json({ error: "Status is required" });
+      }
+      const task = await storage.updatePortalTaskStatus(id, status);
+      if (!task) {
+        return res.status(404).json({ error: "Task not found" });
+      }
+      res.json(task);
+    } catch (error) {
+      console.error("Error updating portal task:", error);
+      res.status(500).json({ error: "Failed to update task" });
+    }
+  });
+
+  app.delete("/api/portal-tasks/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      await storage.deletePortalTask(id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting portal task:", error);
+      res.status(500).json({ error: "Failed to delete task" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

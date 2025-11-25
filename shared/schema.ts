@@ -83,3 +83,19 @@ export const insertComparisonSchema = createInsertSchema(comparisons).omit({
 
 export type Comparison = typeof comparisons.$inferSelect;
 export type InsertComparison = z.infer<typeof insertComparisonSchema>;
+
+// Database schema for portal tasks (development tracking)
+export const portalTasks = pgTable("portal_tasks", {
+  id: serial("id").primaryKey(),
+  title: text("title").notNull(),
+  status: text("status").notNull().default("pending"), // pending, in_progress, done
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertPortalTaskSchema = createInsertSchema(portalTasks).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type PortalTask = typeof portalTasks.$inferSelect;
+export type InsertPortalTask = z.infer<typeof insertPortalTaskSchema>;

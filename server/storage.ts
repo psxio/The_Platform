@@ -1,7 +1,8 @@
 import { 
   type Comparison, type InsertComparison, comparisons,
   type Collection, type InsertCollection, collections,
-  type MintedAddress, type InsertMintedAddress, mintedAddresses
+  type MintedAddress, type InsertMintedAddress, mintedAddresses,
+  type PortalTask, type InsertPortalTask, portalTasks
 } from "@shared/schema";
 import { db } from "./db";
 import { desc, eq, and, sql } from "drizzle-orm";
@@ -23,6 +24,12 @@ export interface IStorage {
   getMintedAddresses(collectionId: number): Promise<string[]>;
   getMintedAddressCount(collectionId: number): Promise<number>;
   removeMintedAddress(collectionId: number, address: string): Promise<void>;
+  
+  // Portal task methods
+  createPortalTask(task: InsertPortalTask): Promise<PortalTask>;
+  getPortalTasks(): Promise<PortalTask[]>;
+  updatePortalTaskStatus(id: number, status: string): Promise<PortalTask | undefined>;
+  deletePortalTask(id: number): Promise<void>;
 }
 
 export class DbStorage implements IStorage {
@@ -134,6 +141,35 @@ export class DbStorage implements IStorage {
           eq(mintedAddresses.address, address.toLowerCase())
         )
       );
+  }
+
+  // Portal task methods
+  async createPortalTask(insertTask: InsertPortalTask): Promise<PortalTask> {
+    const [task] = await db
+      .insert(portalTasks)
+      .values(insertTask)
+      .returning();
+    return task;
+  }
+
+  async getPortalTasks(): Promise<PortalTask[]> {
+    return db
+      .select()
+      .from(portalTasks)
+      .orderBy(desc(portalTasks.createdAt));
+  }
+
+  async updatePortalTaskStatus(id: number, status: string): Promise<PortalTask | undefined> {
+    const [task] = await db
+      .update(portalTasks)
+      .set({ status })
+      .where(eq(portalTasks.id, id))
+      .returning();
+    return task;
+  }
+
+  async deletePortalTask(id: number): Promise<void> {
+    await db.delete(portalTasks).where(eq(portalTasks.id, id));
   }
 }
 

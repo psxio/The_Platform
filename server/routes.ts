@@ -6,7 +6,7 @@ import type { ComparisonResult, InsertCollection } from "@shared/schema";
 import { storage } from "./storage";
 import { parseFile } from "./file-parser";
 import { createRequire } from "module";
-import { setupAuth, isAuthenticated, requireRole } from "./googleAuth";
+import { setupAuth, isAuthenticated, requireRole } from "./auth";
 
 // Validate Ethereum address format
 function isValidEvmAddress(address: string): boolean {
@@ -856,7 +856,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Update user role
   app.patch("/api/auth/role", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const { role } = req.body;
       
       if (!role || !["web3", "content", "admin"].includes(role)) {

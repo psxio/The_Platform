@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { pgTable, text, serial, timestamp, jsonb, integer, varchar, index, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 
-// Session storage table for Google Auth
+// Session storage table for auth
 export const sessions = pgTable(
   "sessions",
   {
@@ -18,10 +18,11 @@ export const sessions = pgTable(
 export const userRoles = ["web3", "content", "admin"] as const;
 export type UserRole = typeof userRoles[number];
 
-// User storage table for Google Auth
+// User storage table for internal auth
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  email: varchar("email").unique(),
+  email: varchar("email").unique().notNull(),
+  password: varchar("password").notNull(),
   firstName: varchar("first_name"),
   lastName: varchar("last_name"),
   profileImageUrl: varchar("profile_image_url"),
@@ -30,8 +31,30 @@ export const users = pgTable("users", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+export const insertUserSchema = createInsertSchema(users).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  profileImageUrl: true,
+  role: true,
+});
+
+export const loginSchema = z.object({
+  email: z.string().email("Invalid email address"),
+  password: z.string().min(6, "Password must be at least 6 characters"),
+});
+
+export const registerSchema = z.object({
+  email: z.string().email("Invalid email address"),
+  password: z.string().min(6, "Password must be at least 6 characters"),
+  firstName: z.string().min(1, "First name is required"),
+  lastName: z.string().optional(),
+});
+
 export type UpsertUser = typeof users.$inferInsert;
 export type User = typeof users.$inferSelect;
+export type LoginInput = z.infer<typeof loginSchema>;
+export type RegisterInput = z.infer<typeof registerSchema>;
 
 export const addressSchema = z.object({
   address: z.string(),

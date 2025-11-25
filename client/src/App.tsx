@@ -1,6 +1,6 @@
 import { Switch, Route, Link, useLocation, Redirect } from "wouter";
-import { queryClient } from "./lib/queryClient";
-import { QueryClientProvider } from "@tanstack/react-query";
+import { queryClient, apiRequest } from "./lib/queryClient";
+import { QueryClientProvider, useMutation } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
@@ -22,10 +22,22 @@ import Collections from "@/pages/collections";
 import Todo from "@/pages/todo";
 import ContentDashboard from "@/pages/content-dashboard";
 import RoleSelect from "@/pages/role-select";
+import AuthPage from "@/pages/auth";
 import NotFound from "@/pages/not-found";
 
 function UserMenu() {
   const { user } = useAuth();
+  const [, setLocation] = useLocation();
+  
+  const logoutMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("POST", "/api/logout");
+    },
+    onSuccess: () => {
+      queryClient.setQueryData(["/api/auth/user"], null);
+      setLocation("/");
+    },
+  });
   
   if (!user) return null;
   
@@ -68,11 +80,9 @@ function UserMenu() {
             Change Role
           </Link>
         </DropdownMenuItem>
-        <DropdownMenuItem asChild>
-          <a href="/api/logout">
-            <LogOut className="mr-2 h-4 w-4" />
-            Log out
-          </a>
+        <DropdownMenuItem onClick={() => logoutMutation.mutate()} data-testid="button-logout">
+          <LogOut className="mr-2 h-4 w-4" />
+          Log out
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -162,15 +172,7 @@ function Nav() {
           </div>
           
           <div className="flex items-center gap-2">
-            {isAuthenticated ? (
-              <UserMenu />
-            ) : (
-              <a href="/api/login">
-                <Button size="sm" data-testid="button-login">
-                  Sign in with Google
-                </Button>
-              </a>
-            )}
+            <UserMenu />
           </div>
         </div>
       </div>
@@ -191,17 +193,7 @@ function AuthenticatedRouter() {
   }
   
   if (!user) {
-    return (
-      <div className="flex items-center justify-center min-h-[50vh]">
-        <div className="text-center space-y-4">
-          <h2 className="text-xl font-semibold">Sign in Required</h2>
-          <p className="text-muted-foreground">Please sign in to access this feature.</p>
-          <a href="/api/login">
-            <Button data-testid="button-signin">Sign in with Google</Button>
-          </a>
-        </div>
-      </div>
-    );
+    return <AuthPage />;
   }
   
   if (!user.role && location !== "/role-select") {

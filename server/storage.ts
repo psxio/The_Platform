@@ -15,6 +15,8 @@ import { desc, eq, and, sql, or } from "drizzle-orm";
 export interface IStorage {
   // User methods (required for Auth)
   getUser(id: string): Promise<User | undefined>;
+  getUserByEmail(email: string): Promise<User | undefined>;
+  createUser(user: { email: string; password: string; firstName: string; lastName?: string }): Promise<User>;
   upsertUser(user: UpsertUser): Promise<User>;
   updateUserRole(id: string, role: UserRole): Promise<User | undefined>;
   getAllUsers(): Promise<User[]>;
@@ -71,6 +73,24 @@ export class DbStorage implements IStorage {
   // User methods (required for Auth)
   async getUser(id: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user;
+  }
+
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.email, email));
+    return user;
+  }
+
+  async createUser(userData: { email: string; password: string; firstName: string; lastName?: string }): Promise<User> {
+    const [user] = await db
+      .insert(users)
+      .values({
+        email: userData.email,
+        password: userData.password,
+        firstName: userData.firstName,
+        lastName: userData.lastName || null,
+      })
+      .returning();
     return user;
   }
 

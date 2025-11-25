@@ -249,12 +249,7 @@ function Router() {
   return (
     <>
       {!isLoading && isAuthenticated && <Nav />}
-      <Switch>
-        <Route path="/role-select" component={RoleSelect} />
-        <Route>
-          <AuthenticatedRouter />
-        </Route>
-      </Switch>
+      <AuthenticatedRouter />
     </>
   );
 }

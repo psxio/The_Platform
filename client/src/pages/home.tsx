@@ -1,10 +1,22 @@
 import { useState, useCallback } from "react";
-import { Upload, FileText, Check, X, Download, Loader2, Search } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { Upload, FileText, Check, X, Download, Loader2, Search, Database, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import type { Address, ComparisonResult } from "@shared/schema";
+import type { ComparisonResult, Collection } from "@shared/schema";
+
+interface CollectionWithCount extends Collection {
+  addressCount: number;
+}
 
 export default function Home() {
   const [mintedFile, setMintedFile] = useState<File | null>(null);
@@ -14,7 +26,15 @@ export default function Home() {
   const [processing, setProcessing] = useState(false);
   const [results, setResults] = useState<ComparisonResult | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [useCollection, setUseCollection] = useState(false);
+  const [selectedCollectionId, setSelectedCollectionId] = useState<string>("");
   const { toast } = useToast();
+
+  const { data: collections = [] } = useQuery<CollectionWithCount[]>({
+    queryKey: ["/api/collections"],
+  });
+
+  const selectedCollection = collections.find(c => c.id.toString() === selectedCollectionId);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -69,28 +89,56 @@ export default function Home() {
   );
 
   const handleProcess = async () => {
-    if (!mintedFile || !eligibleFile) {
-      toast({
-        title: "Missing files",
-        description: "Please upload both files to continue",
-        variant: "destructive",
-      });
-      return;
+    // Check if we have all required inputs
+    if (useCollection) {
+      if (!selectedCollectionId || !eligibleFile) {
+        toast({
+          title: "Missing inputs",
+          description: "Please select a collection and upload an eligible file",
+          variant: "destructive",
+        });
+        return;
+      }
+    } else {
+      if (!mintedFile || !eligibleFile) {
+        toast({
+          title: "Missing files",
+          description: "Please upload both files to continue",
+          variant: "destructive",
+        });
+        return;
+      }
     }
 
     setProcessing(true);
     try {
-      const formData = new FormData();
-      formData.append("minted", mintedFile);
-      formData.append("eligible", eligibleFile);
+      let response: Response;
 
-      const response = await fetch("/api/compare", {
-        method: "POST",
-        body: formData,
-      });
+      if (useCollection) {
+        // Use collection-based comparison
+        const formData = new FormData();
+        formData.append("eligible", eligibleFile!);
+        formData.append("collectionId", selectedCollectionId);
+
+        response = await fetch("/api/compare-collection", {
+          method: "POST",
+          body: formData,
+        });
+      } else {
+        // Use file-based comparison
+        const formData = new FormData();
+        formData.append("minted", mintedFile!);
+        formData.append("eligible", eligibleFile!);
+
+        response = await fetch("/api/compare", {
+          method: "POST",
+          body: formData,
+        });
+      }
 
       if (!response.ok) {
-        throw new Error("Failed to process files");
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to process");
       }
 
       const data = await response.json();
@@ -103,7 +151,6 @@ export default function Home() {
       toast({
         title: "Processing complete",
         description: `Found ${data.stats.remaining} addresses eligible to mint${invalidWarning}`,
-        variant: data.stats.invalidAddresses ? "default" : "default",
       });
     } catch (error) {
       toast({
@@ -147,7 +194,12 @@ export default function Home() {
     setEligibleFile(null);
     setResults(null);
     setSearchQuery("");
+    setSelectedCollectionId("");
   };
+
+  const canProcess = useCollection
+    ? !!selectedCollectionId && !!eligibleFile
+    : !!mintedFile && !!eligibleFile;
 
   const filteredResults = results?.notMinted.filter(addr =>
     addr.address.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -168,84 +220,174 @@ export default function Home() {
 
         <div className="grid md:grid-cols-2 gap-6 mb-8">
           <div>
-            <label className="block text-sm font-medium uppercase tracking-wide mb-4">
-              Already Minted Addresses
-            </label>
-            <div
-              onDragOver={(e) => {
-                handleDragOver(e);
-                setDragOverMinted(true);
-              }}
-              onDragLeave={() => setDragOverMinted(false)}
-              onDrop={(e) => handleDrop(e, "minted")}
-              className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
-                dragOverMinted
-                  ? "border-primary bg-primary/5"
-                  : mintedFile
-                  ? "border-primary/50 bg-card"
-                  : "border-border hover-elevate"
-              }`}
-              data-testid="upload-minted"
-            >
-              {mintedFile ? (
-                <div className="space-y-4">
-                  <div className="flex items-center justify-center">
-                    <div className="p-3 bg-primary/10 rounded-full">
-                      <Check className="w-6 h-6 text-primary" />
-                    </div>
-                  </div>
-                  <div>
-                    <p className="font-medium text-foreground mb-1">{mintedFile.name}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {(mintedFile.size / 1024).toFixed(1)} KB
-                    </p>
-                  </div>
+            <div className="flex items-center justify-between mb-4">
+              <label className="block text-sm font-medium uppercase tracking-wide">
+                Already Minted Addresses
+              </label>
+              {collections.length > 0 && (
+                <div className="flex items-center gap-2">
                   <Button
-                    variant="outline"
+                    variant={!useCollection ? "default" : "ghost"}
                     size="sm"
-                    onClick={() => setMintedFile(null)}
-                    data-testid="button-remove-minted"
+                    onClick={() => { setUseCollection(false); setSelectedCollectionId(""); }}
+                    data-testid="button-use-file"
                   >
-                    <X className="w-4 h-4 mr-2" />
-                    Remove
+                    <FileText className="w-4 h-4 mr-1" />
+                    File
                   </Button>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <div className="flex items-center justify-center">
-                    <div className="p-3 bg-muted rounded-full">
-                      <Upload className="w-6 h-6 text-muted-foreground" />
-                    </div>
-                  </div>
-                  <div>
-                    <p className="font-medium text-foreground mb-1">
-                      Drop file here
-                    </p>
-                    <p className="text-sm text-muted-foreground">
-                      or click to browse
-                    </p>
-                  </div>
-                  <input
-                    type="file"
-                    accept=".csv,.txt,.json,.xlsx,.xls,text/csv,text/plain,application/json,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
-                    onChange={(e) => handleFileSelect(e, "minted")}
-                    className="hidden"
-                    id="minted-upload"
-                    data-testid="input-minted"
-                  />
                   <Button
-                    variant="secondary"
+                    variant={useCollection ? "default" : "ghost"}
                     size="sm"
-                    onClick={() => document.getElementById("minted-upload")?.click()}
-                    data-testid="button-browse-minted"
+                    onClick={() => { setUseCollection(true); setMintedFile(null); }}
+                    data-testid="button-use-collection"
                   >
-                    <FileText className="w-4 h-4 mr-2" />
-                    Browse Files
+                    <Database className="w-4 h-4 mr-1" />
+                    Collection
                   </Button>
-                  <p className="text-xs text-muted-foreground">CSV, TXT, JSON, or Excel files</p>
                 </div>
               )}
             </div>
+
+            {useCollection ? (
+              <div
+                className={`border-2 rounded-lg p-8 text-center transition-colors ${
+                  selectedCollection ? "border-primary/50 bg-card" : "border-border"
+                }`}
+                data-testid="select-collection"
+              >
+                {selectedCollection ? (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-center">
+                      <div className="p-3 bg-primary/10 rounded-full">
+                        <Database className="w-6 h-6 text-primary" />
+                      </div>
+                    </div>
+                    <div>
+                      <p className="font-medium text-foreground mb-1">{selectedCollection.name}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {selectedCollection.addressCount.toLocaleString()} addresses
+                      </p>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setSelectedCollectionId("")}
+                      data-testid="button-remove-collection"
+                    >
+                      <X className="w-4 h-4 mr-2" />
+                      Change
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-center">
+                      <div className="p-3 bg-muted rounded-full">
+                        <Database className="w-6 h-6 text-muted-foreground" />
+                      </div>
+                    </div>
+                    <div>
+                      <p className="font-medium text-foreground mb-2">
+                        Select a Collection
+                      </p>
+                      <Select
+                        value={selectedCollectionId}
+                        onValueChange={setSelectedCollectionId}
+                      >
+                        <SelectTrigger className="w-full max-w-xs mx-auto" data-testid="select-collection-dropdown">
+                          <SelectValue placeholder="Choose collection..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {collections.map((c) => (
+                            <SelectItem key={c.id} value={c.id.toString()}>
+                              {c.name} ({c.addressCount.toLocaleString()} addresses)
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Use stored minted addresses from a collection
+                    </p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div
+                onDragOver={(e) => {
+                  handleDragOver(e);
+                  setDragOverMinted(true);
+                }}
+                onDragLeave={() => setDragOverMinted(false)}
+                onDrop={(e) => handleDrop(e, "minted")}
+                className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
+                  dragOverMinted
+                    ? "border-primary bg-primary/5"
+                    : mintedFile
+                    ? "border-primary/50 bg-card"
+                    : "border-border hover-elevate"
+                }`}
+                data-testid="upload-minted"
+              >
+                {mintedFile ? (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-center">
+                      <div className="p-3 bg-primary/10 rounded-full">
+                        <Check className="w-6 h-6 text-primary" />
+                      </div>
+                    </div>
+                    <div>
+                      <p className="font-medium text-foreground mb-1">{mintedFile.name}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {(mintedFile.size / 1024).toFixed(1)} KB
+                      </p>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setMintedFile(null)}
+                      data-testid="button-remove-minted"
+                    >
+                      <X className="w-4 h-4 mr-2" />
+                      Remove
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-center">
+                      <div className="p-3 bg-muted rounded-full">
+                        <Upload className="w-6 h-6 text-muted-foreground" />
+                      </div>
+                    </div>
+                    <div>
+                      <p className="font-medium text-foreground mb-1">
+                        Drop file here
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        or click to browse
+                      </p>
+                    </div>
+                    <input
+                      type="file"
+                      accept=".csv,.txt,.json,.xlsx,.xls,text/csv,text/plain,application/json,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel"
+                      onChange={(e) => handleFileSelect(e, "minted")}
+                      className="hidden"
+                      id="minted-upload"
+                      data-testid="input-minted"
+                    />
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => document.getElementById("minted-upload")?.click()}
+                      data-testid="button-browse-minted"
+                    >
+                      <FileText className="w-4 h-4 mr-2" />
+                      Browse Files
+                    </Button>
+                    <p className="text-xs text-muted-foreground">CSV, TXT, JSON, or Excel files</p>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <div>
@@ -333,7 +475,7 @@ export default function Home() {
         <div className="flex flex-wrap gap-4 justify-center mb-12">
           <Button
             onClick={handleProcess}
-            disabled={!mintedFile || !eligibleFile || processing}
+            disabled={!canProcess || processing}
             size="lg"
             className="min-w-48"
             data-testid="button-process"
@@ -344,7 +486,7 @@ export default function Home() {
                 Processing...
               </>
             ) : (
-              "Process Files"
+              "Compare Addresses"
             )}
           </Button>
           {results && (

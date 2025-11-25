@@ -7,10 +7,11 @@ import {
   type ContentTask, type InsertContentTask, contentTasks,
   type DirectoryMember, type InsertDirectoryMember, directoryMembers,
   type Deliverable, type InsertDeliverable, deliverables,
+  type AdminInviteCode, adminInviteCodes,
   type UserRole
 } from "@shared/schema";
 import { db } from "./db";
-import { desc, eq, and, sql, or } from "drizzle-orm";
+import { desc, eq, and, sql, or, isNull } from "drizzle-orm";
 
 export interface IStorage {
   // User methods (required for Auth)
@@ -67,6 +68,13 @@ export interface IStorage {
   getDeliverablesByTaskId(taskId: number): Promise<Deliverable[]>;
   createDeliverable(deliverable: InsertDeliverable): Promise<Deliverable>;
   deleteDeliverable(id: number): Promise<boolean>;
+  
+  // Admin invite code methods
+  createAdminInviteCode(code: string, createdById: string | null): Promise<AdminInviteCode>;
+  getValidAdminInviteCode(code: string): Promise<AdminInviteCode | undefined>;
+  useAdminInviteCode(code: string, usedById: string): Promise<AdminInviteCode | undefined>;
+  getAdminInviteCodes(createdById?: string): Promise<AdminInviteCode[]>;
+  deactivateAdminInviteCode(id: number): Promise<boolean>;
 }
 
 export class DbStorage implements IStorage {
@@ -358,6 +366,75 @@ export class DbStorage implements IStorage {
 
   async deleteDeliverable(id: number): Promise<boolean> {
     const result = await db.delete(deliverables).where(eq(deliverables.id, id)).returning();
+    return result.length > 0;
+  }
+
+  // Admin invite code methods
+  async createAdminInviteCode(code: string, createdById: string | null): Promise<AdminInviteCode> {
+    const [inviteCode] = await db
+      .insert(adminInviteCodes)
+      .values({
+        code,
+        createdBy: createdById,
+        isActive: true,
+      })
+      .returning();
+    return inviteCode;
+  }
+
+  async getValidAdminInviteCode(code: string): Promise<AdminInviteCode | undefined> {
+    const [inviteCode] = await db
+      .select()
+      .from(adminInviteCodes)
+      .where(
+        and(
+          eq(adminInviteCodes.code, code),
+          eq(adminInviteCodes.isActive, true),
+          isNull(adminInviteCodes.usedBy)
+        )
+      );
+    return inviteCode;
+  }
+
+  async useAdminInviteCode(code: string, usedById: string): Promise<AdminInviteCode | undefined> {
+    const [inviteCode] = await db
+      .update(adminInviteCodes)
+      .set({
+        usedBy: usedById,
+        usedAt: new Date(),
+        isActive: false,
+      })
+      .where(
+        and(
+          eq(adminInviteCodes.code, code),
+          eq(adminInviteCodes.isActive, true),
+          isNull(adminInviteCodes.usedBy)
+        )
+      )
+      .returning();
+    return inviteCode;
+  }
+
+  async getAdminInviteCodes(createdById?: string): Promise<AdminInviteCode[]> {
+    if (createdById) {
+      return db
+        .select()
+        .from(adminInviteCodes)
+        .where(eq(adminInviteCodes.createdBy, createdById))
+        .orderBy(desc(adminInviteCodes.createdAt));
+    }
+    return db
+      .select()
+      .from(adminInviteCodes)
+      .orderBy(desc(adminInviteCodes.createdAt));
+  }
+
+  async deactivateAdminInviteCode(id: number): Promise<boolean> {
+    const result = await db
+      .update(adminInviteCodes)
+      .set({ isActive: false })
+      .where(eq(adminInviteCodes.id, id))
+      .returning();
     return result.length > 0;
   }
 }

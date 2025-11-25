@@ -683,6 +683,79 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   );
 
+  // Compare eligible file against a stored collection of minted addresses
+  app.post(
+    "/api/compare-collection",
+    upload.single("eligible"),
+    async (req, res) => {
+      try {
+        const collectionId = req.body.collectionId;
+        
+        if (!req.file) {
+          return res.status(400).json({ error: "Eligible file is required" });
+        }
+        
+        if (!collectionId) {
+          return res.status(400).json({ error: "Collection ID is required" });
+        }
+        
+        const collection = await storage.getCollection(parseInt(collectionId));
+        if (!collection) {
+          return res.status(404).json({ error: "Collection not found" });
+        }
+        
+        // Get minted addresses from the collection
+        const mintedAddresses = await storage.getMintedAddresses(parseInt(collectionId));
+        
+        // Parse the eligible file
+        const eligibleParsed = parseFile(req.file.originalname, req.file.buffer);
+        
+        // Create a Set of minted addresses for fast lookup (case-insensitive)
+        const mintedSet = new Set(
+          mintedAddresses.map(addr => addr.toLowerCase())
+        );
+        
+        // Filter eligible addresses that are NOT in the minted set
+        const notMinted = eligibleParsed.addresses.filter(
+          addr => !mintedSet.has(addr.address.toLowerCase())
+        );
+        
+        const result: ComparisonResult = {
+          notMinted,
+          stats: {
+            totalEligible: eligibleParsed.addresses.length,
+            totalMinted: mintedAddresses.length,
+            remaining: notMinted.length,
+            invalidAddresses: eligibleParsed.invalidCount > 0 ? eligibleParsed.invalidCount : undefined,
+          },
+          validationErrors: eligibleParsed.validationErrors.length > 0 
+            ? eligibleParsed.validationErrors.map(e => ({ ...e, file: 'eligible' as const })) 
+            : undefined,
+        };
+        
+        // Save comparison to database with collectionId reference
+        await storage.createComparison({
+          collectionId: parseInt(collectionId),
+          mintedFileName: `${collection.name} (Collection)`,
+          eligibleFileName: req.file.originalname,
+          totalEligible: result.stats.totalEligible,
+          totalMinted: result.stats.totalMinted,
+          remaining: result.stats.remaining,
+          invalidAddresses: result.stats.invalidAddresses || null,
+          results: result as any,
+        });
+        
+        res.json(result);
+      } catch (error) {
+        console.error("Error processing collection comparison:", error);
+        res.status(500).json({
+          error: "Failed to process comparison",
+          message: error instanceof Error ? error.message : "Unknown error"
+        });
+      }
+    }
+  );
+
   const httpServer = createServer(app);
   return httpServer;
 }

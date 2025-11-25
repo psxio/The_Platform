@@ -14,17 +14,25 @@ interface ExtractResult {
   filesWithAddresses?: number;
 }
 
+interface BatchProgress {
+  currentBatch: number;
+  totalBatches: number;
+  isProcessing: boolean;
+}
+
 export default function Extract() {
   const [files, setFiles] = useState<File[]>([]);
   const [uploadMode, setUploadMode] = useState<"file" | "folder">("file");
   const [isDragOver, setIsDragOver] = useState(false);
   const [result, setResult] = useState<ExtractResult | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [batchProgress, setBatchProgress] = useState<BatchProgress | null>(null);
   const { toast } = useToast();
   const folderInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const extractMutation = useMutation({
+  // Extract addresses from a single batch of files
+  const extractBatchMutation = useMutation({
     mutationFn: async (filesToProcess: File[]) => {
       const formData = new FormData();
       filesToProcess.forEach(file => {
@@ -43,24 +51,68 @@ export default function Extract() {
       
       return response.json() as Promise<ExtractResult>;
     },
-    onSuccess: (data) => {
-      setResult(data);
-      const filesInfo = data.filesProcessed && data.filesProcessed > 1 
-        ? ` from ${data.filesProcessed} files` 
+  });
+
+  // Process files in batches of 100
+  const processBatches = useCallback(async (filesToProcess: File[]) => {
+    const BATCH_SIZE = 100;
+    const batches: File[][] = [];
+    
+    for (let i = 0; i < filesToProcess.length; i += BATCH_SIZE) {
+      batches.push(filesToProcess.slice(i, i + BATCH_SIZE));
+    }
+
+    const allAddresses = new Set<string>();
+    let totalProcessed = 0;
+    let filesWithAddresses = 0;
+
+    try {
+      for (let i = 0; i < batches.length; i++) {
+        setBatchProgress({
+          currentBatch: i + 1,
+          totalBatches: batches.length,
+          isProcessing: true,
+        });
+
+        const batchResult = await extractBatchMutation.mutateAsync(batches[i]);
+        
+        // Accumulate addresses
+        batchResult.addresses.forEach(addr => allAddresses.add(addr));
+        totalProcessed += batchResult.filesProcessed || 0;
+        filesWithAddresses += batchResult.filesWithAddresses || 0;
+      }
+
+      // Combine all results
+      const uniqueAddresses = Array.from(allAddresses);
+      const combinedResult: ExtractResult = {
+        filename: filesToProcess.length === 1 
+          ? filesToProcess[0].name 
+          : `${filesToProcess.length} files (${filesWithAddresses} with addresses)`,
+        totalFound: uniqueAddresses.length,
+        addresses: uniqueAddresses,
+        filesProcessed: totalProcessed,
+        filesWithAddresses: filesWithAddresses,
+      };
+
+      setResult(combinedResult);
+      setBatchProgress(null);
+      
+      const filesInfo = totalProcessed > 1 
+        ? ` from ${totalProcessed} files` 
         : "";
       toast({
         title: "Extraction complete",
-        description: `Found ${data.totalFound} unique EVM addresses${filesInfo}`,
+        description: `Found ${uniqueAddresses.length} unique EVM addresses${filesInfo}`,
       });
-    },
-    onError: (error: Error) => {
+    } catch (error) {
+      setBatchProgress(null);
       toast({
         title: "Extraction failed",
-        description: error.message,
+        description: error instanceof Error ? error.message : "Unknown error",
         variant: "destructive",
       });
-    },
-  });
+    }
+  }, [extractBatchMutation, toast]);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -102,7 +154,7 @@ export default function Extract() {
   const handleFolderSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = Array.from(e.target.files || []);
     if (selectedFiles.length > 0) {
-      // Filter to supported file types and limit to 100 files
+      // Filter to supported file types (no limit - will batch process)
       const supportedExtensions = ['.pdf', '.csv', '.txt', '.json', '.xlsx', '.xls', '.html', '.htm'];
       const supportedMimes = ['application/pdf', 'text/csv', 'text/plain', 'application/json', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.ms-excel', 'text/html'];
       
@@ -111,27 +163,23 @@ export default function Extract() {
         return supportedExtensions.includes(ext) || supportedMimes.includes(file.type);
       });
 
-      if (filtered.length > 100) {
-        toast({
-          title: "Too many files",
-          description: `Selected ${filtered.length} supported files, but maximum is 100. Using first 100 files.`,
-          variant: "destructive",
-        });
-        setFiles(filtered.slice(0, 100));
-      } else if (filtered.length < selectedFiles.length) {
+      if (filtered.length < selectedFiles.length) {
         toast({
           title: "Some files skipped",
           description: `${selectedFiles.length - filtered.length} unsupported files were skipped. Using ${filtered.length} supported files.`,
         });
-        setFiles(filtered);
-      } else {
-        setFiles(filtered);
-        toast({
-          title: "Folder selected",
-          description: `${filtered.length} supported files ready to scan`,
-        });
       }
+      
+      const batchCount = Math.ceil(filtered.length / 100);
+      setFiles(filtered);
+      toast({
+        title: "Folder selected",
+        description: batchCount > 1 
+          ? `${filtered.length} files ready. Will process in ${batchCount} batches.` 
+          : `${filtered.length} files ready to scan`,
+      });
       setResult(null);
+      setBatchProgress(null);
     }
   }, [toast]);
 
@@ -147,8 +195,8 @@ export default function Extract() {
       return;
     }
     
-    extractMutation.mutate(files);
-  }, [files, uploadMode, extractMutation, toast]);
+    processBatches(files);
+  }, [files, uploadMode, processBatches, toast]);
 
   const handleDownloadCSV = useCallback(() => {
     if (!result || result.addresses.length === 0) return;
@@ -331,26 +379,46 @@ export default function Extract() {
                 />
               </div>
 
-              <div className="mt-6 flex justify-center">
-                <Button
-                  onClick={handleExtract}
-                  disabled={files.length === 0 || extractMutation.isPending}
-                  size="lg"
-                  className="min-w-[200px]"
-                  data-testid="button-extract"
-                >
-                  {extractMutation.isPending ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Scanning {files.length > 1 ? `${files.length} files...` : "..."}
-                    </>
-                  ) : (
-                    <>
-                      <Search className="w-4 h-4 mr-2" />
-                      Extract Addresses
-                    </>
-                  )}
-                </Button>
+              <div className="mt-6 flex flex-col gap-4">
+                {batchProgress && (
+                  <div className="bg-blue-50 dark:bg-blue-950 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                    <div className="flex items-center gap-3">
+                      <Loader2 className="w-4 h-4 animate-spin text-blue-600 dark:text-blue-400" />
+                      <div className="flex-1">
+                        <p className="font-medium text-blue-900 dark:text-blue-100">
+                          Processing batch {batchProgress.currentBatch} of {batchProgress.totalBatches}
+                        </p>
+                        <div className="w-full bg-blue-200 dark:bg-blue-900 rounded-full h-2 mt-2">
+                          <div 
+                            className="bg-blue-600 dark:bg-blue-400 h-2 rounded-full transition-all duration-300"
+                            style={{ width: `${(batchProgress.currentBatch / batchProgress.totalBatches) * 100}%` }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+                <div className="flex justify-center">
+                  <Button
+                    onClick={handleExtract}
+                    disabled={files.length === 0 || batchProgress !== null}
+                    size="lg"
+                    className="min-w-[200px]"
+                    data-testid="button-extract"
+                  >
+                    {batchProgress ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Processing...
+                      </>
+                    ) : (
+                      <>
+                        <Search className="w-4 h-4 mr-2" />
+                        Extract Addresses
+                      </>
+                    )}
+                  </Button>
+                </div>
               </div>
             </CardContent>
           </Card>

@@ -2,10 +2,15 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import multer from "multer";
 import * as XLSX from "xlsx";
-import type { ComparisonResult } from "@shared/schema";
+import type { ComparisonResult, InsertCollection } from "@shared/schema";
 import { storage } from "./storage";
 import { parseFile } from "./file-parser";
 import { createRequire } from "module";
+
+// Validate Ethereum address format
+function isValidEvmAddress(address: string): boolean {
+  return /^0x[a-fA-F0-9]{40}$/.test(address);
+}
 
 // Use createRequire for pdf-parse as it doesn't have proper ESM exports
 const require = createRequire(import.meta.url);
@@ -292,6 +297,317 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     }
   });
+
+  // ================== COLLECTION MANAGEMENT ENDPOINTS ==================
+
+  // Get all collections
+  app.get("/api/collections", async (req, res) => {
+    try {
+      const collections = await storage.getCollections();
+      // Add address count for each collection
+      const collectionsWithCounts = await Promise.all(
+        collections.map(async (collection) => ({
+          ...collection,
+          addressCount: await storage.getMintedAddressCount(collection.id),
+        }))
+      );
+      res.json(collectionsWithCounts);
+    } catch (error) {
+      console.error("Error fetching collections:", error);
+      res.status(500).json({
+        error: "Failed to fetch collections",
+        message: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  });
+
+  // Get single collection with addresses
+  app.get("/api/collections/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const collection = await storage.getCollection(id);
+      
+      if (!collection) {
+        return res.status(404).json({ error: "Collection not found" });
+      }
+
+      const addresses = await storage.getMintedAddresses(id);
+      res.json({
+        ...collection,
+        addresses,
+        addressCount: addresses.length,
+      });
+    } catch (error) {
+      console.error("Error fetching collection:", error);
+      res.status(500).json({
+        error: "Failed to fetch collection",
+        message: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  });
+
+  // Create new collection
+  app.post("/api/collections", async (req, res) => {
+    try {
+      const { name, description } = req.body;
+      
+      if (!name || typeof name !== "string" || name.trim().length === 0) {
+        return res.status(400).json({ error: "Collection name is required" });
+      }
+
+      const collection = await storage.createCollection({
+        name: name.trim(),
+        description: description?.trim() || null,
+      });
+
+      res.status(201).json({ ...collection, addressCount: 0 });
+    } catch (error: any) {
+      console.error("Error creating collection:", error);
+      // Handle unique constraint violation
+      if (error.code === "23505") {
+        return res.status(409).json({ error: "A collection with this name already exists" });
+      }
+      res.status(500).json({
+        error: "Failed to create collection",
+        message: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  });
+
+  // Delete collection
+  app.delete("/api/collections/:id", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const collection = await storage.getCollection(id);
+      
+      if (!collection) {
+        return res.status(404).json({ error: "Collection not found" });
+      }
+
+      await storage.deleteCollection(id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting collection:", error);
+      res.status(500).json({
+        error: "Failed to delete collection",
+        message: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  });
+
+  // Add addresses to collection (from text/paste)
+  app.post("/api/collections/:id/addresses", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const { addresses } = req.body;
+      
+      const collection = await storage.getCollection(id);
+      if (!collection) {
+        return res.status(404).json({ error: "Collection not found" });
+      }
+
+      if (!addresses || !Array.isArray(addresses)) {
+        return res.status(400).json({ error: "Addresses array is required" });
+      }
+
+      // Validate and filter addresses
+      const validAddresses: string[] = [];
+      const invalidAddresses: { address: string; error: string }[] = [];
+
+      for (const addr of addresses) {
+        if (typeof addr !== "string") continue;
+        const trimmed = addr.trim();
+        if (!trimmed) continue;
+        
+        if (isValidEvmAddress(trimmed)) {
+          validAddresses.push(trimmed.toLowerCase());
+        } else {
+          invalidAddresses.push({ address: trimmed, error: "Invalid EVM address format" });
+        }
+      }
+
+      const addedCount = await storage.addMintedAddresses(id, validAddresses);
+      const totalCount = await storage.getMintedAddressCount(id);
+
+      res.json({
+        added: addedCount,
+        skipped: validAddresses.length - addedCount,
+        invalid: invalidAddresses.length,
+        totalInCollection: totalCount,
+        invalidAddresses: invalidAddresses.slice(0, 10), // Return first 10 invalid
+      });
+    } catch (error) {
+      console.error("Error adding addresses:", error);
+      res.status(500).json({
+        error: "Failed to add addresses",
+        message: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  });
+
+  // Upload file to add addresses to collection
+  app.post(
+    "/api/collections/:id/upload",
+    upload.single("file"),
+    async (req, res) => {
+      try {
+        const id = parseInt(req.params.id);
+        const file = req.file;
+        
+        const collection = await storage.getCollection(id);
+        if (!collection) {
+          return res.status(404).json({ error: "Collection not found" });
+        }
+
+        if (!file) {
+          return res.status(400).json({ error: "File is required" });
+        }
+
+        // Parse file to extract addresses
+        const parsed = parseFile(file.originalname, file.buffer);
+        const validAddresses = parsed.addresses.map(a => a.address.toLowerCase());
+
+        const addedCount = await storage.addMintedAddresses(id, validAddresses);
+        const totalCount = await storage.getMintedAddressCount(id);
+
+        res.json({
+          filename: file.originalname,
+          found: parsed.addresses.length,
+          added: addedCount,
+          skipped: validAddresses.length - addedCount,
+          invalid: parsed.invalidCount,
+          totalInCollection: totalCount,
+        });
+      } catch (error) {
+        console.error("Error uploading file to collection:", error);
+        res.status(500).json({
+          error: "Failed to upload file",
+          message: error instanceof Error ? error.message : "Unknown error",
+        });
+      }
+    }
+  );
+
+  // Remove address from collection
+  app.delete("/api/collections/:id/addresses/:address", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const address = req.params.address;
+      
+      const collection = await storage.getCollection(id);
+      if (!collection) {
+        return res.status(404).json({ error: "Collection not found" });
+      }
+
+      await storage.removeMintedAddress(id, address);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error removing address:", error);
+      res.status(500).json({
+        error: "Failed to remove address",
+        message: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  });
+
+  // Download collection addresses as CSV
+  app.get("/api/collections/:id/download", async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const collection = await storage.getCollection(id);
+      
+      if (!collection) {
+        return res.status(404).json({ error: "Collection not found" });
+      }
+
+      const addresses = await storage.getMintedAddresses(id);
+      const csv = addresses.join("\n");
+
+      res.setHeader("Content-Type", "text/csv");
+      res.setHeader("Content-Disposition", `attachment; filename="${collection.name}_minted_addresses.csv"`);
+      res.send(csv);
+    } catch (error) {
+      console.error("Error downloading collection:", error);
+      res.status(500).json({
+        error: "Failed to download collection",
+        message: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
+  });
+
+  // ================== COMPARE WITH COLLECTION ==================
+
+  // Compare eligible addresses against a stored collection
+  app.post(
+    "/api/compare-collection",
+    upload.single("eligible"),
+    async (req, res) => {
+      try {
+        const file = req.file;
+        const collectionId = parseInt(req.body.collectionId);
+        
+        if (!file) {
+          return res.status(400).json({ error: "Eligible file is required" });
+        }
+
+        if (!collectionId || isNaN(collectionId)) {
+          return res.status(400).json({ error: "Collection ID is required" });
+        }
+
+        const collection = await storage.getCollection(collectionId);
+        if (!collection) {
+          return res.status(404).json({ error: "Collection not found" });
+        }
+
+        // Get minted addresses from collection
+        const mintedAddresses = await storage.getMintedAddresses(collectionId);
+        const mintedSet = new Set(mintedAddresses.map(addr => addr.toLowerCase()));
+
+        // Parse eligible file
+        const eligibleParsed = parseFile(file.originalname, file.buffer);
+
+        // Filter eligible addresses that are NOT in the minted set
+        const notMinted = eligibleParsed.addresses.filter(
+          addr => !mintedSet.has(addr.address.toLowerCase())
+        );
+
+        const result: ComparisonResult = {
+          notMinted,
+          stats: {
+            totalEligible: eligibleParsed.addresses.length,
+            totalMinted: mintedAddresses.length,
+            remaining: notMinted.length,
+            invalidAddresses: eligibleParsed.invalidCount > 0 ? eligibleParsed.invalidCount : undefined,
+          },
+          validationErrors: eligibleParsed.validationErrors.length > 0 
+            ? eligibleParsed.validationErrors 
+            : undefined,
+        };
+
+        // Save comparison to database with collection reference
+        await storage.createComparison({
+          collectionId: collectionId,
+          mintedFileName: `Collection: ${collection.name}`,
+          eligibleFileName: file.originalname,
+          totalEligible: result.stats.totalEligible,
+          totalMinted: result.stats.totalMinted,
+          remaining: result.stats.remaining,
+          invalidAddresses: result.stats.invalidAddresses || null,
+          results: result as any,
+        });
+
+        res.json(result);
+      } catch (error) {
+        console.error("Error comparing with collection:", error);
+        res.status(500).json({
+          error: "Failed to compare with collection",
+          message: error instanceof Error ? error.message : "Unknown error",
+        });
+      }
+    }
+  );
+
+  // ================== ORIGINAL FILE COMPARE ENDPOINT ==================
 
   app.post(
     "/api/compare",

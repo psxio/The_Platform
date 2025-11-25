@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -163,6 +163,13 @@ export default function Extract() {
     return `${(totalBytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
+  useEffect(() => {
+    if (folderInputRef.current) {
+      folderInputRef.current.setAttribute("webkitdirectory", "");
+      folderInputRef.current.setAttribute("directory", "");
+    }
+  }, []);
+
   return (
     <div className="min-h-screen bg-background">
       <div className="container mx-auto px-4 py-8 max-w-4xl">
@@ -288,7 +295,6 @@ export default function Extract() {
                   ref={folderInputRef}
                   className="hidden"
                   onChange={handleFolderSelect}
-                  {...{ webkitdirectory: "", directory: "" } as any}
                   data-testid="input-extract-folder"
                 />
               </div>

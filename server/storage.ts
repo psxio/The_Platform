@@ -2,12 +2,17 @@ import {
   type Comparison, type InsertComparison, comparisons,
   type Collection, type InsertCollection, collections,
   type MintedAddress, type InsertMintedAddress, mintedAddresses,
-  type PortalTask, type InsertPortalTask, portalTasks
+  type Task, type InsertTask, tasks,
+  type User, type UpsertUser, users
 } from "@shared/schema";
 import { db } from "./db";
-import { desc, eq, and, sql } from "drizzle-orm";
+import { desc, eq, and, sql, or } from "drizzle-orm";
 
 export interface IStorage {
+  // User methods (required for Replit Auth)
+  getUser(id: string): Promise<User | undefined>;
+  upsertUser(user: UpsertUser): Promise<User>;
+  
   // Comparison history methods
   createComparison(comparison: InsertComparison): Promise<Comparison>;
   getComparisons(limit?: number): Promise<Comparison[]>;
@@ -25,14 +30,38 @@ export interface IStorage {
   getMintedAddressCount(collectionId: number): Promise<number>;
   removeMintedAddress(collectionId: number, address: string): Promise<void>;
   
-  // Portal task methods
-  createPortalTask(task: InsertPortalTask): Promise<PortalTask>;
-  getPortalTasks(): Promise<PortalTask[]>;
-  updatePortalTaskStatus(id: number, status: string): Promise<PortalTask | undefined>;
-  deletePortalTask(id: number): Promise<void>;
+  // Task methods (user-specific to-do items)
+  createTask(userId: string, title: string): Promise<Task>;
+  getUserTasks(userId: string): Promise<Task[]>;
+  getPublicTasks(): Promise<Task[]>;
+  updateTaskStatus(id: number, userId: string, status: string): Promise<Task | undefined>;
+  updateTaskPublic(id: number, userId: string, isPublic: boolean): Promise<Task | undefined>;
+  deleteTask(id: number, userId: string): Promise<void>;
+  getTask(id: number): Promise<Task | undefined>;
 }
 
 export class DbStorage implements IStorage {
+  // User methods (required for Replit Auth)
+  async getUser(id: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user;
+  }
+
+  async upsertUser(userData: UpsertUser): Promise<User> {
+    const [user] = await db
+      .insert(users)
+      .values(userData)
+      .onConflictDoUpdate({
+        target: users.id,
+        set: {
+          ...userData,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+    return user;
+  }
+
   async createComparison(insertComparison: InsertComparison): Promise<Comparison> {
     const [comparison] = await db
       .insert(comparisons)
@@ -143,55 +172,56 @@ export class DbStorage implements IStorage {
       );
   }
 
-  // Portal task methods
-  async createPortalTask(insertTask: InsertPortalTask): Promise<PortalTask> {
+  // Task methods (user-specific to-do items)
+  async createTask(userId: string, title: string): Promise<Task> {
     const [task] = await db
-      .insert(portalTasks)
-      .values(insertTask)
+      .insert(tasks)
+      .values({ userId, title, status: "pending", isPublic: false })
       .returning();
     return task;
   }
 
-  async getPortalTasks(): Promise<PortalTask[]> {
+  async getUserTasks(userId: string): Promise<Task[]> {
     return db
       .select()
-      .from(portalTasks)
-      .orderBy(desc(portalTasks.createdAt));
+      .from(tasks)
+      .where(eq(tasks.userId, userId))
+      .orderBy(desc(tasks.createdAt));
   }
 
-  async updatePortalTaskStatus(id: number, status: string): Promise<PortalTask | undefined> {
+  async getPublicTasks(): Promise<Task[]> {
+    return db
+      .select()
+      .from(tasks)
+      .where(eq(tasks.isPublic, true))
+      .orderBy(desc(tasks.createdAt));
+  }
+
+  async getTask(id: number): Promise<Task | undefined> {
+    const [task] = await db.select().from(tasks).where(eq(tasks.id, id));
+    return task;
+  }
+
+  async updateTaskStatus(id: number, userId: string, status: string): Promise<Task | undefined> {
     const [task] = await db
-      .update(portalTasks)
+      .update(tasks)
       .set({ status })
-      .where(eq(portalTasks.id, id))
+      .where(and(eq(tasks.id, id), eq(tasks.userId, userId)))
       .returning();
     return task;
   }
 
-  async deletePortalTask(id: number): Promise<void> {
-    await db.delete(portalTasks).where(eq(portalTasks.id, id));
+  async updateTaskPublic(id: number, userId: string, isPublic: boolean): Promise<Task | undefined> {
+    const [task] = await db
+      .update(tasks)
+      .set({ isPublic })
+      .where(and(eq(tasks.id, id), eq(tasks.userId, userId)))
+      .returning();
+    return task;
   }
 
-  async seedPortalTasks(): Promise<void> {
-    // Check if tasks already exist
-    const existingTasks = await db.select().from(portalTasks).limit(1);
-    if (existingTasks.length > 0) {
-      return; // Already seeded
-    }
-
-    // Seed initial 4444 Portal tasks
-    const initialTasks = [
-      { title: "Guild API integration", status: "done" },
-      { title: "X raid function", status: "in_progress" },
-      { title: "UI fixes", status: "pending" },
-      { title: "Mobile optimization", status: "pending" },
-      { title: "Memory/mission tasks", status: "pending" },
-      { title: "Farcaster/Luma/Discord integration", status: "pending" },
-      { title: "Google auth for sheets", status: "pending" },
-      { title: "Changing hard-coded sheets", status: "pending" },
-    ];
-
-    await db.insert(portalTasks).values(initialTasks);
+  async deleteTask(id: number, userId: string): Promise<void> {
+    await db.delete(tasks).where(and(eq(tasks.id, id), eq(tasks.userId, userId)));
   }
 }
 

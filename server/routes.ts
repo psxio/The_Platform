@@ -6,6 +6,7 @@ import type { ComparisonResult, InsertCollection } from "@shared/schema";
 import { storage } from "./storage";
 import { parseFile } from "./file-parser";
 import { createRequire } from "module";
+import { setupAuth, isAuthenticated } from "./replitAuth";
 
 // Validate Ethereum address format
 function isValidEvmAddress(address: string): boolean {
@@ -76,12 +77,20 @@ async function fileToText(filename: string, buffer: Buffer): Promise<string> {
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Seed initial portal tasks on startup
-  try {
-    await storage.seedPortalTasks();
-  } catch (error) {
-    console.error("Error seeding portal tasks:", error);
-  }
+  // Setup Replit Auth
+  await setupAuth(app);
+
+  // Auth routes
+  app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const user = await storage.getUser(userId);
+      res.json(user);
+    } catch (error) {
+      console.error("Error fetching user:", error);
+      res.status(500).json({ message: "Failed to fetch user" });
+    }
+  });
 
   // Get comparison history
   app.get("/api/comparisons", async (req, res) => {
@@ -763,59 +772,81 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   );
 
-  // Portal Task endpoints
-  app.get("/api/portal-tasks", async (req, res) => {
+  // ================== TO-DO TASK ENDPOINTS ==================
+
+  // Get current user's tasks (requires auth)
+  app.get("/api/tasks", isAuthenticated, async (req: any, res) => {
     try {
-      const tasks = await storage.getPortalTasks();
+      const userId = req.user.claims.sub;
+      const tasks = await storage.getUserTasks(userId);
       res.json(tasks);
     } catch (error) {
-      console.error("Error fetching portal tasks:", error);
+      console.error("Error fetching tasks:", error);
       res.status(500).json({ error: "Failed to fetch tasks" });
     }
   });
 
-  app.post("/api/portal-tasks", async (req, res) => {
+  // Get public tasks (no auth required)
+  app.get("/api/tasks/public", async (req, res) => {
     try {
-      const { title, status } = req.body;
+      const tasks = await storage.getPublicTasks();
+      res.json(tasks);
+    } catch (error) {
+      console.error("Error fetching public tasks:", error);
+      res.status(500).json({ error: "Failed to fetch public tasks" });
+    }
+  });
+
+  // Create new task (requires auth)
+  app.post("/api/tasks", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { title } = req.body;
       if (!title) {
         return res.status(400).json({ error: "Title is required" });
       }
-      const task = await storage.createPortalTask({
-        title,
-        status: status || "pending"
-      });
+      const task = await storage.createTask(userId, title);
       res.json(task);
     } catch (error) {
-      console.error("Error creating portal task:", error);
+      console.error("Error creating task:", error);
       res.status(500).json({ error: "Failed to create task" });
     }
   });
 
-  app.patch("/api/portal-tasks/:id", async (req, res) => {
+  // Update task status (requires auth, must be owner)
+  app.patch("/api/tasks/:id", isAuthenticated, async (req: any, res) => {
     try {
+      const userId = req.user.claims.sub;
       const id = parseInt(req.params.id);
-      const { status } = req.body;
-      if (!status) {
-        return res.status(400).json({ error: "Status is required" });
+      const { status, isPublic } = req.body;
+      
+      let task;
+      if (status !== undefined) {
+        task = await storage.updateTaskStatus(id, userId, status);
       }
-      const task = await storage.updatePortalTaskStatus(id, status);
+      if (isPublic !== undefined) {
+        task = await storage.updateTaskPublic(id, userId, isPublic);
+      }
+      
       if (!task) {
-        return res.status(404).json({ error: "Task not found" });
+        return res.status(404).json({ error: "Task not found or not authorized" });
       }
       res.json(task);
     } catch (error) {
-      console.error("Error updating portal task:", error);
+      console.error("Error updating task:", error);
       res.status(500).json({ error: "Failed to update task" });
     }
   });
 
-  app.delete("/api/portal-tasks/:id", async (req, res) => {
+  // Delete task (requires auth, must be owner)
+  app.delete("/api/tasks/:id", isAuthenticated, async (req: any, res) => {
     try {
+      const userId = req.user.claims.sub;
       const id = parseInt(req.params.id);
-      await storage.deletePortalTask(id);
+      await storage.deleteTask(id, userId);
       res.json({ success: true });
     } catch (error) {
-      console.error("Error deleting portal task:", error);
+      console.error("Error deleting task:", error);
       res.status(500).json({ error: "Failed to delete task" });
     }
   });

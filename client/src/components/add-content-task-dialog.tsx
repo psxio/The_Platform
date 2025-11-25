@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { insertContentTaskSchema, type InsertContentTask, type DirectoryMember, type ContentTask } from "@shared/schema";
+import { insertContentTaskSchema, type InsertContentTask, type DirectoryMember, type ContentTask, type Campaign } from "@shared/schema";
 import {
   Dialog,
   DialogContent,
@@ -52,6 +52,10 @@ export function AddContentTaskDialog({ open, onOpenChange, task }: AddContentTas
     queryKey: ["/api/directory"],
   });
 
+  const { data: campaigns } = useQuery<Campaign[]>({
+    queryKey: ["/api/campaigns"],
+  });
+
   const form = useForm<InsertContentTask>({
     resolver: zodResolver(insertContentTaskSchema),
     defaultValues: {
@@ -63,6 +67,8 @@ export function AddContentTaskDialog({ open, onOpenChange, task }: AddContentTas
       client: undefined,
       deliverable: undefined,
       notes: undefined,
+      priority: "medium",
+      campaignId: undefined,
     },
   });
 
@@ -77,6 +83,8 @@ export function AddContentTaskDialog({ open, onOpenChange, task }: AddContentTas
         client: task.client || undefined,
         deliverable: task.deliverable || undefined,
         notes: task.notes || undefined,
+        priority: task.priority || "medium",
+        campaignId: task.campaignId || undefined,
       });
     } else {
       form.reset({
@@ -88,6 +96,8 @@ export function AddContentTaskDialog({ open, onOpenChange, task }: AddContentTas
         client: undefined,
         deliverable: undefined,
         notes: undefined,
+        priority: "medium",
+        campaignId: undefined,
       });
     }
   }, [task, currentUser, form]);
@@ -202,6 +212,32 @@ export function AddContentTaskDialog({ open, onOpenChange, task }: AddContentTas
 
               <FormField
                 control={form.control}
+                name="priority"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Priority</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value || "medium"}>
+                      <FormControl>
+                        <SelectTrigger data-testid="select-priority">
+                          <SelectValue placeholder="Select priority" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="low">Low</SelectItem>
+                        <SelectItem value="medium">Medium</SelectItem>
+                        <SelectItem value="high">High</SelectItem>
+                        <SelectItem value="urgent">Urgent</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <FormField
+                control={form.control}
                 name="assignedTo"
                 render={({ field }) => (
                   <FormItem>
@@ -216,6 +252,41 @@ export function AddContentTaskDialog({ open, onOpenChange, task }: AddContentTas
                         {directoryMembers?.map((member) => (
                           <SelectItem key={member.id} value={member.person}>
                             {member.person}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name="campaignId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Campaign (Optional)</FormLabel>
+                    <Select 
+                      onValueChange={(value) => field.onChange(value ? parseInt(value) : undefined)} 
+                      value={field.value?.toString() || ""}
+                    >
+                      <FormControl>
+                        <SelectTrigger data-testid="select-campaign">
+                          <SelectValue placeholder="Select campaign" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="">None</SelectItem>
+                        {campaigns?.map((campaign) => (
+                          <SelectItem key={campaign.id} value={campaign.id.toString()}>
+                            <div className="flex items-center gap-2">
+                              <div 
+                                className="w-2 h-2 rounded-full" 
+                                style={{ backgroundColor: campaign.color || "#3B82F6" }}
+                              />
+                              {campaign.name}
+                            </div>
                           </SelectItem>
                         ))}
                       </SelectContent>

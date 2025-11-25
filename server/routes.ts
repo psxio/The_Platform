@@ -1388,6 +1388,454 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ================== CAMPAIGN ENDPOINTS ==================
+  // These require "content" or "admin" role
+
+  // Get all campaigns
+  app.get("/api/campaigns", requireRole("content"), async (req, res) => {
+    try {
+      const campaigns = await storage.getCampaigns();
+      res.json(campaigns);
+    } catch (error) {
+      console.error("Error fetching campaigns:", error);
+      res.status(500).json({ error: "Failed to fetch campaigns" });
+    }
+  });
+
+  // Get single campaign
+  app.get("/api/campaigns/:id", requireRole("content"), async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const campaign = await storage.getCampaign(id);
+      if (!campaign) {
+        return res.status(404).json({ error: "Campaign not found" });
+      }
+      res.json(campaign);
+    } catch (error) {
+      console.error("Error fetching campaign:", error);
+      res.status(500).json({ error: "Failed to fetch campaign" });
+    }
+  });
+
+  // Create campaign
+  app.post("/api/campaigns", requireRole("content"), async (req: any, res) => {
+    try {
+      const campaign = await storage.createCampaign(req.body);
+      
+      // Log activity
+      await storage.createActivityLog({
+        campaignId: campaign.id,
+        userId: req.user?.id || null,
+        action: "campaign_created",
+        details: { name: campaign.name },
+      });
+      
+      res.status(201).json(campaign);
+    } catch (error) {
+      console.error("Error creating campaign:", error);
+      res.status(500).json({ error: "Failed to create campaign" });
+    }
+  });
+
+  // Update campaign
+  app.put("/api/campaigns/:id", requireRole("content"), async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const campaign = await storage.updateCampaign(id, req.body);
+      if (!campaign) {
+        return res.status(404).json({ error: "Campaign not found" });
+      }
+      
+      // Log activity
+      await storage.createActivityLog({
+        campaignId: id,
+        userId: req.user?.id || null,
+        action: "campaign_updated",
+        details: { updates: req.body },
+      });
+      
+      res.json(campaign);
+    } catch (error) {
+      console.error("Error updating campaign:", error);
+      res.status(500).json({ error: "Failed to update campaign" });
+    }
+  });
+
+  // Delete campaign
+  app.delete("/api/campaigns/:id", requireRole("content"), async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const success = await storage.deleteCampaign(id);
+      if (!success) {
+        return res.status(404).json({ error: "Campaign not found" });
+      }
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting campaign:", error);
+      res.status(500).json({ error: "Failed to delete campaign" });
+    }
+  });
+
+  // Get tasks for a campaign
+  app.get("/api/campaigns/:id/tasks", requireRole("content"), async (req, res) => {
+    try {
+      const campaignId = parseInt(req.params.id);
+      const allTasks = await storage.getContentTasks();
+      const campaignTasks = allTasks.filter(t => t.campaignId === campaignId);
+      res.json(campaignTasks);
+    } catch (error) {
+      console.error("Error fetching campaign tasks:", error);
+      res.status(500).json({ error: "Failed to fetch campaign tasks" });
+    }
+  });
+
+  // ================== SUBTASK ENDPOINTS ==================
+
+  // Get subtasks for a task
+  app.get("/api/content-tasks/:id/subtasks", requireRole("content"), async (req, res) => {
+    try {
+      const taskId = parseInt(req.params.id);
+      const subtasks = await storage.getSubtasks(taskId);
+      res.json(subtasks);
+    } catch (error) {
+      console.error("Error fetching subtasks:", error);
+      res.status(500).json({ error: "Failed to fetch subtasks" });
+    }
+  });
+
+  // Create subtask
+  app.post("/api/content-tasks/:id/subtasks", requireRole("content"), async (req: any, res) => {
+    try {
+      const taskId = parseInt(req.params.id);
+      const { title, order } = req.body;
+      
+      if (!title) {
+        return res.status(400).json({ error: "Title is required" });
+      }
+      
+      const subtask = await storage.createSubtask({
+        taskId,
+        title,
+        completed: false,
+        order: order || 0,
+      });
+      
+      // Log activity
+      await storage.createActivityLog({
+        taskId,
+        userId: req.user?.id || null,
+        action: "subtask_added",
+        details: { title },
+      });
+      
+      res.status(201).json(subtask);
+    } catch (error) {
+      console.error("Error creating subtask:", error);
+      res.status(500).json({ error: "Failed to create subtask" });
+    }
+  });
+
+  // Update subtask
+  app.patch("/api/subtasks/:id", requireRole("content"), async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const subtask = await storage.updateSubtask(id, req.body);
+      if (!subtask) {
+        return res.status(404).json({ error: "Subtask not found" });
+      }
+      
+      // Log activity if completion status changed
+      if (req.body.completed !== undefined) {
+        await storage.createActivityLog({
+          taskId: subtask.taskId,
+          userId: req.user?.id || null,
+          action: req.body.completed ? "subtask_completed" : "subtask_uncompleted",
+          details: { title: subtask.title },
+        });
+      }
+      
+      res.json(subtask);
+    } catch (error) {
+      console.error("Error updating subtask:", error);
+      res.status(500).json({ error: "Failed to update subtask" });
+    }
+  });
+
+  // Delete subtask
+  app.delete("/api/subtasks/:id", requireRole("content"), async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const success = await storage.deleteSubtask(id);
+      if (!success) {
+        return res.status(404).json({ error: "Subtask not found" });
+      }
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting subtask:", error);
+      res.status(500).json({ error: "Failed to delete subtask" });
+    }
+  });
+
+  // ================== COMMENT ENDPOINTS ==================
+
+  // Get comments for a task
+  app.get("/api/content-tasks/:id/comments", requireRole("content"), async (req, res) => {
+    try {
+      const taskId = parseInt(req.params.id);
+      const comments = await storage.getComments(taskId);
+      res.json(comments);
+    } catch (error) {
+      console.error("Error fetching comments:", error);
+      res.status(500).json({ error: "Failed to fetch comments" });
+    }
+  });
+
+  // Create comment
+  app.post("/api/content-tasks/:id/comments", requireRole("content"), async (req: any, res) => {
+    try {
+      const taskId = parseInt(req.params.id);
+      const { content, parentId } = req.body;
+      const userId = req.user?.id;
+      
+      if (!content) {
+        return res.status(400).json({ error: "Content is required" });
+      }
+      
+      if (!userId) {
+        return res.status(401).json({ error: "User ID required" });
+      }
+      
+      const comment = await storage.createComment({
+        taskId,
+        userId,
+        content,
+        parentId: parentId || null,
+      });
+      
+      // Log activity
+      await storage.createActivityLog({
+        taskId,
+        userId,
+        action: "comment_added",
+        details: { preview: content.substring(0, 100) },
+      });
+      
+      // Create notification for task assignee if different from commenter
+      const task = await storage.getContentTask(taskId);
+      if (task?.assignedTo) {
+        // Find user by name in directory (simplified - in production would need proper user lookup)
+        const allUsers = await storage.getAllUsers();
+        const assignee = allUsers.find(u => 
+          `${u.firstName} ${u.lastName}`.toLowerCase() === task.assignedTo?.toLowerCase() ||
+          u.email === task.assignedTo
+        );
+        
+        if (assignee && assignee.id !== userId) {
+          await storage.createNotification({
+            userId: assignee.id,
+            type: "comment",
+            title: "New comment on your task",
+            message: content.substring(0, 100),
+            taskId,
+          });
+        }
+      }
+      
+      res.status(201).json(comment);
+    } catch (error) {
+      console.error("Error creating comment:", error);
+      res.status(500).json({ error: "Failed to create comment" });
+    }
+  });
+
+  // Update comment
+  app.patch("/api/comments/:id", requireRole("content"), async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const { content } = req.body;
+      
+      if (!content) {
+        return res.status(400).json({ error: "Content is required" });
+      }
+      
+      const comment = await storage.updateComment(id, content);
+      if (!comment) {
+        return res.status(404).json({ error: "Comment not found" });
+      }
+      
+      res.json(comment);
+    } catch (error) {
+      console.error("Error updating comment:", error);
+      res.status(500).json({ error: "Failed to update comment" });
+    }
+  });
+
+  // Delete comment
+  app.delete("/api/comments/:id", requireRole("content"), async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const success = await storage.deleteComment(id);
+      if (!success) {
+        return res.status(404).json({ error: "Comment not found" });
+      }
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting comment:", error);
+      res.status(500).json({ error: "Failed to delete comment" });
+    }
+  });
+
+  // ================== ACTIVITY LOG ENDPOINTS ==================
+
+  // Get activity log for a task
+  app.get("/api/content-tasks/:id/activity", requireRole("content"), async (req, res) => {
+    try {
+      const taskId = parseInt(req.params.id);
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : 50;
+      const activity = await storage.getActivityLog(taskId, undefined, limit);
+      res.json(activity);
+    } catch (error) {
+      console.error("Error fetching activity log:", error);
+      res.status(500).json({ error: "Failed to fetch activity log" });
+    }
+  });
+
+  // Get activity log for a campaign
+  app.get("/api/campaigns/:id/activity", requireRole("content"), async (req, res) => {
+    try {
+      const campaignId = parseInt(req.params.id);
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : 50;
+      const activity = await storage.getActivityLog(undefined, campaignId, limit);
+      res.json(activity);
+    } catch (error) {
+      console.error("Error fetching campaign activity log:", error);
+      res.status(500).json({ error: "Failed to fetch campaign activity log" });
+    }
+  });
+
+  // ================== NOTIFICATION ENDPOINTS ==================
+
+  // Get notifications for current user
+  app.get("/api/notifications", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const notifications = await storage.getNotifications(userId);
+      res.json(notifications);
+    } catch (error) {
+      console.error("Error fetching notifications:", error);
+      res.status(500).json({ error: "Failed to fetch notifications" });
+    }
+  });
+
+  // Get unread notification count
+  app.get("/api/notifications/unread-count", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const count = await storage.getUnreadNotificationCount(userId);
+      res.json({ count });
+    } catch (error) {
+      console.error("Error fetching notification count:", error);
+      res.status(500).json({ error: "Failed to fetch notification count" });
+    }
+  });
+
+  // Mark notification as read
+  app.patch("/api/notifications/:id/read", isAuthenticated, async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const userId = req.user.id;
+      const success = await storage.markNotificationRead(id, userId);
+      if (!success) {
+        return res.status(404).json({ error: "Notification not found" });
+      }
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error marking notification read:", error);
+      res.status(500).json({ error: "Failed to mark notification read" });
+    }
+  });
+
+  // Mark all notifications as read
+  app.patch("/api/notifications/read-all", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      await storage.markAllNotificationsRead(userId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error marking all notifications read:", error);
+      res.status(500).json({ error: "Failed to mark all notifications read" });
+    }
+  });
+
+  // ================== ANALYTICS ENDPOINTS ==================
+
+  // Get task analytics/metrics
+  app.get("/api/analytics/tasks", requireRole("content"), async (req, res) => {
+    try {
+      const tasks = await storage.getContentTasks();
+      
+      const now = new Date();
+      const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      
+      // Calculate metrics
+      const totalTasks = tasks.length;
+      const byStatus: Record<string, number> = {};
+      const byClient: Record<string, number> = {};
+      const byAssignee: Record<string, number> = {};
+      let overdueTasks = 0;
+      let completedThisWeek = 0;
+      
+      const oneWeekAgo = new Date(today);
+      oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+      
+      for (const task of tasks) {
+        // Status breakdown
+        byStatus[task.status] = (byStatus[task.status] || 0) + 1;
+        
+        // Client breakdown
+        if (task.client) {
+          byClient[task.client] = (byClient[task.client] || 0) + 1;
+        }
+        
+        // Assignee breakdown
+        if (task.assignedTo) {
+          byAssignee[task.assignedTo] = (byAssignee[task.assignedTo] || 0) + 1;
+        }
+        
+        // Overdue tasks
+        if (task.dueDate && task.status !== "COMPLETED") {
+          const dueDate = new Date(task.dueDate);
+          if (dueDate < today) {
+            overdueTasks++;
+          }
+        }
+        
+        // Completed this week
+        if (task.status === "COMPLETED" && task.createdAt) {
+          const createdAt = new Date(task.createdAt);
+          if (createdAt >= oneWeekAgo) {
+            completedThisWeek++;
+          }
+        }
+      }
+      
+      res.json({
+        totalTasks,
+        byStatus,
+        byClient,
+        byAssignee,
+        overdueTasks,
+        completedThisWeek,
+        completionRate: totalTasks > 0 
+          ? Math.round(((byStatus["COMPLETED"] || 0) / totalTasks) * 100) 
+          : 0,
+      });
+    } catch (error) {
+      console.error("Error fetching task analytics:", error);
+      res.status(500).json({ error: "Failed to fetch task analytics" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

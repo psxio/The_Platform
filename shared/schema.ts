@@ -158,6 +158,31 @@ export type InsertTask = z.infer<typeof insertTaskSchema>;
 
 // ContentFlowStudio tables below
 
+// Task statuses for multi-stage workflow
+export const taskStatuses = ["TO BE STARTED", "IN PROGRESS", "IN REVIEW", "APPROVED", "COMPLETED"] as const;
+export type TaskStatus = typeof taskStatuses[number];
+
+// Campaigns table - for grouping related tasks
+export const campaigns = pgTable("campaigns", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  description: text("description"),
+  client: varchar("client", { length: 255 }),
+  startDate: varchar("start_date", { length: 50 }),
+  endDate: varchar("end_date", { length: 50 }),
+  status: varchar("status", { length: 50 }).notNull().default("active"),
+  color: varchar("color", { length: 20 }).default("#3B82F6"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertCampaignSchema = createInsertSchema(campaigns).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertCampaign = z.infer<typeof insertCampaignSchema>;
+export type Campaign = typeof campaigns.$inferSelect;
+
 // Content Tasks table - for content production team
 export const contentTasks = pgTable("content_tasks", {
   id: serial("id").primaryKey(),
@@ -169,6 +194,8 @@ export const contentTasks = pgTable("content_tasks", {
   client: varchar("client", { length: 255 }),
   deliverable: text("deliverable"),
   notes: text("notes"),
+  priority: varchar("priority", { length: 20 }).default("medium"),
+  campaignId: integer("campaign_id").references(() => campaigns.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -182,10 +209,90 @@ export const insertContentTaskSchema = createInsertSchema(contentTasks).omit({
   client: z.string().optional().transform(val => val && val.trim() !== "" ? val : undefined),
   deliverable: z.string().optional().transform(val => val && val.trim() !== "" ? val : undefined),
   notes: z.string().optional().transform(val => val && val.trim() !== "" ? val : undefined),
+  priority: z.string().optional().default("medium"),
+  campaignId: z.number().optional().nullable(),
 });
 
 export type InsertContentTask = z.infer<typeof insertContentTaskSchema>;
 export type ContentTask = typeof contentTasks.$inferSelect;
+
+// Subtasks table - checklist items within a content task
+export const subtasks = pgTable("subtasks", {
+  id: serial("id").primaryKey(),
+  taskId: integer("task_id").notNull().references(() => contentTasks.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  completed: boolean("completed").notNull().default(false),
+  order: integer("order").notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertSubtaskSchema = createInsertSchema(subtasks).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertSubtask = z.infer<typeof insertSubtaskSchema>;
+export type Subtask = typeof subtasks.$inferSelect;
+
+// Comments table - for task discussions
+export const comments = pgTable("comments", {
+  id: serial("id").primaryKey(),
+  taskId: integer("task_id").notNull().references(() => contentTasks.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  content: text("content").notNull(),
+  parentId: integer("parent_id"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertCommentSchema = createInsertSchema(comments).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertComment = z.infer<typeof insertCommentSchema>;
+export type Comment = typeof comments.$inferSelect;
+
+// Activity log table - for tracking task changes
+export const activityLog = pgTable("activity_log", {
+  id: serial("id").primaryKey(),
+  taskId: integer("task_id").references(() => contentTasks.id, { onDelete: "cascade" }),
+  campaignId: integer("campaign_id").references(() => campaigns.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "set null" }),
+  action: varchar("action", { length: 100 }).notNull(),
+  details: jsonb("details"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertActivityLogSchema = createInsertSchema(activityLog).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertActivityLog = z.infer<typeof insertActivityLogSchema>;
+export type ActivityLog = typeof activityLog.$inferSelect;
+
+// Notifications table - for in-app notifications
+export const notifications = pgTable("notifications", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  type: varchar("type", { length: 50 }).notNull(),
+  title: varchar("title", { length: 255 }).notNull(),
+  message: text("message"),
+  taskId: integer("task_id").references(() => contentTasks.id, { onDelete: "cascade" }),
+  campaignId: integer("campaign_id").references(() => campaigns.id, { onDelete: "cascade" }),
+  read: boolean("read").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertNotificationSchema = createInsertSchema(notifications).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertNotification = z.infer<typeof insertNotificationSchema>;
+export type Notification = typeof notifications.$inferSelect;
 
 // Directory members table - content team members
 export const directoryMembers = pgTable("directory_members", {

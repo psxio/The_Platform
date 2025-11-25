@@ -8,6 +8,11 @@ import {
   type DirectoryMember, type InsertDirectoryMember, directoryMembers,
   type Deliverable, type InsertDeliverable, deliverables,
   type AdminInviteCode, adminInviteCodes,
+  type Campaign, type InsertCampaign, campaigns,
+  type Subtask, type InsertSubtask, subtasks,
+  type Comment, type InsertComment, comments,
+  type ActivityLog, type InsertActivityLog, activityLog,
+  type Notification, type InsertNotification, notifications,
   type UserRole
 } from "@shared/schema";
 import { db } from "./db";
@@ -75,6 +80,36 @@ export interface IStorage {
   useAdminInviteCode(code: string, usedById: string): Promise<AdminInviteCode | undefined>;
   getAdminInviteCodes(createdById?: string): Promise<AdminInviteCode[]>;
   deactivateAdminInviteCode(id: number): Promise<boolean>;
+  
+  // Campaign methods
+  getCampaigns(): Promise<Campaign[]>;
+  getCampaign(id: number): Promise<Campaign | undefined>;
+  createCampaign(campaign: InsertCampaign): Promise<Campaign>;
+  updateCampaign(id: number, campaign: Partial<InsertCampaign>): Promise<Campaign | undefined>;
+  deleteCampaign(id: number): Promise<boolean>;
+  
+  // Subtask methods
+  getSubtasks(taskId: number): Promise<Subtask[]>;
+  createSubtask(subtask: InsertSubtask): Promise<Subtask>;
+  updateSubtask(id: number, updates: Partial<InsertSubtask>): Promise<Subtask | undefined>;
+  deleteSubtask(id: number): Promise<boolean>;
+  
+  // Comment methods
+  getComments(taskId: number): Promise<Comment[]>;
+  createComment(comment: InsertComment): Promise<Comment>;
+  updateComment(id: number, content: string): Promise<Comment | undefined>;
+  deleteComment(id: number): Promise<boolean>;
+  
+  // Activity log methods
+  getActivityLog(taskId?: number, campaignId?: number, limit?: number): Promise<ActivityLog[]>;
+  createActivityLog(activity: InsertActivityLog): Promise<ActivityLog>;
+  
+  // Notification methods
+  getNotifications(userId: string): Promise<Notification[]>;
+  getUnreadNotificationCount(userId: string): Promise<number>;
+  createNotification(notification: InsertNotification): Promise<Notification>;
+  markNotificationRead(id: number, userId: string): Promise<boolean>;
+  markAllNotificationsRead(userId: string): Promise<void>;
 }
 
 export class DbStorage implements IStorage {
@@ -436,6 +471,148 @@ export class DbStorage implements IStorage {
       .where(eq(adminInviteCodes.id, id))
       .returning();
     return result.length > 0;
+  }
+
+  // Campaign methods
+  async getCampaigns(): Promise<Campaign[]> {
+    return await db.select().from(campaigns).orderBy(desc(campaigns.createdAt));
+  }
+
+  async getCampaign(id: number): Promise<Campaign | undefined> {
+    const [campaign] = await db.select().from(campaigns).where(eq(campaigns.id, id));
+    return campaign;
+  }
+
+  async createCampaign(insertCampaign: InsertCampaign): Promise<Campaign> {
+    const [campaign] = await db.insert(campaigns).values(insertCampaign).returning();
+    return campaign;
+  }
+
+  async updateCampaign(id: number, updates: Partial<InsertCampaign>): Promise<Campaign | undefined> {
+    const [campaign] = await db
+      .update(campaigns)
+      .set(updates)
+      .where(eq(campaigns.id, id))
+      .returning();
+    return campaign;
+  }
+
+  async deleteCampaign(id: number): Promise<boolean> {
+    const result = await db.delete(campaigns).where(eq(campaigns.id, id)).returning();
+    return result.length > 0;
+  }
+
+  // Subtask methods
+  async getSubtasks(taskId: number): Promise<Subtask[]> {
+    return await db
+      .select()
+      .from(subtasks)
+      .where(eq(subtasks.taskId, taskId))
+      .orderBy(subtasks.order);
+  }
+
+  async createSubtask(insertSubtask: InsertSubtask): Promise<Subtask> {
+    const [subtask] = await db.insert(subtasks).values(insertSubtask).returning();
+    return subtask;
+  }
+
+  async updateSubtask(id: number, updates: Partial<InsertSubtask>): Promise<Subtask | undefined> {
+    const [subtask] = await db
+      .update(subtasks)
+      .set(updates)
+      .where(eq(subtasks.id, id))
+      .returning();
+    return subtask;
+  }
+
+  async deleteSubtask(id: number): Promise<boolean> {
+    const result = await db.delete(subtasks).where(eq(subtasks.id, id)).returning();
+    return result.length > 0;
+  }
+
+  // Comment methods
+  async getComments(taskId: number): Promise<Comment[]> {
+    return await db
+      .select()
+      .from(comments)
+      .where(eq(comments.taskId, taskId))
+      .orderBy(comments.createdAt);
+  }
+
+  async createComment(insertComment: InsertComment): Promise<Comment> {
+    const [comment] = await db.insert(comments).values(insertComment).returning();
+    return comment;
+  }
+
+  async updateComment(id: number, content: string): Promise<Comment | undefined> {
+    const [comment] = await db
+      .update(comments)
+      .set({ content, updatedAt: new Date() })
+      .where(eq(comments.id, id))
+      .returning();
+    return comment;
+  }
+
+  async deleteComment(id: number): Promise<boolean> {
+    const result = await db.delete(comments).where(eq(comments.id, id)).returning();
+    return result.length > 0;
+  }
+
+  // Activity log methods
+  async getActivityLog(taskId?: number, campaignId?: number, limit: number = 50): Promise<ActivityLog[]> {
+    let query = db.select().from(activityLog);
+    
+    if (taskId) {
+      query = query.where(eq(activityLog.taskId, taskId)) as typeof query;
+    } else if (campaignId) {
+      query = query.where(eq(activityLog.campaignId, campaignId)) as typeof query;
+    }
+    
+    return await query.orderBy(desc(activityLog.createdAt)).limit(limit);
+  }
+
+  async createActivityLog(insertActivity: InsertActivityLog): Promise<ActivityLog> {
+    const [activity] = await db.insert(activityLog).values(insertActivity).returning();
+    return activity;
+  }
+
+  // Notification methods
+  async getNotifications(userId: string): Promise<Notification[]> {
+    return await db
+      .select()
+      .from(notifications)
+      .where(eq(notifications.userId, userId))
+      .orderBy(desc(notifications.createdAt))
+      .limit(50);
+  }
+
+  async getUnreadNotificationCount(userId: string): Promise<number> {
+    const result = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(notifications)
+      .where(and(eq(notifications.userId, userId), eq(notifications.read, false)));
+    return Number(result[0]?.count || 0);
+  }
+
+  async createNotification(insertNotification: InsertNotification): Promise<Notification> {
+    const [notification] = await db.insert(notifications).values(insertNotification).returning();
+    return notification;
+  }
+
+  async markNotificationRead(id: number, userId: string): Promise<boolean> {
+    const result = await db
+      .update(notifications)
+      .set({ read: true })
+      .where(and(eq(notifications.id, id), eq(notifications.userId, userId)))
+      .returning();
+    return result.length > 0;
+  }
+
+  async markAllNotificationsRead(userId: string): Promise<void> {
+    await db
+      .update(notifications)
+      .set({ read: true })
+      .where(eq(notifications.userId, userId));
   }
 }
 

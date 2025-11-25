@@ -1,9 +1,10 @@
-import type { ContentTask } from "@shared/schema";
+import type { ContentTask, Campaign } from "@shared/schema";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Calendar, User, Building2, Paperclip, UserCheck, AlertTriangle } from "lucide-react";
+import { Calendar, User, Building2, Paperclip, UserCheck, AlertTriangle, Flag, FolderKanban } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useQuery } from "@tanstack/react-query";
 
 function isOverdue(dueDate: string | null | undefined, status: string): boolean {
   if (!dueDate || status === "COMPLETED") return false;
@@ -54,10 +55,36 @@ const statusConfig = {
   },
 };
 
+const priorityConfig = {
+  low: {
+    className: "text-muted-foreground",
+    icon: "opacity-50",
+  },
+  medium: {
+    className: "text-blue-600 dark:text-blue-400",
+    icon: "",
+  },
+  high: {
+    className: "text-amber-600 dark:text-amber-400",
+    icon: "",
+  },
+  urgent: {
+    className: "text-destructive",
+    icon: "animate-pulse",
+  },
+};
+
 export function ContentTaskCard({ task, isSelected, onSelectionChange, onEdit }: ContentTaskCardProps) {
   const statusStyle = statusConfig[task.status as keyof typeof statusConfig] || statusConfig["TO BE STARTED"];
+  const priorityStyle = priorityConfig[(task.priority || "medium") as keyof typeof priorityConfig] || priorityConfig.medium;
   const taskIsOverdue = isOverdue(task.dueDate, task.status);
   const taskIsDueSoon = isDueSoon(task.dueDate, task.status);
+
+  const { data: campaigns } = useQuery<Campaign[]>({
+    queryKey: ["/api/campaigns"],
+  });
+
+  const campaign = campaigns?.find(c => c.id === task.campaignId);
 
   const handleCardClick = (e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest('[data-radix-collection-item]')) {
@@ -82,13 +109,21 @@ export function ContentTaskCard({ task, isSelected, onSelectionChange, onEdit }:
     >
       <CardHeader className="pb-3 space-y-0">
         <div className="flex items-start justify-between gap-2">
-          <Badge
-            variant={statusStyle.variant}
-            className={cn("text-xs font-medium", statusStyle.className)}
-            data-testid={`badge-status-${task.id}`}
-          >
-            {task.status}
-          </Badge>
+          <div className="flex items-center gap-2 flex-wrap">
+            <Badge
+              variant={statusStyle.variant}
+              className={cn("text-xs font-medium", statusStyle.className)}
+              data-testid={`badge-status-${task.id}`}
+            >
+              {task.status}
+            </Badge>
+            {task.priority && task.priority !== "medium" && (
+              <div className={cn("flex items-center gap-1 text-xs", priorityStyle.className)}>
+                <Flag className={cn("w-3 h-3", priorityStyle.icon)} />
+                <span className="capitalize">{task.priority}</span>
+              </div>
+            )}
+          </div>
           {onSelectionChange && (
             <Checkbox
               checked={isSelected}
@@ -97,6 +132,15 @@ export function ContentTaskCard({ task, isSelected, onSelectionChange, onEdit }:
             />
           )}
         </div>
+        {campaign && (
+          <div className="flex items-center gap-1.5 mt-2 text-xs text-muted-foreground">
+            <div 
+              className="w-2 h-2 rounded-full" 
+              style={{ backgroundColor: campaign.color || "#3B82F6" }}
+            />
+            <span>{campaign.name}</span>
+          </div>
+        )}
       </CardHeader>
 
       <CardContent className="space-y-4">

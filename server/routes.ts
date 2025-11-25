@@ -1,11 +1,74 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import multer from "multer";
+import * as XLSX from "xlsx";
 import type { ComparisonResult } from "@shared/schema";
 import { storage } from "./storage";
 import { parseFile } from "./file-parser";
+import { createRequire } from "module";
+
+// Use createRequire for pdf-parse as it doesn't have proper ESM exports
+const require = createRequire(import.meta.url);
+const pdfParse = require("pdf-parse");
 
 const upload = multer({ storage: multer.memoryStorage() });
+
+// Extract all EVM addresses from any text content
+function extractEvmAddresses(content: string): string[] {
+  // Regex to match Ethereum addresses: 0x followed by 40 hex characters
+  const addressRegex = /0x[a-fA-F0-9]{40}/g;
+  const matches = content.match(addressRegex) || [];
+  
+  // Remove duplicates and normalize to lowercase for consistency with comparison tool
+  const seen = new Set<string>();
+  const uniqueAddresses: string[] = [];
+  
+  for (const addr of matches) {
+    const lowerAddr = addr.toLowerCase();
+    if (!seen.has(lowerAddr)) {
+      seen.add(lowerAddr);
+      uniqueAddresses.push(lowerAddr); // Return lowercase for consistency
+    }
+  }
+  
+  return uniqueAddresses;
+}
+
+// Convert file buffer to text content based on file type
+async function fileToText(filename: string, buffer: Buffer): Promise<string> {
+  const ext = filename.toLowerCase().split('.').pop() || '';
+  
+  // Handle PDF files
+  if (ext === 'pdf') {
+    try {
+      const data = await pdfParse(buffer);
+      return data.text;
+    } catch (e) {
+      console.error('Error reading PDF file:', e);
+      return '';
+    }
+  }
+  
+  // Handle Excel files
+  if (ext === 'xlsx' || ext === 'xls') {
+    try {
+      const workbook = XLSX.read(buffer, { type: 'buffer' });
+      let allText = '';
+      for (const sheetName of workbook.SheetNames) {
+        const sheet = workbook.Sheets[sheetName];
+        // Convert to CSV text
+        allText += XLSX.utils.sheet_to_csv(sheet) + '\n';
+      }
+      return allText;
+    } catch (e) {
+      console.error('Error reading Excel file:', e);
+      return '';
+    }
+  }
+  
+  // For all other files, try to read as text
+  return buffer.toString('utf-8');
+}
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Get comparison history
@@ -42,6 +105,47 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     }
   });
+
+  // Extract EVM addresses from any file
+  app.post(
+    "/api/extract",
+    upload.single("file"),
+    async (req, res) => {
+      try {
+        const file = req.file;
+        
+        if (!file) {
+          return res.status(400).json({ 
+            error: "File is required" 
+          });
+        }
+
+        // Convert file to text content
+        const textContent = await fileToText(file.originalname, file.buffer);
+        
+        if (!textContent) {
+          return res.status(400).json({ 
+            error: "Could not read file content. The file may be empty or in an unsupported binary format." 
+          });
+        }
+
+        // Extract all EVM addresses
+        const addresses = extractEvmAddresses(textContent);
+
+        res.json({
+          filename: file.originalname,
+          totalFound: addresses.length,
+          addresses: addresses,
+        });
+      } catch (error) {
+        console.error("Error extracting addresses:", error);
+        res.status(500).json({ 
+          error: "Failed to extract addresses",
+          message: error instanceof Error ? error.message : "Unknown error"
+        });
+      }
+    }
+  );
 
   app.post(
     "/api/compare",

@@ -346,20 +346,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
         };
 
         // Save comparison to database
-        try {
-          await storage.createComparison({
-            mintedFileName: mintedFile.originalname,
-            eligibleFileName: eligibleFile.originalname,
-            totalEligible: result.stats.totalEligible,
-            totalMinted: result.stats.totalMinted,
-            remaining: result.stats.remaining,
-            invalidAddresses: result.stats.invalidAddresses || null,
-            results: result as any,
-          });
-        } catch (dbError) {
-          console.error("Failed to save comparison to database:", dbError);
-          // Don't fail the request if database save fails
-        }
+        await storage.createComparison({
+          mintedFileName: mintedFile.originalname,
+          eligibleFileName: eligibleFile.originalname,
+          totalEligible: result.stats.totalEligible,
+          totalMinted: result.stats.totalMinted,
+          remaining: result.stats.remaining,
+          invalidAddresses: result.stats.invalidAddresses || null,
+          results: result as any,
+        });
 
         res.json(result);
       } catch (error) {

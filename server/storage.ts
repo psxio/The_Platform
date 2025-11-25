@@ -171,6 +171,28 @@ export class DbStorage implements IStorage {
   async deletePortalTask(id: number): Promise<void> {
     await db.delete(portalTasks).where(eq(portalTasks.id, id));
   }
+
+  async seedPortalTasks(): Promise<void> {
+    // Check if tasks already exist
+    const existingTasks = await db.select().from(portalTasks).limit(1);
+    if (existingTasks.length > 0) {
+      return; // Already seeded
+    }
+
+    // Seed initial 4444 Portal tasks
+    const initialTasks = [
+      { title: "Guild API integration", status: "done" },
+      { title: "X raid function", status: "in_progress" },
+      { title: "UI fixes", status: "pending" },
+      { title: "Mobile optimization", status: "pending" },
+      { title: "Memory/mission tasks", status: "pending" },
+      { title: "Farcaster/Luma/Discord integration", status: "pending" },
+      { title: "Google auth for sheets", status: "pending" },
+      { title: "Changing hard-coded sheets", status: "pending" },
+    ];
+
+    await db.insert(portalTasks).values(initialTasks);
+  }
 }
 
 export const storage = new DbStorage();

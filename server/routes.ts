@@ -76,6 +76,13 @@ async function fileToText(filename: string, buffer: Buffer): Promise<string> {
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  // Seed initial portal tasks on startup
+  try {
+    await storage.seedPortalTasks();
+  } catch (error) {
+    console.error("Error seeding portal tasks:", error);
+  }
+
   // Get comparison history
   app.get("/api/comparisons", async (req, res) => {
     try {

@@ -5,16 +5,22 @@ import { DeliverablesView } from "@/components/deliverables-view";
 import { GoogleSheetsSync } from "@/components/google-sheets-sync";
 import { CampaignsView } from "@/components/campaigns-view";
 import { AnalyticsDashboard } from "@/components/analytics-dashboard";
+import { KanbanView } from "@/components/kanban-view";
+import { CalendarView } from "@/components/calendar-view";
 import { AddContentTaskDialog } from "@/components/add-content-task-dialog";
 import { AddCampaignDialog } from "@/components/add-campaign-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Plus, ClipboardList, Users, Upload, Settings, FolderKanban, BarChart3 } from "lucide-react";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Plus, ClipboardList, Users, Upload, Settings, FolderKanban, BarChart3, LayoutGrid, Columns3, Calendar } from "lucide-react";
+
+type TaskViewMode = "grid" | "kanban" | "calendar";
 
 export default function ContentDashboard() {
   const [isAddTaskDialogOpen, setIsAddTaskDialogOpen] = useState(false);
   const [isAddCampaignDialogOpen, setIsAddCampaignDialogOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("tasks");
+  const [taskViewMode, setTaskViewMode] = useState<TaskViewMode>("grid");
 
   return (
     <div className="container mx-auto py-6 px-4 max-w-7xl">
@@ -30,10 +36,29 @@ export default function ContentDashboard() {
           </div>
           <div className="flex items-center gap-2">
             {activeTab === "tasks" && (
-              <Button onClick={() => setIsAddTaskDialogOpen(true)} data-testid="button-add-task">
-                <Plus className="h-4 w-4 mr-2" />
-                Add Task
-              </Button>
+              <>
+                <ToggleGroup 
+                  type="single" 
+                  value={taskViewMode} 
+                  onValueChange={(value) => value && setTaskViewMode(value as TaskViewMode)}
+                  className="border rounded-md"
+                  data-testid="toggle-task-view"
+                >
+                  <ToggleGroupItem value="grid" aria-label="Grid view" data-testid="toggle-grid-view">
+                    <LayoutGrid className="h-4 w-4" />
+                  </ToggleGroupItem>
+                  <ToggleGroupItem value="kanban" aria-label="Kanban view" data-testid="toggle-kanban-view">
+                    <Columns3 className="h-4 w-4" />
+                  </ToggleGroupItem>
+                  <ToggleGroupItem value="calendar" aria-label="Calendar view" data-testid="toggle-calendar-view">
+                    <Calendar className="h-4 w-4" />
+                  </ToggleGroupItem>
+                </ToggleGroup>
+                <Button onClick={() => setIsAddTaskDialogOpen(true)} data-testid="button-add-task">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Task
+                </Button>
+              </>
             )}
             {activeTab === "campaigns" && (
               <Button onClick={() => setIsAddCampaignDialogOpen(true)} data-testid="button-add-campaign">
@@ -73,7 +98,9 @@ export default function ContentDashboard() {
           </TabsList>
 
           <TabsContent value="tasks" className="mt-6">
-            <ContentTasksView />
+            {taskViewMode === "grid" && <ContentTasksView />}
+            {taskViewMode === "kanban" && <KanbanView />}
+            {taskViewMode === "calendar" && <CalendarView />}
           </TabsContent>
 
           <TabsContent value="campaigns" className="mt-6">

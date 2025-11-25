@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import type { ContentTask } from "@shared/schema";
+import type { ContentTask, User } from "@shared/schema";
 import { ContentTaskCard } from "@/components/content-task-card";
 import { AdvancedTaskFilters } from "@/components/advanced-task-filters";
 import { BulkTaskActions } from "@/components/bulk-task-actions";
 import { AddContentTaskDialog } from "@/components/add-content-task-dialog";
+import { TaskDetailsDialog } from "@/components/task-details-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AlertCircle, Inbox } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -19,9 +20,15 @@ export function ContentTasksView() {
   const [selectedTaskIds, setSelectedTaskIds] = useState<number[]>([]);
   const [editingTask, setEditingTask] = useState<ContentTask | null>(null);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [viewingTask, setViewingTask] = useState<ContentTask | null>(null);
+  const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false);
 
   const { data: tasks, isLoading, error } = useQuery<ContentTask[]>({
     queryKey: ["/api/content-tasks"],
+  });
+
+  const { data: currentUser } = useQuery<User>({
+    queryKey: ["/api/auth/user"],
   });
 
   if (error) {
@@ -116,6 +123,11 @@ export function ContentTasksView() {
     );
   };
 
+  const handleTaskClick = (task: ContentTask) => {
+    setViewingTask(task);
+    setIsDetailsDialogOpen(true);
+  };
+
   const handleTaskEdit = (task: ContentTask) => {
     setEditingTask(task);
     setIsEditDialogOpen(true);
@@ -124,6 +136,11 @@ export function ContentTasksView() {
   const handleEditDialogClose = () => {
     setIsEditDialogOpen(false);
     setEditingTask(null);
+  };
+
+  const handleDetailsDialogClose = () => {
+    setIsDetailsDialogOpen(false);
+    setViewingTask(null);
   };
 
   return (
@@ -175,7 +192,7 @@ export function ContentTasksView() {
                 task={task}
                 isSelected={selectedTaskIds.includes(task.id)}
                 onSelectionChange={(selected) => handleTaskSelectionChange(task.id, selected)}
-                onEdit={handleTaskEdit}
+                onEdit={handleTaskClick}
               />
             ))}
           </div>
@@ -186,6 +203,14 @@ export function ContentTasksView() {
         open={isEditDialogOpen}
         onOpenChange={handleEditDialogClose}
         task={editingTask || undefined}
+      />
+
+      <TaskDetailsDialog
+        open={isDetailsDialogOpen}
+        onOpenChange={handleDetailsDialogClose}
+        task={viewingTask}
+        onEdit={handleTaskEdit}
+        currentUserId={currentUser?.id}
       />
     </div>
   );

@@ -105,8 +105,8 @@ export async function setupAuth(app: Express) {
   app.get(
     "/api/auth/google/callback",
     passport.authenticate("google", {
-      failureRedirect: "/todo?error=auth_failed",
-      successRedirect: "/todo",
+      failureRedirect: "/?error=auth_failed",
+      successRedirect: "/role-select",
     })
   );
 
@@ -115,7 +115,7 @@ export async function setupAuth(app: Express) {
       if (err) {
         console.error("Logout error:", err);
       }
-      res.redirect("/todo");
+      res.redirect("/");
     });
   });
 
@@ -129,4 +129,24 @@ export const isAuthenticated: RequestHandler = (req, res, next) => {
     return next();
   }
   return res.status(401).json({ message: "Unauthorized" });
+};
+
+export const requireRole = (...roles: string[]): RequestHandler => {
+  return (req: any, res, next) => {
+    if (!req.isAuthenticated() || !req.user) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    
+    const userRole = req.user.role;
+    
+    if (!userRole) {
+      return res.status(403).json({ message: "No role assigned. Please select a role first." });
+    }
+    
+    if (userRole === "admin" || roles.includes(userRole)) {
+      return next();
+    }
+    
+    return res.status(403).json({ message: "Access denied. Insufficient permissions." });
+  };
 };

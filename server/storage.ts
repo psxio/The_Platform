@@ -3,15 +3,21 @@ import {
   type Collection, type InsertCollection, collections,
   type MintedAddress, type InsertMintedAddress, mintedAddresses,
   type Task, type InsertTask, tasks,
-  type User, type UpsertUser, users
+  type User, type UpsertUser, users,
+  type ContentTask, type InsertContentTask, contentTasks,
+  type DirectoryMember, type InsertDirectoryMember, directoryMembers,
+  type Deliverable, type InsertDeliverable, deliverables,
+  type UserRole
 } from "@shared/schema";
 import { db } from "./db";
 import { desc, eq, and, sql, or } from "drizzle-orm";
 
 export interface IStorage {
-  // User methods (required for Replit Auth)
+  // User methods (required for Auth)
   getUser(id: string): Promise<User | undefined>;
   upsertUser(user: UpsertUser): Promise<User>;
+  updateUserRole(id: string, role: UserRole): Promise<User | undefined>;
+  getAllUsers(): Promise<User[]>;
   
   // Comparison history methods
   createComparison(comparison: InsertComparison): Promise<Comparison>;
@@ -38,10 +44,31 @@ export interface IStorage {
   updateTaskPublic(id: number, userId: string, isPublic: boolean): Promise<Task | undefined>;
   deleteTask(id: number, userId: string): Promise<void>;
   getTask(id: number): Promise<Task | undefined>;
+  
+  // Content task methods (ContentFlowStudio)
+  getContentTasks(): Promise<ContentTask[]>;
+  getContentTask(id: number): Promise<ContentTask | undefined>;
+  createContentTask(task: InsertContentTask): Promise<ContentTask>;
+  updateContentTask(id: number, task: Partial<InsertContentTask>): Promise<ContentTask | undefined>;
+  deleteContentTask(id: number): Promise<boolean>;
+  
+  // Directory member methods
+  getDirectoryMembers(): Promise<DirectoryMember[]>;
+  getDirectoryMember(id: number): Promise<DirectoryMember | undefined>;
+  createDirectoryMember(member: InsertDirectoryMember): Promise<DirectoryMember>;
+  updateDirectoryMember(id: number, member: Partial<InsertDirectoryMember>): Promise<DirectoryMember | undefined>;
+  deleteDirectoryMember(id: number): Promise<boolean>;
+  
+  // Deliverable methods
+  getDeliverables(): Promise<Deliverable[]>;
+  getDeliverable(id: number): Promise<Deliverable | undefined>;
+  getDeliverablesByTaskId(taskId: number): Promise<Deliverable[]>;
+  createDeliverable(deliverable: InsertDeliverable): Promise<Deliverable>;
+  deleteDeliverable(id: number): Promise<boolean>;
 }
 
 export class DbStorage implements IStorage {
-  // User methods (required for Replit Auth)
+  // User methods (required for Auth)
   async getUser(id: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.id, id));
     return user;
@@ -60,6 +87,19 @@ export class DbStorage implements IStorage {
       })
       .returning();
     return user;
+  }
+
+  async updateUserRole(id: string, role: UserRole): Promise<User | undefined> {
+    const [user] = await db
+      .update(users)
+      .set({ role, updatedAt: new Date() })
+      .where(eq(users.id, id))
+      .returning();
+    return user;
+  }
+
+  async getAllUsers(): Promise<User[]> {
+    return db.select().from(users).orderBy(desc(users.createdAt));
   }
 
   async createComparison(insertComparison: InsertComparison): Promise<Comparison> {
@@ -118,23 +158,18 @@ export class DbStorage implements IStorage {
   async addMintedAddresses(collectionId: number, addresses: string[]): Promise<number> {
     if (addresses.length === 0) return 0;
     
-    // Normalize addresses to lowercase for consistency
     const normalizedAddresses = addresses.map(a => a.toLowerCase());
     
-    // Get existing addresses for this collection to avoid duplicates
     const existing = await db
       .select({ address: mintedAddresses.address })
       .from(mintedAddresses)
       .where(eq(mintedAddresses.collectionId, collectionId));
     
     const existingSet = new Set(existing.map(e => e.address.toLowerCase()));
-    
-    // Filter out duplicates
     const newAddresses = normalizedAddresses.filter(a => !existingSet.has(a));
     
     if (newAddresses.length === 0) return 0;
     
-    // Insert new addresses
     await db.insert(mintedAddresses).values(
       newAddresses.map(address => ({
         collectionId,
@@ -222,6 +257,88 @@ export class DbStorage implements IStorage {
 
   async deleteTask(id: number, userId: string): Promise<void> {
     await db.delete(tasks).where(and(eq(tasks.id, id), eq(tasks.userId, userId)));
+  }
+
+  // Content task methods (ContentFlowStudio)
+  async getContentTasks(): Promise<ContentTask[]> {
+    return await db.select().from(contentTasks).orderBy(desc(contentTasks.createdAt));
+  }
+
+  async getContentTask(id: number): Promise<ContentTask | undefined> {
+    const [task] = await db.select().from(contentTasks).where(eq(contentTasks.id, id));
+    return task;
+  }
+
+  async createContentTask(insertTask: InsertContentTask): Promise<ContentTask> {
+    const [task] = await db.insert(contentTasks).values(insertTask).returning();
+    return task;
+  }
+
+  async updateContentTask(id: number, updates: Partial<InsertContentTask>): Promise<ContentTask | undefined> {
+    const [task] = await db
+      .update(contentTasks)
+      .set(updates)
+      .where(eq(contentTasks.id, id))
+      .returning();
+    return task;
+  }
+
+  async deleteContentTask(id: number): Promise<boolean> {
+    const result = await db.delete(contentTasks).where(eq(contentTasks.id, id)).returning();
+    return result.length > 0;
+  }
+
+  // Directory member methods
+  async getDirectoryMembers(): Promise<DirectoryMember[]> {
+    return await db.select().from(directoryMembers);
+  }
+
+  async getDirectoryMember(id: number): Promise<DirectoryMember | undefined> {
+    const [member] = await db.select().from(directoryMembers).where(eq(directoryMembers.id, id));
+    return member;
+  }
+
+  async createDirectoryMember(insertMember: InsertDirectoryMember): Promise<DirectoryMember> {
+    const [member] = await db.insert(directoryMembers).values(insertMember).returning();
+    return member;
+  }
+
+  async updateDirectoryMember(id: number, updates: Partial<InsertDirectoryMember>): Promise<DirectoryMember | undefined> {
+    const [member] = await db
+      .update(directoryMembers)
+      .set(updates)
+      .where(eq(directoryMembers.id, id))
+      .returning();
+    return member;
+  }
+
+  async deleteDirectoryMember(id: number): Promise<boolean> {
+    const result = await db.delete(directoryMembers).where(eq(directoryMembers.id, id)).returning();
+    return result.length > 0;
+  }
+
+  // Deliverable methods
+  async getDeliverables(): Promise<Deliverable[]> {
+    return await db.select().from(deliverables).orderBy(desc(deliverables.uploadedAt));
+  }
+
+  async getDeliverable(id: number): Promise<Deliverable | undefined> {
+    const [deliverable] = await db.select().from(deliverables).where(eq(deliverables.id, id));
+    return deliverable;
+  }
+
+  async getDeliverablesByTaskId(taskId: number): Promise<Deliverable[]> {
+    return await db.select().from(deliverables).where(eq(deliverables.taskId, taskId));
+  }
+
+  async createDeliverable(insertDeliverable: InsertDeliverable): Promise<Deliverable> {
+    const [deliverable] = await db.insert(deliverables).values(insertDeliverable).returning();
+    return deliverable;
+  }
+
+  async deleteDeliverable(id: number): Promise<boolean> {
+    const result = await db.delete(deliverables).where(eq(deliverables.id, id)).returning();
+    return result.length > 0;
   }
 }
 

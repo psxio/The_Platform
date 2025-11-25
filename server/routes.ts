@@ -6,7 +6,7 @@ import type { ComparisonResult, InsertCollection } from "@shared/schema";
 import { storage } from "./storage";
 import { parseFile } from "./file-parser";
 import { createRequire } from "module";
-import { setupAuth, isAuthenticated } from "./googleAuth";
+import { setupAuth, isAuthenticated, requireRole } from "./googleAuth";
 
 // Validate Ethereum address format
 function isValidEvmAddress(address: string): boolean {
@@ -848,6 +848,303 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error deleting task:", error);
       res.status(500).json({ error: "Failed to delete task" });
+    }
+  });
+
+  // ================== USER ROLE ENDPOINTS ==================
+
+  // Update user role
+  app.patch("/api/auth/role", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.claims.sub;
+      const { role } = req.body;
+      
+      if (!role || !["web3", "content", "admin"].includes(role)) {
+        return res.status(400).json({ error: "Valid role is required (web3, content, or admin)" });
+      }
+      
+      const user = await storage.updateUserRole(userId, role);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      
+      res.json(user);
+    } catch (error) {
+      console.error("Error updating role:", error);
+      res.status(500).json({ error: "Failed to update role" });
+    }
+  });
+
+  // ================== CONTENT TASK ENDPOINTS (ContentFlowStudio) ==================
+  // These require "content" or "admin" role
+
+  // Get all content tasks
+  app.get("/api/content-tasks", requireRole("content"), async (req, res) => {
+    try {
+      const tasks = await storage.getContentTasks();
+      res.json(tasks);
+    } catch (error) {
+      console.error("Error fetching content tasks:", error);
+      res.status(500).json({ error: "Failed to fetch content tasks" });
+    }
+  });
+
+  // Get single content task
+  app.get("/api/content-tasks/:id", requireRole("content"), async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const task = await storage.getContentTask(id);
+      if (!task) {
+        return res.status(404).json({ error: "Content task not found" });
+      }
+      res.json(task);
+    } catch (error) {
+      console.error("Error fetching content task:", error);
+      res.status(500).json({ error: "Failed to fetch content task" });
+    }
+  });
+
+  // Create content task
+  app.post("/api/content-tasks", requireRole("content"), async (req, res) => {
+    try {
+      const { description, status, assignedTo, dueDate, assignedBy, client, deliverable, notes } = req.body;
+      
+      if (!description || typeof description !== "string") {
+        return res.status(400).json({ error: "Description is required" });
+      }
+      
+      const task = await storage.createContentTask({
+        description,
+        status: status || "TO BE STARTED",
+        assignedTo: assignedTo || undefined,
+        dueDate: dueDate || undefined,
+        assignedBy: assignedBy || undefined,
+        client: client || undefined,
+        deliverable: deliverable || undefined,
+        notes: notes || undefined,
+      });
+      
+      res.status(201).json(task);
+    } catch (error) {
+      console.error("Error creating content task:", error);
+      res.status(500).json({ error: "Failed to create content task" });
+    }
+  });
+
+  // Update content task
+  app.put("/api/content-tasks/:id", requireRole("content"), async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const updates = req.body;
+      
+      const task = await storage.updateContentTask(id, updates);
+      if (!task) {
+        return res.status(404).json({ error: "Content task not found" });
+      }
+      
+      res.json(task);
+    } catch (error) {
+      console.error("Error updating content task:", error);
+      res.status(500).json({ error: "Failed to update content task" });
+    }
+  });
+
+  // Delete content task
+  app.delete("/api/content-tasks/:id", requireRole("content"), async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const deleted = await storage.deleteContentTask(id);
+      if (!deleted) {
+        return res.status(404).json({ error: "Content task not found" });
+      }
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting content task:", error);
+      res.status(500).json({ error: "Failed to delete content task" });
+    }
+  });
+
+  // ================== DIRECTORY MEMBER ENDPOINTS ==================
+  // These require "content" or "admin" role
+
+  // Get all directory members
+  app.get("/api/directory", requireRole("content"), async (req, res) => {
+    try {
+      const members = await storage.getDirectoryMembers();
+      res.json(members);
+    } catch (error) {
+      console.error("Error fetching directory:", error);
+      res.status(500).json({ error: "Failed to fetch directory" });
+    }
+  });
+
+  // Get single directory member
+  app.get("/api/directory/:id", requireRole("content"), async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const member = await storage.getDirectoryMember(id);
+      if (!member) {
+        return res.status(404).json({ error: "Directory member not found" });
+      }
+      res.json(member);
+    } catch (error) {
+      console.error("Error fetching directory member:", error);
+      res.status(500).json({ error: "Failed to fetch directory member" });
+    }
+  });
+
+  // Create directory member
+  app.post("/api/directory", requireRole("content"), async (req, res) => {
+    try {
+      const { person, skill, evmAddress, client } = req.body;
+      
+      if (!person || typeof person !== "string") {
+        return res.status(400).json({ error: "Person name is required" });
+      }
+      
+      const member = await storage.createDirectoryMember({
+        person,
+        skill: skill || undefined,
+        evmAddress: evmAddress || undefined,
+        client: client || undefined,
+      });
+      
+      res.status(201).json(member);
+    } catch (error) {
+      console.error("Error creating directory member:", error);
+      res.status(500).json({ error: "Failed to create directory member" });
+    }
+  });
+
+  // Update directory member
+  app.put("/api/directory/:id", requireRole("content"), async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const updates = req.body;
+      
+      const member = await storage.updateDirectoryMember(id, updates);
+      if (!member) {
+        return res.status(404).json({ error: "Directory member not found" });
+      }
+      
+      res.json(member);
+    } catch (error) {
+      console.error("Error updating directory member:", error);
+      res.status(500).json({ error: "Failed to update directory member" });
+    }
+  });
+
+  // Delete directory member
+  app.delete("/api/directory/:id", requireRole("content"), async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const deleted = await storage.deleteDirectoryMember(id);
+      if (!deleted) {
+        return res.status(404).json({ error: "Directory member not found" });
+      }
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting directory member:", error);
+      res.status(500).json({ error: "Failed to delete directory member" });
+    }
+  });
+
+  // ================== DELIVERABLE ENDPOINTS ==================
+  // These require "content" or "admin" role
+
+  // Get all deliverables
+  app.get("/api/deliverables", requireRole("content"), async (req, res) => {
+    try {
+      const deliverables = await storage.getDeliverables();
+      res.json(deliverables);
+    } catch (error) {
+      console.error("Error fetching deliverables:", error);
+      res.status(500).json({ error: "Failed to fetch deliverables" });
+    }
+  });
+
+  // Get deliverables by task ID
+  app.get("/api/content-tasks/:id/deliverables", requireRole("content"), async (req, res) => {
+    try {
+      const taskId = parseInt(req.params.id);
+      const deliverables = await storage.getDeliverablesByTaskId(taskId);
+      res.json(deliverables);
+    } catch (error) {
+      console.error("Error fetching task deliverables:", error);
+      res.status(500).json({ error: "Failed to fetch task deliverables" });
+    }
+  });
+
+  // Upload deliverable for a task
+  app.post(
+    "/api/content-tasks/:id/deliverables",
+    requireRole("content"),
+    upload.single("file"),
+    async (req, res) => {
+      try {
+        const taskId = parseInt(req.params.id);
+        const file = req.file;
+        
+        if (!file) {
+          return res.status(400).json({ error: "File is required" });
+        }
+        
+        const task = await storage.getContentTask(taskId);
+        if (!task) {
+          return res.status(404).json({ error: "Content task not found" });
+        }
+        
+        // Save file to uploads directory
+        const fs = await import("fs");
+        const path = await import("path");
+        const uploadsDir = path.join(process.cwd(), "uploads");
+        
+        if (!fs.existsSync(uploadsDir)) {
+          fs.mkdirSync(uploadsDir, { recursive: true });
+        }
+        
+        const uniqueName = `${Date.now()}-${file.originalname}`;
+        const filePath = path.join(uploadsDir, uniqueName);
+        fs.writeFileSync(filePath, file.buffer);
+        
+        const deliverable = await storage.createDeliverable({
+          taskId,
+          fileName: file.originalname,
+          filePath: `/uploads/${uniqueName}`,
+          fileSize: `${(file.size / 1024).toFixed(1)} KB`,
+        });
+        
+        res.status(201).json(deliverable);
+      } catch (error) {
+        console.error("Error uploading deliverable:", error);
+        res.status(500).json({ error: "Failed to upload deliverable" });
+      }
+    }
+  );
+
+  // Delete deliverable
+  app.delete("/api/deliverables/:id", requireRole("content"), async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const deliverable = await storage.getDeliverable(id);
+      
+      if (!deliverable) {
+        return res.status(404).json({ error: "Deliverable not found" });
+      }
+      
+      // Delete file from disk
+      const fs = await import("fs");
+      const path = await import("path");
+      const filePath = path.join(process.cwd(), deliverable.filePath);
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+      
+      await storage.deleteDeliverable(id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting deliverable:", error);
+      res.status(500).json({ error: "Failed to delete deliverable" });
     }
   });
 

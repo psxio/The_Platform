@@ -1,8 +1,15 @@
-# CSV Wallet Address Comparison Tool
+# Unified Web3 & Content Production Platform
 
 ## Overview
 
-A Web3-focused utility tool for comparing wallet addresses across multiple file formats to identify which eligible addresses have not yet minted. The application provides a clean, professional interface for uploading two files (minted addresses and eligible addresses) and displays comparison results with statistics, downloadable output, and comparison history tracking.
+A unified application combining two systems:
+1. **Web3 Wallet Tools**: Address comparison, NFT collection management, and address extraction for Web3 users
+2. **ContentFlowStudio**: Content production management system with task tracking, team directory, and deliverables for content teams
+
+The application uses Google OAuth authentication with strict role-based access control:
+- **web3 users**: Only see wallet address tools and NFT features
+- **content users**: Only see content production management features
+- **admin users**: Full access to both sides
 
 ## User Preferences
 
@@ -10,183 +17,168 @@ Preferred communication style: Simple, everyday language.
 
 ## System Architecture
 
+### Authentication
+
+**Google OAuth 2.0**: User-provided credentials stored as secrets
+- GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET required
+- Passport.js with passport-google-oauth20 strategy
+- Session-based auth with PostgreSQL session store
+- Callback URL: `/api/auth/google/callback`
+
+**User Roles** (stored in users.role field):
+- `web3`: Access to Compare, Extract, Collections, History, To Do pages
+- `content`: Access to Content Dashboard with tasks and team directory
+- `admin`: Access to all features from both sides
+
+**Role Selection**: First-time users see role selection page; can change role later via user menu
+
 ### Frontend Architecture
 
 **Framework**: React with TypeScript using Vite as the build tool.
 
-**Routing**: Uses Wouter for lightweight client-side routing.
+**Routing**: Uses Wouter for lightweight client-side routing with role-based route protection.
 
-**UI Component Library**: Shadcn UI (New York style) with Radix UI primitives providing accessible, customizable components. The design system emphasizes:
-- Clean, functional design inspired by Linear and Web3 dashboards
-- Utility-focused interface prioritizing clarity and trust
-- Monospace fonts for wallet addresses, Inter/modern sans-serif for general text
-- Tailwind CSS for styling with custom design tokens
+**UI Component Library**: Shadcn UI (New York style) with Radix UI primitives.
 
-**State Management**: 
-- React hooks for local component state
-- TanStack Query (React Query) for server state management and data fetching
-- No global state management solution (context-based patterns where needed)
-
-**Key Design Decisions**:
-- Four-page application with navigation between Compare, Extract, Collections, and History pages
-- Drag-and-drop file upload zones with visual feedback for multiple file formats
-- Real-time file parsing and comparison with Ethereum address validation
-- Collection-based system for storing minted addresses per NFT collection
-- Dual-mode comparison: upload minted file OR select pre-stored collection
-- Statistics dashboard displaying total eligible, already minted, and remaining addresses
-- Searchable results table with download capability
-- Comparison history with persistent storage in PostgreSQL
-- Mobile-responsive layout (single column stacking on small screens)
+**Key Pages**:
+- `/role-select`: Role selection for new users
+- `/compare`: Web3 address comparison tool (web3/admin)
+- `/extract`: EVM address extraction from files (web3/admin)
+- `/collections`: NFT collection management (web3/admin)
+- `/history`: Comparison history (web3/admin)
+- `/todo`: Personal to-do list (web3/admin)
+- `/content`: Content production dashboard (content/admin)
 
 ### Backend Architecture
 
 **Runtime**: Node.js with Express server
 
-**API Design**: REST API with file upload endpoints using Multer for multipart/form-data handling
-
-**Multi-Format File Processing**: Unified parser (server/file-parser.ts) supporting:
-- **CSV**: PapaParse for robust CSV parsing with multiple formats and delimiters
-- **TXT**: Plain text address lists (one per line)
-- **JSON**: Array of address objects or plain address strings with flexible field mapping
-- **Excel**: .xlsx and .xls files using xlsx library for spreadsheet parsing
-- Extraction of Ethereum addresses (0x + 40 hex characters) with format validation
-- Optional metadata extraction (username, points, rank)
-- Flexible parsing that handles both structured data and plain text address lists
-
-**Address Validation**: 
-- Format validation: 0x prefix + 40 hexadecimal characters
-- Case-insensitive comparison for address matching
-- Validation error reporting with line numbers and invalid address details
-
-**Request Flow**:
-1. Client uploads two files via `/api/compare` endpoint (supports CSV, TXT, JSON, Excel)
-2. Server detects format and parses content to extract wallet addresses with validation
-3. Server performs case-insensitive set comparison to identify addresses in eligible list but not in minted list
-4. Results saved to PostgreSQL database for history tracking
-5. Results returned with statistics, validation errors (if any), and full address details
-
 **API Endpoints**:
+
+Web3 Endpoints:
 - POST `/api/compare` - Upload and compare two files
-- POST `/api/compare-collection` - Compare eligible file against a stored collection
-- POST `/api/extract` - Extract EVM addresses from any file (PDF, CSV, TXT, JSON, Excel, HTML)
-- GET `/api/comparisons` - Retrieve comparison history (with optional limit query param)
-- GET `/api/comparisons/:id` - Retrieve specific comparison by ID
-- GET `/api/collections` - List all collections with address counts
-- POST `/api/collections` - Create a new collection
-- GET `/api/collections/:id` - Get collection details
-- DELETE `/api/collections/:id` - Delete a collection (cascades to addresses)
-- POST `/api/collections/:id/addresses` - Add addresses to a collection
-- DELETE `/api/collections/:id/addresses` - Remove addresses from a collection
+- POST `/api/compare-collection` - Compare eligible file against stored collection
+- POST `/api/extract` - Extract EVM addresses from any file
+- GET/POST/DELETE `/api/collections` - NFT collection CRUD
+- GET/POST/DELETE `/api/collections/:id/addresses` - Collection addresses
+- GET `/api/comparisons` - Comparison history
 
-**Development vs Production**:
-- Development: Vite dev server with HMR and specialized error handling
-- Production: Compiled static assets served by Express
+Auth Endpoints:
+- GET `/api/auth/user` - Get current user
+- GET `/api/login` - Initiate Google OAuth
+- GET `/api/logout` - Log out
+- PATCH `/api/auth/role` - Update user role
 
-### Data Storage Solutions
+ContentFlowStudio Endpoints:
+- GET/POST/PUT/DELETE `/api/content-tasks` - Content task CRUD
+- GET/POST/PUT/DELETE `/api/directory` - Team directory CRUD
+- GET/POST/DELETE `/api/deliverables` - Deliverable file management
+- POST `/api/content-tasks/:id/deliverables` - Upload task deliverable
 
-**Current Implementation**: PostgreSQL database with Drizzle ORM for persistent comparison history storage.
+To-Do Endpoints:
+- GET/POST/PATCH/DELETE `/api/tasks` - Personal task CRUD
 
-**Database Schema**: Defined in `shared/schema.ts`:
+### Database Schema
 
-Collections table:
-- id (serial): Auto-incrementing primary key
-- name (text): Collection name (unique)
-- description (text, nullable): Collection description
-- createdAt (timestamp): When collection was created
+**Users table** (for Google Auth):
+- id (varchar): UUID primary key
+- email (varchar): Unique email
+- firstName, lastName, profileImageUrl (varchar)
+- role (varchar): "web3", "content", or "admin"
+- createdAt, updatedAt (timestamp)
 
-Minted Addresses table:
-- id (serial): Auto-incrementing primary key
-- collectionId (integer): Foreign key to collections table (cascades on delete)
-- address (text): Ethereum wallet address (lowercase normalized)
-- createdAt (timestamp): When address was added
+**Sessions table** (for session storage):
+- sid (varchar): Session ID primary key
+- sess (jsonb): Session data
+- expire (timestamp): Session expiration
 
-Comparisons table:
-- id (serial): Auto-incrementing primary key
-- collectionId (integer, nullable): Foreign key to collections table (if using stored collection)
-- mintedFileName (varchar): Name of minted addresses file/collection
-- eligibleFileName (varchar): Name of eligible addresses file
-- totalEligible (integer): Count of total eligible addresses
-- totalMinted (integer): Count of already minted addresses
-- remaining (integer): Count of addresses that haven't minted
-- invalidAddresses (integer, nullable): Count of invalid addresses found
-- results (jsonb): Full comparison results including address details
-- createdAt (timestamp): When comparison was performed
+**Collections table** (NFT minted address collections):
+- id (serial): Primary key
+- name (text): Unique collection name
+- description (text): Optional description
+- createdAt (timestamp)
 
-**Data Models**:
-- Address: Contains wallet address, optional username, points, and rank
-- ComparisonResult: Contains array of non-minted addresses, statistics object, and optional validation errors
-- Collection: Database record with name, description, and address count
-- Comparison: Database record with file names, statistics, and full results
+**Minted Addresses table**:
+- id (serial): Primary key
+- collectionId (integer): FK to collections (cascade delete)
+- address (text): Lowercase EVM address
+- createdAt (timestamp)
+
+**Comparisons table** (comparison history):
+- id (serial): Primary key
+- collectionId (integer): Optional FK to collections
+- mintedFileName, eligibleFileName (varchar)
+- totalEligible, totalMinted, remaining, invalidAddresses (integer)
+- results (jsonb): Full comparison results
+- createdAt (timestamp)
+
+**Tasks table** (personal to-do):
+- id (serial): Primary key
+- userId (varchar): FK to users (cascade delete)
+- title (text), status (text), isPublic (boolean)
+- createdAt (timestamp)
+
+**Content Tasks table** (ContentFlowStudio):
+- id (serial): Primary key
+- description (text): Task description
+- status (varchar): "TO BE STARTED", "IN PROGRESS", "COMPLETED"
+- assignedTo, dueDate, assignedBy, client, deliverable, notes (varchar/text)
+- createdAt (timestamp)
+
+**Directory Members table** (team directory):
+- id (serial): Primary key
+- person (varchar): Person name
+- skill (text): Skills/roles
+- evmAddress (varchar): Optional EVM address
+- client (varchar): Associated client
+
+**Deliverables table** (task file uploads):
+- id (serial): Primary key
+- taskId (integer): FK to content_tasks (cascade delete)
+- fileName (varchar), filePath (text), fileSize (varchar)
+- uploadedAt (timestamp)
 
 ### External Dependencies
 
-**UI Components**: 
-- Radix UI primitives (@radix-ui/*) - Accessible component primitives
-- Lucide React - Icon library
-- cmdk - Command menu component
-- class-variance-authority & clsx - Utility-first styling helpers
+**Authentication**:
+- passport, passport-google-oauth20: OAuth strategy
+- express-session, connect-pg-simple: Session management
+- openid-client: OIDC support
+
+**UI Components**:
+- Radix UI primitives (@radix-ui/*)
+- Lucide React icons
+- Shadcn UI components
 
 **Data Processing**:
-- PapaParse - CSV parsing and manipulation
-- xlsx - Excel file parsing (.xlsx, .xls)
-- Multer - File upload handling
+- PapaParse: CSV parsing
+- xlsx: Excel file parsing
+- pdf-parse: PDF text extraction
+- Multer: File upload handling
 
-**Database & ORM**:
-- Drizzle ORM - TypeScript ORM with PostgreSQL dialect for schema definition and queries
-- @neondatabase/serverless - Neon database driver for PostgreSQL connections
-- PostgreSQL - Persistent storage for comparison history
-
-**Development Tools**:
-- TypeScript - Type safety across stack
-- Vite - Frontend build tool and dev server
-- esbuild - Server bundling for production
-- Replit-specific plugins for development experience
-
-**Styling**:
-- Tailwind CSS - Utility-first CSS framework
-- PostCSS with Autoprefixer
-
-**Key Architectural Choices**:
-
-1. **Multi-Format Support**: Unified parser architecture supports CSV, TXT, JSON, and Excel formats with automatic format detection based on file extension, providing flexibility for users with different data sources.
-
-2. **Persistent History**: Comparison results are saved to PostgreSQL database, allowing users to review past comparisons and download previous results without re-uploading files.
-
-3. **Address Validation**: Ethereum address format validation with detailed error reporting helps users identify and fix data quality issues before comparison.
-
-4. **Case-Insensitive Matching**: Address comparison is case-insensitive to handle different checksumming conventions while maintaining compatibility.
-
-5. **Flexible Parsing**: Parser handles multiple data formats including properly structured files, plain text address lists, and mixed content with metadata extraction using regex patterns.
-
-6. **Type Safety**: Shared schema definitions between client and server using Zod for runtime validation and TypeScript for compile-time type checking.
-
-7. **Modular Component System**: Shadcn UI approach allows for customization while maintaining consistency through design tokens and variants.
-
-8. **Build Optimization**: Separate development and production server configurations for optimal developer experience and production performance.
+**Database**:
+- Drizzle ORM with PostgreSQL
+- @neondatabase/serverless driver
 
 ## Recent Changes (November 25, 2025)
 
-1. **Personal To-Do System**: New To Do page with Replit Auth integration
-   - User authentication via Replit OpenID Connect (Google, GitHub, X, Apple, email)
-   - Personal task boards with status tracking (Pending, In Progress, Done)
-   - Optional public sharing: toggle tasks to be visible to all visitors
-   - User-specific data with session storage in PostgreSQL
-2. **Collection-Based System**: Collections page for managing NFT minted address lists
-   - Create and delete collections with names and descriptions
-   - Upload addresses via file (CSV, TXT, JSON, Excel) or paste directly
-   - Address validation and deduplication at backend level
-   - Addresses stored per collection with cascade delete
-3. **Dual-Mode Comparison**: Compare page supports two modes
-   - File mode: Upload both minted and eligible files (original behavior)
-   - Collection mode: Select a stored collection and upload only eligible file
-   - Toggle between modes with File/Collection buttons
-4. **4444 Collection**: Pre-loaded with minted addresses from attached CSV
-5. **Five-Page Navigation**: Compare, Extract, Collections, History, To Do tabs
-6. **Address Extractor Feature**: Extract page scans any file (PDF, CSV, TXT, JSON, Excel, HTML) to extract all EVM wallet addresses, with CSV download capability
+1. **App Merger**: Combined Web3 wallet tools with ContentFlowStudio
+2. **Google OAuth**: Replaced Replit Auth with user-provided Google OAuth credentials
+3. **Role-Based Access Control**: 
+   - Three roles: web3, content, admin
+   - Role selection page for new users
+   - Role-based navigation showing only relevant features
+4. **ContentFlowStudio Integration**:
+   - Content Tasks page with filtering and bulk actions
+   - Team Directory with skills and EVM addresses
+   - Deliverable file uploads per task
+5. **Database Schema Updates**:
+   - Added role field to users table
+   - Added content_tasks, directory_members, deliverables tables
 
 ## Previous Changes (November 24, 2025)
 
-1. **Ethereum Address Validation**: Implemented format validation (0x + 40 hex chars) with error reporting UI showing invalid addresses and line numbers
-2. **PostgreSQL Database**: Set up Drizzle ORM with comparisons table for persistent history storage
-3. **Comparison History**: Added History page with navigation, displaying past comparisons with download capability
-4. **Multi-Format File Support**: Extended parser to support CSV, TXT, JSON (.json), and Excel (.xlsx, .xls) files with unified parsing interface
+1. **Ethereum Address Validation**: Format validation with error reporting
+2. **PostgreSQL Database**: Drizzle ORM with persistent storage
+3. **Comparison History**: History page with past results
+4. **Multi-Format File Support**: CSV, TXT, JSON, Excel parsing

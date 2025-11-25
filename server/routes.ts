@@ -264,9 +264,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Auth routes
   app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const user = await storage.getUser(userId);
-      res.json(user);
+      // User is already populated by isAuthenticated middleware
+      const { password: _, ...userWithoutPassword } = req.user;
+      res.json(userWithoutPassword);
     } catch (error) {
       console.error("Error fetching user:", error);
       res.status(500).json({ message: "Failed to fetch user" });
@@ -958,7 +958,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Get current user's tasks (requires auth)
   app.get("/api/tasks", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const tasks = await storage.getUserTasks(userId);
       res.json(tasks);
     } catch (error) {
@@ -981,7 +981,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Create new task (requires auth)
   app.post("/api/tasks", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const { title } = req.body;
       if (!title) {
         return res.status(400).json({ error: "Title is required" });
@@ -997,7 +997,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Update task status (requires auth, must be owner)
   app.patch("/api/tasks/:id", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const id = parseInt(req.params.id);
       const { status, isPublic } = req.body;
       
@@ -1022,7 +1022,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Delete task (requires auth, must be owner)
   app.delete("/api/tasks/:id", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.claims.sub;
+      const userId = req.user.id;
       const id = parseInt(req.params.id);
       await storage.deleteTask(id, userId);
       res.json({ success: true });

@@ -30,20 +30,20 @@ const STATUS_CONFIG = {
   },
 };
 
-export default function Portal() {
+export default function Todo() {
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const { toast } = useToast();
 
   const { data: tasks = [], isLoading } = useQuery<PortalTask[]>({
-    queryKey: ["/api/portal-tasks"],
+    queryKey: ["/api/tasks"],
   });
 
   const createTaskMutation = useMutation({
     mutationFn: async (title: string) => {
-      return apiRequest("POST", "/api/portal-tasks", { title });
+      return apiRequest("POST", "/api/tasks", { title });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/portal-tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/tasks"] });
       setNewTaskTitle("");
       toast({ title: "Task added" });
     },
@@ -54,10 +54,10 @@ export default function Portal() {
 
   const updateStatusMutation = useMutation({
     mutationFn: async ({ id, status }: { id: number; status: string }) => {
-      return apiRequest("PATCH", `/api/portal-tasks/${id}`, { status });
+      return apiRequest("PATCH", `/api/tasks/${id}`, { status });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/portal-tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/tasks"] });
     },
     onError: () => {
       toast({ title: "Failed to update task", variant: "destructive" });
@@ -66,10 +66,10 @@ export default function Portal() {
 
   const deleteTaskMutation = useMutation({
     mutationFn: async (id: number) => {
-      return apiRequest("DELETE", `/api/portal-tasks/${id}`);
+      return apiRequest("DELETE", `/api/tasks/${id}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/portal-tasks"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/tasks"] });
       toast({ title: "Task deleted" });
     },
     onError: () => {
@@ -102,10 +102,10 @@ export default function Portal() {
       <div className="max-w-3xl mx-auto px-4 md:px-6 py-12">
         <div className="text-center mb-8">
           <h1 className="text-2xl md:text-3xl font-semibold mb-2">
-            4444 Portal
+            To Do
           </h1>
           <p className="text-muted-foreground">
-            Development task tracker
+            Your personal task board
           </p>
         </div>
 

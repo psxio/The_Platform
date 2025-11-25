@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import type { Deliverable, Task } from "@shared/schema";
+import type { Deliverable, ContentTask } from "@shared/schema";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
@@ -14,18 +14,25 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { ObjectUploader } from "@/components/object-uploader";
 import { Upload, Download, FileText, Trash2, AlertCircle, Inbox } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
-import { formatBytes } from "@/lib/utils";
+
+function formatBytes(bytes: number): string {
+  if (bytes === 0) return '0 Bytes';
+  const k = 1024;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+}
 
 export function DeliverablesView() {
   const [selectedTaskId, setSelectedTaskId] = useState<string>("");
+  const [isUploading, setIsUploading] = useState(false);
   const { toast } = useToast();
 
-  const { data: tasks } = useQuery<Task[]>({
-    queryKey: ["/api/tasks"],
+  const { data: contentTasks } = useQuery<ContentTask[]>({
+    queryKey: ["/api/content-tasks"],
   });
 
   const { data: deliverables, isLoading, error } = useQuery<Deliverable[]>({
@@ -33,8 +40,8 @@ export function DeliverablesView() {
   });
 
   const deleteDeliverableMutation = useMutation({
-    mutationFn: async (id: string) => {
-      return await apiRequest("DELETE", `/api/deliverables/${id}`, undefined);
+    mutationFn: async (id: number) => {
+      return await apiRequest("DELETE", `/api/deliverables/${id}`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/deliverables"] });
@@ -52,24 +59,10 @@ export function DeliverablesView() {
     },
   });
 
-  const handleGetUploadParameters = async () => {
-    try {
-      const response = await apiRequest("POST", "/api/objects/upload", undefined);
-      return {
-        method: (response.method || "POST") as "PUT" | "POST",
-        url: response.url,
-        objectPath: response.objectPath,
-      };
-    } catch (error) {
-      console.error("Failed to get upload URL:", error);
-      return {
-        method: "POST" as const,
-        url: "/api/objects/upload-file",
-      };
-    }
-  };
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
 
-  const handleUploadComplete = async (result: { successful: Array<{ name: string; size: number; uploadURL: string }> }) => {
     if (!selectedTaskId) {
       toast({
         title: "Error",
@@ -79,32 +72,40 @@ export function DeliverablesView() {
       return;
     }
 
-    const file = result.successful[0];
-    if (!file) return;
+    setIsUploading(true);
 
-    const payload = {
-      taskId: selectedTaskId,
-      fileName: file.name,
-      filePath: file.uploadURL,
-      fileSize: file.size.toString(),
-    };
+    for (const file of Array.from(files)) {
+      const formData = new FormData();
+      formData.append("file", file);
 
-    try {
-      await apiRequest("POST", "/api/deliverables", payload);
+      try {
+        const response = await fetch(`/api/content-tasks/${selectedTaskId}/deliverables`, {
+          method: "POST",
+          body: formData,
+          credentials: "include",
+        });
 
-      queryClient.invalidateQueries({ queryKey: ["/api/deliverables"] });
-      toast({
-        title: "Uploaded",
-        description: "File has been uploaded successfully.",
-      });
-    } catch (error) {
-      console.error("Failed to save deliverable:", error);
-      toast({
-        title: "Error",
-        description: "Failed to save deliverable information.",
-        variant: "destructive",
-      });
+        if (!response.ok) {
+          throw new Error("Upload failed");
+        }
+
+        toast({
+          title: "Uploaded",
+          description: `${file.name} has been uploaded successfully.`,
+        });
+      } catch (error) {
+        console.error("Failed to upload file:", error);
+        toast({
+          title: "Error",
+          description: `Failed to upload ${file.name}.`,
+          variant: "destructive",
+        });
+      }
     }
+
+    setIsUploading(false);
+    queryClient.invalidateQueries({ queryKey: ["/api/deliverables"] });
+    event.target.value = "";
   };
 
   const handleDownload = (filePath: string, fileName: string) => {
@@ -118,11 +119,11 @@ export function DeliverablesView() {
   };
 
   const filteredDeliverables = deliverables?.filter((d) => 
-    !selectedTaskId || d.taskId === selectedTaskId
+    !selectedTaskId || d.taskId === parseInt(selectedTaskId)
   ) || [];
 
-  const getTaskDescription = (taskId: string) => {
-    const task = tasks?.find((t) => t.id === taskId);
+  const getTaskDescription = (taskId: number) => {
+    const task = contentTasks?.find((t) => t.id === taskId);
     return task?.description || "Unknown Task";
   };
 
@@ -154,8 +155,8 @@ export function DeliverablesView() {
                 <SelectValue placeholder="Choose a task..." />
               </SelectTrigger>
               <SelectContent>
-                {tasks?.map((task) => (
-                  <SelectItem key={task.id} value={task.id}>
+                {contentTasks?.map((task) => (
+                  <SelectItem key={task.id} value={task.id.toString()}>
                     <div className="flex items-center gap-2">
                       <Badge variant="outline" className="text-xs">
                         {task.status}
@@ -168,24 +169,29 @@ export function DeliverablesView() {
             </Select>
           </div>
 
-          <div className="border-2 border-dashed border-border rounded-md p-8 text-center">
-            <ObjectUploader
-              maxNumberOfFiles={5}
-              maxFileSize={52428800}
-              onGetUploadParameters={handleGetUploadParameters}
-              onComplete={handleUploadComplete}
-              buttonClassName="w-full"
+          <div className="border-2 border-dashed border-primary rounded-md p-8 text-center bg-primary/5">
+            <input
+              type="file"
+              id="file-upload"
+              multiple
+              onChange={handleFileUpload}
+              className="hidden"
+              disabled={isUploading || !selectedTaskId}
+            />
+            <label
+              htmlFor="file-upload"
+              className={`flex flex-col items-center gap-2 cursor-pointer ${!selectedTaskId ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
-              <div className="flex flex-col items-center gap-2">
-                <Upload className="w-8 h-8 text-muted-foreground" />
-                <div>
-                  <p className="font-medium text-sm">Drop files or click to upload</p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Maximum file size: 50MB
-                  </p>
-                </div>
+              <Upload className="w-8 h-8 text-muted-foreground" />
+              <div>
+                <p className="font-medium text-sm">
+                  {isUploading ? "Uploading..." : "Drop files or click to upload"}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Maximum file size: 50MB
+                </p>
               </div>
-            </ObjectUploader>
+            </label>
           </div>
         </CardContent>
       </Card>

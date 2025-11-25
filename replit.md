@@ -166,18 +166,23 @@ Comparisons table:
 
 ## Recent Changes (November 25, 2025)
 
-1. **Collection-Based System**: New Collections page for managing NFT collection minted address lists
+1. **Personal To-Do System**: New To Do page with Replit Auth integration
+   - User authentication via Replit OpenID Connect (Google, GitHub, X, Apple, email)
+   - Personal task boards with status tracking (Pending, In Progress, Done)
+   - Optional public sharing: toggle tasks to be visible to all visitors
+   - User-specific data with session storage in PostgreSQL
+2. **Collection-Based System**: Collections page for managing NFT minted address lists
    - Create and delete collections with names and descriptions
    - Upload addresses via file (CSV, TXT, JSON, Excel) or paste directly
    - Address validation and deduplication at backend level
    - Addresses stored per collection with cascade delete
-2. **Dual-Mode Comparison**: Compare page now supports two modes
+3. **Dual-Mode Comparison**: Compare page supports two modes
    - File mode: Upload both minted and eligible files (original behavior)
    - Collection mode: Select a stored collection and upload only eligible file
    - Toggle between modes with File/Collection buttons
-3. **4444 Collection**: Pre-loaded with 592 minted addresses from attached CSV
-4. **Four-Page Navigation**: Updated UI with Compare, Extract, Collections, and History tabs
-5. **Address Extractor Feature**: New Extract page that scans any file (PDF, CSV, TXT, JSON, Excel, HTML) to automatically find and extract all EVM wallet addresses, with CSV download capability
+4. **4444 Collection**: Pre-loaded with minted addresses from attached CSV
+5. **Five-Page Navigation**: Compare, Extract, Collections, History, To Do tabs
+6. **Address Extractor Feature**: Extract page scans any file (PDF, CSV, TXT, JSON, Excel, HTML) to extract all EVM wallet addresses, with CSV download capability
 
 ## Previous Changes (November 24, 2025)
 

@@ -78,11 +78,60 @@ async function fileToText(filename: string, buffer: Buffer): Promise<string> {
   return buffer.toString('utf-8');
 }
 
+// Helper function to find assignee info from multiple sources
+// Returns user info if found through users table, or email string if only found in directory
+interface AssigneeInfo {
+  user?: { id: string; firstName: string | null; lastName: string | null; email: string };
+  email?: string;
+  name?: string;
+}
+
+async function findAssignee(assignedTo: string | null | undefined): Promise<AssigneeInfo | null> {
+  if (!assignedTo) return null;
+  
+  const allUsers = await storage.getAllUsers();
+  const directoryMembers = await storage.getDirectoryMembers();
+  
+  // 1. Check if assignedTo is a direct email address
+  if (assignedTo.includes("@")) {
+    const user = allUsers.find(u => u.email?.toLowerCase() === assignedTo.toLowerCase());
+    if (user) {
+      return { user: { id: user.id, firstName: user.firstName, lastName: user.lastName, email: user.email! }, name: `${user.firstName} ${user.lastName}` };
+    }
+    // Email found but no user account - still can send email
+    return { email: assignedTo, name: assignedTo.split("@")[0] };
+  }
+  
+  // 2. Check if assignedTo matches a user's full name
+  const user = allUsers.find(u => 
+    `${u.firstName} ${u.lastName}`.toLowerCase() === assignedTo.toLowerCase()
+  );
+  if (user && user.email) {
+    return { user: { id: user.id, firstName: user.firstName, lastName: user.lastName, email: user.email }, name: `${user.firstName} ${user.lastName}` };
+  }
+  
+  // 3. Check directory members for email
+  const directoryMember = directoryMembers.find(m => 
+    m.person?.toLowerCase() === assignedTo.toLowerCase()
+  );
+  if (directoryMember?.email) {
+    // Check if there's a user with this email
+    const memberUser = allUsers.find(u => u.email?.toLowerCase() === directoryMember.email?.toLowerCase());
+    if (memberUser) {
+      return { user: { id: memberUser.id, firstName: memberUser.firstName, lastName: memberUser.lastName, email: memberUser.email! }, name: directoryMember.person };
+    }
+    return { email: directoryMember.email, name: directoryMember.person };
+  }
+  
+  // No match found
+  console.log(`[Email] Could not find email for assignee: "${assignedTo}" - consider adding email to directory member`);
+  return null;
+}
+
 // Check for due tasks and send reminder notifications
 async function checkDueTasks() {
   try {
     const tasks = await storage.getContentTasks();
-    const allUsers = await storage.getAllUsers();
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     
@@ -95,57 +144,71 @@ async function checkDueTasks() {
       
       const diffDays = Math.floor((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
       
-      // Find assignee
-      const assignee = allUsers.find(u => 
-        `${u.firstName} ${u.lastName}`.toLowerCase() === task.assignedTo?.toLowerCase() ||
-        u.email === task.assignedTo
-      );
+      // Find assignee using improved lookup
+      const assigneeInfo = await findAssignee(task.assignedTo);
       
-      if (!assignee) continue;
+      if (!assigneeInfo) continue;
+      
+      // Get target email for notifications
+      const targetEmail = assigneeInfo.user?.email || assigneeInfo.email;
+      if (!targetEmail) continue;
       
       // Due soon (within 3 days)
       if (diffDays > 0 && diffDays <= 3) {
-        // Create in-app notification
-        const existingNotification = await storage.getNotifications(assignee.id);
-        const alreadyNotified = existingNotification.some(n => 
-          n.taskId === task.id && 
-          n.type === "due_soon" &&
-          new Date(n.createdAt!).toDateString() === today.toDateString()
-        );
+        let alreadyNotified = false;
+        
+        // Create in-app notification only if we have a user account
+        if (assigneeInfo.user) {
+          const existingNotification = await storage.getNotifications(assigneeInfo.user.id);
+          alreadyNotified = existingNotification.some(n => 
+            n.taskId === task.id && 
+            n.type === "due_soon" &&
+            new Date(n.createdAt!).toDateString() === today.toDateString()
+          );
+          
+          if (!alreadyNotified) {
+            await storage.createNotification({
+              userId: assigneeInfo.user.id,
+              type: "due_soon",
+              title: "Task due soon",
+              message: `"${task.description?.substring(0, 50)}..." is due in ${diffDays} day${diffDays > 1 ? 's' : ''}`,
+              taskId: task.id,
+            });
+          }
+        }
         
         if (!alreadyNotified) {
-          await storage.createNotification({
-            userId: assignee.id,
-            type: "due_soon",
-            title: "Task due soon",
-            message: `"${task.description?.substring(0, 50)}..." is due in ${diffDays} day${diffDays > 1 ? 's' : ''}`,
-            taskId: task.id,
-          });
-          
-          await emailService.sendDueSoonEmail(task, assignee, diffDays);
+          await emailService.sendDueSoonEmail(task, { email: targetEmail, name: assigneeInfo.name }, diffDays);
         }
       }
       
       // Overdue
       if (diffDays < 0) {
         const daysOverdue = Math.abs(diffDays);
-        const existingNotification = await storage.getNotifications(assignee.id);
-        const alreadyNotified = existingNotification.some(n => 
-          n.taskId === task.id && 
-          n.type === "overdue" &&
-          new Date(n.createdAt!).toDateString() === today.toDateString()
-        );
+        let alreadyNotified = false;
+        
+        // Create in-app notification only if we have a user account
+        if (assigneeInfo.user) {
+          const existingNotification = await storage.getNotifications(assigneeInfo.user.id);
+          alreadyNotified = existingNotification.some(n => 
+            n.taskId === task.id && 
+            n.type === "overdue" &&
+            new Date(n.createdAt!).toDateString() === today.toDateString()
+          );
+          
+          if (!alreadyNotified) {
+            await storage.createNotification({
+              userId: assigneeInfo.user.id,
+              type: "overdue",
+              title: "Task is overdue",
+              message: `"${task.description?.substring(0, 50)}..." is ${daysOverdue} day${daysOverdue > 1 ? 's' : ''} overdue`,
+              taskId: task.id,
+            });
+          }
+        }
         
         if (!alreadyNotified) {
-          await storage.createNotification({
-            userId: assignee.id,
-            type: "overdue",
-            title: "Task is overdue",
-            message: `"${task.description?.substring(0, 50)}..." is ${daysOverdue} day${daysOverdue > 1 ? 's' : ''} overdue`,
-            taskId: task.id,
-          });
-          
-          await emailService.sendOverdueEmail(task, assignee, daysOverdue);
+          await emailService.sendOverdueEmail(task, { email: targetEmail, name: assigneeInfo.name }, daysOverdue);
         }
       }
     }
@@ -1172,28 +1235,29 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Send email notification if task is assigned
       if (task.assignedTo) {
-        const allUsers = await storage.getAllUsers();
-        const assignee = allUsers.find(u => 
-          `${u.firstName} ${u.lastName}`.toLowerCase() === task.assignedTo?.toLowerCase() ||
-          u.email === task.assignedTo
-        );
+        const assigneeInfo = await findAssignee(task.assignedTo);
         
-        if (assignee && assignee.id !== req.user?.id) {
-          // Create in-app notification
-          await storage.createNotification({
-            userId: assignee.id,
-            type: "assignment",
-            title: "New task assigned",
-            message: task.description?.substring(0, 100),
-            taskId: task.id,
-          });
+        if (assigneeInfo) {
+          // Create in-app notification only if we have a user account
+          if (assigneeInfo.user && assigneeInfo.user.id !== req.user?.id) {
+            await storage.createNotification({
+              userId: assigneeInfo.user.id,
+              type: "assignment",
+              title: "New task assigned",
+              message: task.description?.substring(0, 100),
+              taskId: task.id,
+            });
+          }
           
-          // Send email notification
-          await emailService.sendTaskAssignmentEmail(
-            task,
-            assignee,
-            assignedBy || req.user?.firstName || "Someone"
-          );
+          // Send email notification (works with user or directory member email)
+          const targetEmail = assigneeInfo.user?.email || assigneeInfo.email;
+          if (targetEmail && assigneeInfo.user?.id !== req.user?.id) {
+            await emailService.sendTaskAssignmentEmail(
+              task,
+              { email: targetEmail, name: assigneeInfo.name },
+              assignedBy || req.user?.firstName || "Someone"
+            );
+          }
         }
       }
       
@@ -1252,25 +1316,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         // Create notification and send email for new assignee
         if (task.assignedTo) {
-          const allUsers = await storage.getAllUsers();
-          const assignee = allUsers.find(u => 
-            `${u.firstName} ${u.lastName}`.toLowerCase() === task.assignedTo?.toLowerCase() ||
-            u.email === task.assignedTo
-          );
+          const assigneeInfo = await findAssignee(task.assignedTo);
           
-          if (assignee && assignee.id !== userId) {
-            // Create in-app notification
-            await storage.createNotification({
-              userId: assignee.id,
-              type: "assignment",
-              title: "New task assigned",
-              message: task.description?.substring(0, 100),
-              taskId: id,
-            });
+          if (assigneeInfo) {
+            // Create in-app notification only if we have a user account
+            if (assigneeInfo.user && assigneeInfo.user.id !== userId) {
+              await storage.createNotification({
+                userId: assigneeInfo.user.id,
+                type: "assignment",
+                title: "New task assigned",
+                message: task.description?.substring(0, 100),
+                taskId: id,
+              });
+            }
             
-            // Send email notification
-            const assignerName = req.user?.firstName || updates.assignedBy || "Someone";
-            await emailService.sendTaskAssignmentEmail(task, assignee, assignerName);
+            // Send email notification (works with user or directory member email)
+            const targetEmail = assigneeInfo.user?.email || assigneeInfo.email;
+            if (targetEmail && assigneeInfo.user?.id !== userId) {
+              const assignerName = req.user?.firstName || updates.assignedBy || "Someone";
+              await emailService.sendTaskAssignmentEmail(
+                task,
+                { email: targetEmail, name: assigneeInfo.name },
+                assignerName
+              );
+            }
           }
         }
       }
@@ -1350,7 +1419,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Create directory member
   app.post("/api/directory", requireRole("content"), async (req, res) => {
     try {
-      const { person, skill, evmAddress, client } = req.body;
+      const { person, skill, evmAddress, client, email } = req.body;
       
       if (!person || typeof person !== "string") {
         return res.status(400).json({ error: "Person name is required" });
@@ -1361,6 +1430,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         skill: skill || undefined,
         evmAddress: evmAddress || undefined,
         client: client || undefined,
+        email: email || undefined,
       });
       
       res.status(201).json(member);

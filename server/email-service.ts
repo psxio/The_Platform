@@ -12,6 +12,13 @@ interface EmailConfig {
   from: string;
 }
 
+// Flexible recipient type - can be a User or just email/name
+interface EmailRecipient {
+  email: string;
+  name?: string;
+  firstName?: string | null;
+}
+
 export class EmailService {
   private transporter: nodemailer.Transporter | null = null;
   private fromAddress: string = "";
@@ -56,9 +63,19 @@ export class EmailService {
     return this.isConfigured && this.transporter !== null;
   }
 
+  private getRecipientName(recipient: EmailRecipient | User): string {
+    if ('firstName' in recipient && recipient.firstName) {
+      return recipient.firstName;
+    }
+    if ('name' in recipient && recipient.name) {
+      return recipient.name.split(' ')[0]; // First name from full name
+    }
+    return "there";
+  }
+
   async sendTaskAssignmentEmail(
     task: ContentTask,
-    assignee: User,
+    assignee: EmailRecipient | User,
     assignedBy: string
   ): Promise<boolean> {
     if (!this.isReady()) {
@@ -66,11 +83,12 @@ export class EmailService {
       return false;
     }
 
+    const recipientName = this.getRecipientName(assignee);
     const subject = `New Task Assigned: ${task.description?.substring(0, 50)}...`;
     const html = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <h2 style="color: #3B82F6;">New Task Assigned to You</h2>
-        <p>Hi ${assignee.firstName || "there"},</p>
+        <p>Hi ${recipientName},</p>
         <p>You have been assigned a new task by ${assignedBy}.</p>
         
         <div style="background: #F3F4F6; border-radius: 8px; padding: 16px; margin: 16px 0;">
@@ -90,18 +108,19 @@ export class EmailService {
 
   async sendDueSoonEmail(
     task: ContentTask,
-    assignee: User,
+    assignee: EmailRecipient | User,
     daysUntilDue: number
   ): Promise<boolean> {
     if (!this.isReady()) {
       return false;
     }
 
+    const recipientName = this.getRecipientName(assignee);
     const subject = `Task Due Soon: ${task.description?.substring(0, 50)}...`;
     const html = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <h2 style="color: #F59E0B;">Task Due Soon</h2>
-        <p>Hi ${assignee.firstName || "there"},</p>
+        <p>Hi ${recipientName},</p>
         <p>This is a reminder that you have a task due ${daysUntilDue === 1 ? "tomorrow" : `in ${daysUntilDue} days`}.</p>
         
         <div style="background: #FEF3C7; border-radius: 8px; padding: 16px; margin: 16px 0; border-left: 4px solid #F59E0B;">
@@ -120,18 +139,19 @@ export class EmailService {
 
   async sendOverdueEmail(
     task: ContentTask,
-    assignee: User,
+    assignee: EmailRecipient | User,
     daysOverdue: number
   ): Promise<boolean> {
     if (!this.isReady()) {
       return false;
     }
 
+    const recipientName = this.getRecipientName(assignee);
     const subject = `OVERDUE Task: ${task.description?.substring(0, 50)}...`;
     const html = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
         <h2 style="color: #EF4444;">Task is Overdue</h2>
-        <p>Hi ${assignee.firstName || "there"},</p>
+        <p>Hi ${recipientName},</p>
         <p>This is an urgent reminder that you have a task that is ${daysOverdue === 1 ? "1 day" : `${daysOverdue} days`} overdue.</p>
         
         <div style="background: #FEE2E2; border-radius: 8px; padding: 16px; margin: 16px 0; border-left: 4px solid #EF4444;">

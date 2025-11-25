@@ -194,6 +194,30 @@ To-Do Endpoints:
 
 ## Recent Changes (November 25, 2025)
 
+### Enhanced ContentFlowStudio Features (Session 3)
+
+1. **Email Notification System**:
+   - Nodemailer-based email service for task notifications
+   - Sends emails on task assignment (when task is created or assignee changes)
+   - Automated due date reminder system running hourly
+   - Sends "due soon" emails 3 days before due date
+   - Sends "overdue" emails when tasks pass due date
+   - Graceful handling when SMTP credentials not configured
+   - API endpoint: POST `/api/test-email` for testing
+   - Required environment variables: SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM
+
+2. **Improved Google Sheets Integration**:
+   - Enhanced Settings UI with collapsible setup instructions
+   - Sheet ID input field - accepts full URLs or just the ID
+   - Credential status indicators (configured vs not configured)
+   - Service account email display when credentials are set
+   - Disconnect functionality to clear sheet connection
+   - API endpoint: POST `/api/sheets/disconnect`
+
+3. **Bug Fixes**:
+   - Fixed "Add Task" dialog crash caused by empty SelectItem value
+   - Changed campaign "None" option from empty string to "none" value
+
 ### Enhanced ContentFlowStudio Features (Session 2)
 
 1. **Multiple Task Views**:

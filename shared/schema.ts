@@ -301,6 +301,7 @@ export const directoryMembers = pgTable("directory_members", {
   skill: text("skill"),
   evmAddress: varchar("evm_address", { length: 255 }),
   client: varchar("client", { length: 255 }),
+  email: varchar("email", { length: 255 }), // For email notifications
 });
 
 export const insertDirectoryMemberSchema = createInsertSchema(directoryMembers).omit({

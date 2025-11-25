@@ -65,6 +65,7 @@ Preferred communication style: Simple, everyday language.
 
 **API Endpoints**:
 - POST `/api/compare` - Upload and compare two files
+- POST `/api/extract` - Extract EVM addresses from any file (PDF, CSV, TXT, JSON, Excel, HTML)
 - GET `/api/comparisons` - Retrieve comparison history (with optional limit query param)
 - GET `/api/comparisons/:id` - Retrieve specific comparison by ID
 
@@ -138,7 +139,12 @@ Preferred communication style: Simple, everyday language.
 
 8. **Build Optimization**: Separate development and production server configurations for optimal developer experience and production performance.
 
-## Recent Changes (November 24, 2025)
+## Recent Changes (November 25, 2025)
+
+1. **Address Extractor Feature**: New Extract page that scans any file (PDF, CSV, TXT, JSON, Excel, HTML) to automatically find and extract all EVM wallet addresses, with CSV download capability
+2. **Three-Page Navigation**: Updated UI with Compare, Extract, and History tabs
+
+## Previous Changes (November 24, 2025)
 
 1. **Ethereum Address Validation**: Implemented format validation (0x + 40 hex chars) with error reporting UI showing invalid addresses and line numbers
 2. **PostgreSQL Database**: Set up Drizzle ORM with comparisons table for persistent history storage

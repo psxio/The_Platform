@@ -194,32 +194,47 @@ To-Do Endpoints:
 
 ## Recent Changes (November 25, 2025)
 
-1. **Admin Invite Code System**:
+1. **Google Sheets Integration**:
+   - Bidirectional sync with Google Sheets for content task management
+   - Settings tab in content dashboard with connect/push/pull controls
+   - Service account authentication using GOOGLE_SERVICE_ACCOUNT_EMAIL and GOOGLE_PRIVATE_KEY
+   - server/google-sheets.ts service for Sheets API communication
+   - API endpoints: POST `/api/sheets/connect`, GET `/api/sheets/status`, POST `/api/sheets/push`, POST `/api/sheets/pull`
+2. **Overdue Task Highlighting**:
+   - Visual indicators for overdue tasks (red border/background)
+   - Visual indicators for due-soon tasks (amber, within 3 days)
+   - Completed tasks excluded from overdue highlighting
+   - AlertTriangle icon for overdue due dates
+3. **Deliverables Tab Restored**:
+   - Fixed Deliverables tab in content dashboard
+   - Linked to content tasks (not personal tasks)
+   - File upload per task with proper API integration
+4. **Admin Invite Code System**:
    - Admin role now requires a valid invite code during role selection
    - Single-use codes that expire after 7 days
    - Only existing admins can generate new codes
    - Initial bootstrap via INITIAL_ADMIN_CODE environment variable
    - Admin invite codes management page at `/admin/codes`
-2. **Internal Authentication**: Replaced Google OAuth with email/password authentication
+5. **Internal Authentication**: Replaced Google OAuth with email/password authentication
    - Registration and login forms with validation
    - Passwords hashed with bcryptjs (10 salt rounds)
    - Session-based authentication with PostgreSQL session store
    - Added password column to users table
-3. **Role-Based Access Control**: 
+6. **Role-Based Access Control**: 
    - Three roles: web3, content, admin
    - Role selection page for new users
    - Role-based navigation showing only relevant features
    - Server-side middleware protection: `requireRole("content")` for all ContentFlowStudio endpoints
    - Frontend route protection: All routes require authentication
-4. **ContentFlowStudio Integration**:
+7. **ContentFlowStudio Integration**:
    - Content Tasks page with filtering and bulk actions
    - Team Directory with skills and EVM addresses
    - Deliverable file uploads per task
-5. **Database Schema Updates**:
+8. **Database Schema Updates**:
    - Added password and role fields to users table
    - Added content_tasks, directory_members, deliverables tables
    - Added admin_invite_codes table for secure admin access
-6. **Security Hardening**:
+9. **Security Hardening**:
    - All protected routes redirect to sign-in page for unauthenticated users
    - Backend API routes enforce role-based access with middleware
    - Admin role has access to all features from both systems

@@ -12,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Loader2 } from "lucide-react";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 const loginSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -282,7 +283,10 @@ export default function AuthPage() {
   const [activeTab, setActiveTab] = useState("login");
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background p-4">
+    <div className="min-h-screen flex items-center justify-center bg-background p-4 relative">
+      <div className="absolute top-4 right-4">
+        <ThemeToggle />
+      </div>
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <CardTitle className="text-2xl">Web3 Tools & Content Studio</CardTitle>

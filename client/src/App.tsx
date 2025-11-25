@@ -15,6 +15,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { FileText, History as HistoryIcon, FileSearch, Database, CheckSquare, ClipboardList, LogOut, Settings, Loader2, Key } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { ThemeProvider } from "@/components/theme-provider";
+import { ThemeToggle } from "@/components/theme-toggle";
 import Home from "@/pages/home";
 import History from "@/pages/history";
 import Extract from "@/pages/extract";
@@ -181,6 +183,7 @@ function Nav() {
           </div>
           
           <div className="flex items-center gap-2">
+            <ThemeToggle />
             <UserMenu />
           </div>
         </div>
@@ -262,10 +265,12 @@ function Router() {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
-        <Toaster />
-        <Router />
-      </TooltipProvider>
+      <ThemeProvider defaultTheme="system" storageKey="app-theme">
+        <TooltipProvider>
+          <Toaster />
+          <Router />
+        </TooltipProvider>
+      </ThemeProvider>
     </QueryClientProvider>
   );
 }

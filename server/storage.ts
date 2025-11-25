@@ -559,16 +559,54 @@ export class DbStorage implements IStorage {
   }
 
   // Activity log methods
-  async getActivityLog(taskId?: number, campaignId?: number, limit: number = 50): Promise<ActivityLog[]> {
-    let query = db.select().from(activityLog);
+  async getActivityLog(taskId?: number, campaignId?: number, limit: number = 50): Promise<(ActivityLog & { user?: { firstName: string | null; lastName: string | null; profileImageUrl: string | null } })[]> {
+    const baseQuery = db
+      .select({
+        id: activityLog.id,
+        taskId: activityLog.taskId,
+        campaignId: activityLog.campaignId,
+        userId: activityLog.userId,
+        action: activityLog.action,
+        details: activityLog.details,
+        createdAt: activityLog.createdAt,
+        userFirstName: users.firstName,
+        userLastName: users.lastName,
+        userProfileImage: users.profileImageUrl,
+      })
+      .from(activityLog)
+      .leftJoin(users, eq(activityLog.userId, users.id));
     
+    let results;
     if (taskId) {
-      query = query.where(eq(activityLog.taskId, taskId)) as typeof query;
+      results = await baseQuery
+        .where(eq(activityLog.taskId, taskId))
+        .orderBy(desc(activityLog.createdAt))
+        .limit(limit);
     } else if (campaignId) {
-      query = query.where(eq(activityLog.campaignId, campaignId)) as typeof query;
+      results = await baseQuery
+        .where(eq(activityLog.campaignId, campaignId))
+        .orderBy(desc(activityLog.createdAt))
+        .limit(limit);
+    } else {
+      results = await baseQuery
+        .orderBy(desc(activityLog.createdAt))
+        .limit(limit);
     }
     
-    return await query.orderBy(desc(activityLog.createdAt)).limit(limit);
+    return results.map(row => ({
+      id: row.id,
+      taskId: row.taskId,
+      campaignId: row.campaignId,
+      userId: row.userId,
+      action: row.action,
+      details: row.details,
+      createdAt: row.createdAt,
+      user: row.userId ? {
+        firstName: row.userFirstName,
+        lastName: row.userLastName,
+        profileImageUrl: row.userProfileImage,
+      } : undefined,
+    }));
   }
 
   async createActivityLog(insertActivity: InsertActivityLog): Promise<ActivityLog> {

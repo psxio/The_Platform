@@ -194,6 +194,49 @@ To-Do Endpoints:
 
 ## Recent Changes (November 25, 2025)
 
+### Enhanced ContentFlowStudio Features (Session 2)
+
+1. **Multiple Task Views**:
+   - Grid view: Traditional card-based task display
+   - Kanban view: Drag-and-drop columns for status changes
+   - Calendar view: Tasks organized by due date on monthly calendar
+   - View mode switcher in Tasks tab
+
+2. **Subtasks/Checklist System**:
+   - Add subtasks to any content task
+   - Track completion progress with checkboxes
+   - Progress bar showing subtask completion percentage
+   - API endpoints: GET/POST `/api/content-tasks/:id/subtasks`, PATCH/DELETE `/api/subtasks/:id`
+
+3. **Comments & Collaboration**:
+   - Threaded comments with replies on tasks
+   - User attribution with avatars
+   - Edit and delete own comments
+   - API endpoints: GET/POST `/api/content-tasks/:id/comments`, PATCH/DELETE `/api/comments/:id`
+
+4. **Activity Timeline**:
+   - Complete history of task changes
+   - Tracks status changes, assignments, priority changes, subtask actions
+   - User-attributed activity entries with timestamps
+   - API endpoint: GET `/api/content-tasks/:id/activity`
+
+5. **Analytics Dashboard**:
+   - Task status distribution (pie chart)
+   - Priority breakdown (bar chart)
+   - Team workload by assignee
+   - Client distribution
+   - Campaign progress tracking
+   - Quick summary stats
+
+6. **In-App Notification System**:
+   - Bell icon in navigation header with unread count
+   - Notification types: assignment, comment, due_soon, overdue
+   - Mark as read individual or all
+   - Auto-created on task assignment and comments
+   - API endpoints: GET `/api/notifications`, GET `/api/notifications/unread-count`, PATCH `/api/notifications/:id/read`, PATCH `/api/notifications/read-all`
+
+### Previous Features (Session 1)
+
 1. **Google Sheets Integration**:
    - Bidirectional sync with Google Sheets for content task management
    - Settings tab in content dashboard with connect/push/pull controls

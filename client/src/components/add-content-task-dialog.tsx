@@ -268,8 +268,8 @@ export function AddContentTaskDialog({ open, onOpenChange, task }: AddContentTas
                   <FormItem>
                     <FormLabel>Campaign (Optional)</FormLabel>
                     <Select 
-                      onValueChange={(value) => field.onChange(value ? parseInt(value) : undefined)} 
-                      value={field.value?.toString() || ""}
+                      onValueChange={(value) => field.onChange(value === "none" ? undefined : parseInt(value))} 
+                      value={field.value?.toString() || "none"}
                     >
                       <FormControl>
                         <SelectTrigger data-testid="select-campaign">
@@ -277,7 +277,7 @@ export function AddContentTaskDialog({ open, onOpenChange, task }: AddContentTas
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="">None</SelectItem>
+                        <SelectItem value="none">None</SelectItem>
                         {campaigns?.map((campaign) => (
                           <SelectItem key={campaign.id} value={campaign.id.toString()}>
                             <div className="flex items-center gap-2">

@@ -1024,7 +1024,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Create content task
-  app.post("/api/content-tasks", requireRole("content"), async (req, res) => {
+  app.post("/api/content-tasks", requireRole("content"), async (req: any, res) => {
     try {
       const { description, status, assignedTo, dueDate, assignedBy, client, deliverable, notes } = req.body;
       
@@ -1043,6 +1043,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
         notes: notes || undefined,
       });
       
+      // Log activity
+      await storage.createActivityLog({
+        taskId: task.id,
+        userId: req.user?.id,
+        action: "created",
+        details: { description: task.description },
+      });
+      
       res.status(201).json(task);
     } catch (error) {
       console.error("Error creating content task:", error);
@@ -1051,14 +1059,90 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Update content task
-  app.put("/api/content-tasks/:id", requireRole("content"), async (req, res) => {
+  app.put("/api/content-tasks/:id", requireRole("content"), async (req: any, res) => {
     try {
       const id = parseInt(req.params.id);
       const updates = req.body;
       
+      // Get existing task for comparison
+      const existingTask = await storage.getContentTask(id);
+      if (!existingTask) {
+        return res.status(404).json({ error: "Content task not found" });
+      }
+      
       const task = await storage.updateContentTask(id, updates);
       if (!task) {
         return res.status(404).json({ error: "Content task not found" });
+      }
+      
+      // Log specific changes
+      const userId = req.user?.id;
+      
+      if (existingTask.status !== task.status) {
+        await storage.createActivityLog({
+          taskId: id,
+          userId,
+          action: "status_changed",
+          details: { from: existingTask.status, to: task.status },
+        });
+      }
+      
+      if (existingTask.priority !== task.priority) {
+        await storage.createActivityLog({
+          taskId: id,
+          userId,
+          action: "priority_changed",
+          details: { from: existingTask.priority, to: task.priority },
+        });
+      }
+      
+      if (existingTask.assignedTo !== task.assignedTo) {
+        await storage.createActivityLog({
+          taskId: id,
+          userId,
+          action: "assigned",
+          details: { assignedTo: task.assignedTo },
+        });
+        
+        // Create notification for new assignee
+        if (task.assignedTo) {
+          const allUsers = await storage.getAllUsers();
+          const assignee = allUsers.find(u => 
+            `${u.firstName} ${u.lastName}`.toLowerCase() === task.assignedTo?.toLowerCase() ||
+            u.email === task.assignedTo
+          );
+          
+          if (assignee && assignee.id !== userId) {
+            await storage.createNotification({
+              userId: assignee.id,
+              type: "assignment",
+              title: "New task assigned",
+              message: task.description?.substring(0, 100),
+              taskId: id,
+            });
+          }
+        }
+      }
+      
+      if (existingTask.dueDate !== task.dueDate) {
+        await storage.createActivityLog({
+          taskId: id,
+          userId,
+          action: "due_date_changed",
+          details: { from: existingTask.dueDate, to: task.dueDate },
+        });
+      }
+      
+      // Log general update if no specific field tracked
+      const trackedFields = ['status', 'priority', 'assignedTo', 'dueDate'];
+      const hasOtherChanges = Object.keys(updates).some(key => !trackedFields.includes(key));
+      if (hasOtherChanges && Object.keys(updates).length > 0) {
+        await storage.createActivityLog({
+          taskId: id,
+          userId,
+          action: "updated",
+          details: { fields: Object.keys(updates).filter(k => !trackedFields.includes(k)) },
+        });
       }
       
       res.json(task);

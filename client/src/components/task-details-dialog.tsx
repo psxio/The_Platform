@@ -31,6 +31,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TaskComments } from "./task-comments";
+import { TaskActivityTimeline } from "./task-activity-timeline";
 
 interface TaskDetailsDialogProps {
   open: boolean;
@@ -376,6 +377,10 @@ export function TaskDetailsDialog({ open, onOpenChange, task, onEdit, currentUse
           {currentUserId && (
             <TaskComments taskId={task.id} currentUserId={currentUserId} />
           )}
+
+          <Separator />
+
+          <TaskActivityTimeline taskId={task.id} />
         </div>
       </DialogContent>
     </Dialog>

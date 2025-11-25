@@ -220,3 +220,25 @@ export const insertDeliverableSchema = createInsertSchema(deliverables).omit({
 
 export type InsertDeliverable = z.infer<typeof insertDeliverableSchema>;
 export type Deliverable = typeof deliverables.$inferSelect;
+
+// Admin invite codes table - for secure admin role assignment
+export const adminInviteCodes = pgTable("admin_invite_codes", {
+  id: serial("id").primaryKey(),
+  code: varchar("code", { length: 32 }).notNull().unique(),
+  createdBy: varchar("created_by").references(() => users.id, { onDelete: "set null" }),
+  usedBy: varchar("used_by").references(() => users.id, { onDelete: "set null" }),
+  usedAt: timestamp("used_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  expiresAt: timestamp("expires_at"),
+  isActive: boolean("is_active").notNull().default(true),
+});
+
+export const insertAdminInviteCodeSchema = createInsertSchema(adminInviteCodes).omit({
+  id: true,
+  createdAt: true,
+  usedAt: true,
+  usedBy: true,
+});
+
+export type InsertAdminInviteCode = z.infer<typeof insertAdminInviteCodeSchema>;
+export type AdminInviteCode = typeof adminInviteCodes.$inferSelect;

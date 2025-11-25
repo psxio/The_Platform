@@ -8,6 +8,7 @@ import { parseFile } from "./file-parser";
 import { createRequire } from "module";
 import { setupAuth, isAuthenticated, requireRole } from "./auth";
 import { googleSheetsService } from "./google-sheets";
+import { emailService } from "./email-service";
 
 // Validate Ethereum address format
 function isValidEvmAddress(address: string): boolean {
@@ -77,9 +78,125 @@ async function fileToText(filename: string, buffer: Buffer): Promise<string> {
   return buffer.toString('utf-8');
 }
 
+// Check for due tasks and send reminder notifications
+async function checkDueTasks() {
+  try {
+    const tasks = await storage.getContentTasks();
+    const allUsers = await storage.getAllUsers();
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    for (const task of tasks) {
+      if (!task.dueDate || task.status === "COMPLETED") continue;
+      
+      // Parse due date (supports formats like "Nov 26", "2025-11-26", etc.)
+      const dueDate = parseDueDate(task.dueDate);
+      if (!dueDate) continue;
+      
+      const diffDays = Math.floor((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+      
+      // Find assignee
+      const assignee = allUsers.find(u => 
+        `${u.firstName} ${u.lastName}`.toLowerCase() === task.assignedTo?.toLowerCase() ||
+        u.email === task.assignedTo
+      );
+      
+      if (!assignee) continue;
+      
+      // Due soon (within 3 days)
+      if (diffDays > 0 && diffDays <= 3) {
+        // Create in-app notification
+        const existingNotification = await storage.getNotifications(assignee.id);
+        const alreadyNotified = existingNotification.some(n => 
+          n.taskId === task.id && 
+          n.type === "due_soon" &&
+          new Date(n.createdAt!).toDateString() === today.toDateString()
+        );
+        
+        if (!alreadyNotified) {
+          await storage.createNotification({
+            userId: assignee.id,
+            type: "due_soon",
+            title: "Task due soon",
+            message: `"${task.description?.substring(0, 50)}..." is due in ${diffDays} day${diffDays > 1 ? 's' : ''}`,
+            taskId: task.id,
+          });
+          
+          await emailService.sendDueSoonEmail(task, assignee, diffDays);
+        }
+      }
+      
+      // Overdue
+      if (diffDays < 0) {
+        const daysOverdue = Math.abs(diffDays);
+        const existingNotification = await storage.getNotifications(assignee.id);
+        const alreadyNotified = existingNotification.some(n => 
+          n.taskId === task.id && 
+          n.type === "overdue" &&
+          new Date(n.createdAt!).toDateString() === today.toDateString()
+        );
+        
+        if (!alreadyNotified) {
+          await storage.createNotification({
+            userId: assignee.id,
+            type: "overdue",
+            title: "Task is overdue",
+            message: `"${task.description?.substring(0, 50)}..." is ${daysOverdue} day${daysOverdue > 1 ? 's' : ''} overdue`,
+            taskId: task.id,
+          });
+          
+          await emailService.sendOverdueEmail(task, assignee, daysOverdue);
+        }
+      }
+    }
+  } catch (error) {
+    console.error("Error checking due tasks:", error);
+  }
+}
+
+// Parse various date formats
+function parseDueDate(dateStr: string): Date | null {
+  if (!dateStr) return null;
+  
+  // Try ISO format first (2025-11-26)
+  const isoDate = new Date(dateStr);
+  if (!isNaN(isoDate.getTime())) return isoDate;
+  
+  // Try "Nov 26" format
+  const months: Record<string, number> = {
+    jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5,
+    jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11
+  };
+  
+  const match = dateStr.match(/^(\w{3})\s+(\d{1,2})$/i);
+  if (match) {
+    const month = months[match[1].toLowerCase()];
+    const day = parseInt(match[2]);
+    if (month !== undefined && day) {
+      const year = new Date().getFullYear();
+      const date = new Date(year, month, day);
+      // If date is in the past, assume next year
+      if (date < new Date()) {
+        date.setFullYear(year + 1);
+      }
+      return date;
+    }
+  }
+  
+  return null;
+}
+
 export async function registerRoutes(app: Express): Promise<Server> {
   // Setup Replit Auth
   await setupAuth(app);
+  
+  // Initialize email service
+  await emailService.initialize();
+  
+  // Run due task check every hour
+  setInterval(checkDueTasks, 60 * 60 * 1000);
+  // Also run immediately on startup (after a short delay)
+  setTimeout(checkDueTasks, 5000);
 
   // Auth routes
   app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
@@ -1026,7 +1143,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Create content task
   app.post("/api/content-tasks", requireRole("content"), async (req: any, res) => {
     try {
-      const { description, status, assignedTo, dueDate, assignedBy, client, deliverable, notes } = req.body;
+      const { description, status, assignedTo, dueDate, assignedBy, client, deliverable, notes, priority, campaignId } = req.body;
       
       if (!description || typeof description !== "string") {
         return res.status(400).json({ error: "Description is required" });
@@ -1041,6 +1158,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         client: client || undefined,
         deliverable: deliverable || undefined,
         notes: notes || undefined,
+        priority: priority || "medium",
+        campaignId: campaignId || undefined,
       });
       
       // Log activity
@@ -1050,6 +1169,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
         action: "created",
         details: { description: task.description },
       });
+      
+      // Send email notification if task is assigned
+      if (task.assignedTo) {
+        const allUsers = await storage.getAllUsers();
+        const assignee = allUsers.find(u => 
+          `${u.firstName} ${u.lastName}`.toLowerCase() === task.assignedTo?.toLowerCase() ||
+          u.email === task.assignedTo
+        );
+        
+        if (assignee && assignee.id !== req.user?.id) {
+          // Create in-app notification
+          await storage.createNotification({
+            userId: assignee.id,
+            type: "assignment",
+            title: "New task assigned",
+            message: task.description?.substring(0, 100),
+            taskId: task.id,
+          });
+          
+          // Send email notification
+          await emailService.sendTaskAssignmentEmail(
+            task,
+            assignee,
+            assignedBy || req.user?.firstName || "Someone"
+          );
+        }
+      }
       
       res.status(201).json(task);
     } catch (error) {
@@ -1104,7 +1250,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           details: { assignedTo: task.assignedTo },
         });
         
-        // Create notification for new assignee
+        // Create notification and send email for new assignee
         if (task.assignedTo) {
           const allUsers = await storage.getAllUsers();
           const assignee = allUsers.find(u => 
@@ -1113,6 +1259,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           );
           
           if (assignee && assignee.id !== userId) {
+            // Create in-app notification
             await storage.createNotification({
               userId: assignee.id,
               type: "assignment",
@@ -1120,6 +1267,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
               message: task.description?.substring(0, 100),
               taskId: id,
             });
+            
+            // Send email notification
+            const assignerName = req.user?.firstName || updates.assignedBy || "Someone";
+            await emailService.sendTaskAssignmentEmail(task, assignee, assignerName);
           }
         }
       }
@@ -1358,9 +1509,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get("/api/sheets/status", requireRole("content"), async (req, res) => {
     try {
       const isConfigured = googleSheetsService.isConfigured();
+      const hasCredentials = !!(process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL && process.env.GOOGLE_PRIVATE_KEY);
       res.json({ 
         configured: isConfigured,
-        sheetId: process.env.GOOGLE_SHEET_ID ? "***configured***" : null 
+        sheetId: process.env.GOOGLE_SHEET_ID || null,
+        hasCredentials,
+        serviceAccountEmail: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || null,
       });
     } catch (error) {
       console.error("Error checking sheets status:", error);
@@ -1371,19 +1525,55 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Initialize Google Sheets connection
   app.post("/api/sheets/connect", requireRole("content"), async (req, res) => {
     try {
+      const { sheetId } = req.body;
+      
+      // If sheetId is provided, temporarily set it in the environment
+      if (sheetId) {
+        process.env.GOOGLE_SHEET_ID = sheetId;
+      }
+      
       const success = await googleSheetsService.initialize();
       if (success) {
         await googleSheetsService.ensureHeaderRow();
         res.json({ success: true, message: "Connected to Google Sheets" });
       } else {
-        res.status(400).json({ 
-          success: false, 
-          error: "Failed to connect - check credentials configuration" 
-        });
+        // Clear the sheet ID if connection failed
+        if (sheetId) {
+          delete process.env.GOOGLE_SHEET_ID;
+        }
+        
+        const hasCredentials = !!(process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL && process.env.GOOGLE_PRIVATE_KEY);
+        if (!hasCredentials) {
+          res.status(400).json({ 
+            success: false, 
+            error: "Missing credentials - please set GOOGLE_SERVICE_ACCOUNT_EMAIL and GOOGLE_PRIVATE_KEY" 
+          });
+        } else if (!sheetId && !process.env.GOOGLE_SHEET_ID) {
+          res.status(400).json({ 
+            success: false, 
+            error: "Please provide a Google Sheet ID or URL" 
+          });
+        } else {
+          res.status(400).json({ 
+            success: false, 
+            error: "Failed to connect - check that the sheet is shared with the service account" 
+          });
+        }
       }
     } catch (error) {
       console.error("Error connecting to sheets:", error);
       res.status(500).json({ error: "Failed to connect to Google Sheets" });
+    }
+  });
+  
+  // Disconnect from Google Sheets
+  app.post("/api/sheets/disconnect", requireRole("content"), async (req, res) => {
+    try {
+      delete process.env.GOOGLE_SHEET_ID;
+      res.json({ success: true, message: "Disconnected from Google Sheets" });
+    } catch (error) {
+      console.error("Error disconnecting from sheets:", error);
+      res.status(500).json({ error: "Failed to disconnect from Google Sheets" });
     }
   });
 
@@ -1457,6 +1647,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             client: row.client,
             deliverable: row.deliverable,
             notes: row.notes,
+            priority: "medium",
           });
           created++;
         }

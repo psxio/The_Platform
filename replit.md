@@ -19,11 +19,17 @@ Preferred communication style: Simple, everyday language.
 
 ### Authentication
 
-**Google OAuth 2.0**: User-provided credentials stored as secrets
-- GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET required
-- Passport.js with passport-google-oauth20 strategy
+**Internal Email/Password Authentication**:
 - Session-based auth with PostgreSQL session store
-- Callback URL: `/api/auth/google/callback`
+- Passwords hashed using bcryptjs (10 salt rounds)
+- No external OAuth dependencies
+
+**Auth Endpoints**:
+- POST `/api/auth/register` - Register with email, password, firstName, lastName
+- POST `/api/auth/login` - Login with email and password
+- POST `/api/logout` - Destroy session and logout
+- GET `/api/auth/user` - Get current authenticated user
+- PATCH `/api/auth/role` - Update user role
 
 **User Roles** (stored in users.role field):
 - `web3`: Access to Compare, Extract, Collections, History, To Do pages
@@ -80,9 +86,10 @@ To-Do Endpoints:
 
 ### Database Schema
 
-**Users table** (for Google Auth):
+**Users table** (for internal auth):
 - id (varchar): UUID primary key
 - email (varchar): Unique email
+- password (varchar): Hashed password (bcrypt)
 - firstName, lastName, profileImageUrl (varchar)
 - role (varchar): "web3", "content", or "admin"
 - createdAt, updatedAt (timestamp)
@@ -141,9 +148,8 @@ To-Do Endpoints:
 ### External Dependencies
 
 **Authentication**:
-- passport, passport-google-oauth20: OAuth strategy
+- bcryptjs: Password hashing
 - express-session, connect-pg-simple: Session management
-- openid-client: OIDC support
 
 **UI Components**:
 - Radix UI primitives (@radix-ui/*)
@@ -162,22 +168,25 @@ To-Do Endpoints:
 
 ## Recent Changes (November 25, 2025)
 
-1. **App Merger**: Combined Web3 wallet tools with ContentFlowStudio
-2. **Google OAuth**: Replaced Replit Auth with user-provided Google OAuth credentials
-3. **Role-Based Access Control**: 
+1. **Internal Authentication**: Replaced Google OAuth with email/password authentication
+   - Registration and login forms with validation
+   - Passwords hashed with bcryptjs (10 salt rounds)
+   - Session-based authentication with PostgreSQL session store
+   - Added password column to users table
+2. **Role-Based Access Control**: 
    - Three roles: web3, content, admin
    - Role selection page for new users
    - Role-based navigation showing only relevant features
    - Server-side middleware protection: `requireRole("content")` for all ContentFlowStudio endpoints
    - Frontend route protection: All routes require authentication
-4. **ContentFlowStudio Integration**:
+3. **ContentFlowStudio Integration**:
    - Content Tasks page with filtering and bulk actions
    - Team Directory with skills and EVM addresses
    - Deliverable file uploads per task
-5. **Database Schema Updates**:
-   - Added role field to users table
+4. **Database Schema Updates**:
+   - Added password and role fields to users table
    - Added content_tasks, directory_members, deliverables tables
-6. **Security Hardening**:
+5. **Security Hardening**:
    - All protected routes redirect to sign-in page for unauthenticated users
    - Backend API routes enforce role-based access with middleware
    - Admin role has access to all features from both systems

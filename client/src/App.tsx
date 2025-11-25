@@ -13,7 +13,7 @@ import {
   DropdownMenuSeparator, 
   DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu";
-import { FileText, History as HistoryIcon, FileSearch, Database, CheckSquare, ClipboardList, LogOut, Settings, Loader2 } from "lucide-react";
+import { FileText, History as HistoryIcon, FileSearch, Database, CheckSquare, ClipboardList, LogOut, Settings, Loader2, Key } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import Home from "@/pages/home";
 import History from "@/pages/history";
@@ -21,6 +21,7 @@ import Extract from "@/pages/extract";
 import Collections from "@/pages/collections";
 import Todo from "@/pages/todo";
 import ContentDashboard from "@/pages/content-dashboard";
+import AdminCodes from "@/pages/admin-codes";
 import RoleSelect from "@/pages/role-select";
 import AuthPage from "@/pages/auth";
 import NotFound from "@/pages/not-found";
@@ -74,6 +75,14 @@ function UserMenu() {
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
+        {user.role === "admin" && (
+          <DropdownMenuItem asChild>
+            <Link href="/admin/codes">
+              <Key className="mr-2 h-4 w-4" />
+              Invite Codes
+            </Link>
+          </DropdownMenuItem>
+        )}
         <DropdownMenuItem asChild>
           <Link href="/role-select">
             <Settings className="mr-2 h-4 w-4" />
@@ -220,6 +229,10 @@ function AuthenticatedRouter() {
       
       {showContent && (
         <Route path="/content" component={ContentDashboard} />
+      )}
+      
+      {user.role === "admin" && (
+        <Route path="/admin/codes" component={AdminCodes} />
       )}
       
       <Route>

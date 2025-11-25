@@ -196,6 +196,54 @@ export default function Extract() {
     processBatches(files);
   }, [files, uploadMode, processBatches, toast]);
 
+  const handleExtractTweet = useCallback(async () => {
+    if (!tweetUrl.trim()) {
+      toast({
+        title: "No tweet URL",
+        description: "Please enter an X (Twitter) tweet URL",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setIsLoadingTweet(true);
+    try {
+      const response = await fetch("/api/extract-tweets", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tweetUrl: tweetUrl.trim() }),
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.details || error.error || "Failed to extract from tweet");
+      }
+
+      const data = await response.json();
+      setResult({
+        filename: data.filename,
+        totalFound: data.totalFound,
+        addresses: data.addresses,
+        filesProcessed: data.filesProcessed,
+        filesWithAddresses: data.filesWithAddresses,
+        tweetText: data.tweetText,
+      });
+
+      toast({
+        title: "Extraction complete",
+        description: `Found ${data.totalFound} unique EVM addresses in tweet`,
+      });
+    } catch (error) {
+      toast({
+        title: "Extraction failed",
+        description: error instanceof Error ? error.message : "Unknown error",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoadingTweet(false);
+    }
+  }, [tweetUrl, toast]);
+
   const handleDownloadCSV = useCallback(() => {
     if (!result || result.addresses.length === 0) return;
     
@@ -220,6 +268,7 @@ export default function Extract() {
     setFiles([]);
     setResult(null);
     setSearchQuery("");
+    setTweetUrl("");
     if (fileInputRef.current) fileInputRef.current.value = "";
     if (folderInputRef.current) folderInputRef.current.value = "";
   }, []);
@@ -263,6 +312,49 @@ export default function Extract() {
         </div>
 
         <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Twitter className="w-5 h-5" />
+                Extract from X (Twitter)
+              </CardTitle>
+              <CardDescription>
+                Paste a tweet URL to extract all EVM addresses from the tweet
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="https://x.com/username/status/1234567890"
+                    value={tweetUrl}
+                    onChange={(e) => setTweetUrl(e.target.value)}
+                    disabled={isLoadingTweet}
+                    data-testid="input-tweet-url"
+                  />
+                  <Button
+                    onClick={handleExtractTweet}
+                    disabled={isLoadingTweet || !tweetUrl.trim()}
+                    size="lg"
+                    data-testid="button-extract-tweet"
+                  >
+                    {isLoadingTweet ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Extracting...
+                      </>
+                    ) : (
+                      <>
+                        <Search className="w-4 h-4 mr-2" />
+                        Extract
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2">

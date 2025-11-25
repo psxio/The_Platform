@@ -2,10 +2,11 @@ import { useState } from "react";
 import { ContentTasksView } from "@/components/content-tasks-view";
 import { DirectoryTable } from "@/components/directory-table";
 import { DeliverablesView } from "@/components/deliverables-view";
+import { GoogleSheetsSync } from "@/components/google-sheets-sync";
 import { AddContentTaskDialog } from "@/components/add-content-task-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { Plus, ClipboardList, Users, Upload } from "lucide-react";
+import { Plus, ClipboardList, Users, Upload, Settings } from "lucide-react";
 
 export default function ContentDashboard() {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
@@ -32,7 +33,7 @@ export default function ContentDashboard() {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full max-w-lg grid-cols-3">
+          <TabsList className="grid w-full max-w-2xl grid-cols-4">
             <TabsTrigger value="tasks" className="gap-2" data-testid="tab-tasks">
               <ClipboardList className="h-4 w-4" />
               Tasks
@@ -44,6 +45,10 @@ export default function ContentDashboard() {
             <TabsTrigger value="deliverables" className="gap-2" data-testid="tab-deliverables">
               <Upload className="h-4 w-4" />
               Deliverables
+            </TabsTrigger>
+            <TabsTrigger value="settings" className="gap-2" data-testid="tab-settings">
+              <Settings className="h-4 w-4" />
+              Settings
             </TabsTrigger>
           </TabsList>
 
@@ -57,6 +62,12 @@ export default function ContentDashboard() {
 
           <TabsContent value="deliverables" className="mt-6">
             <DeliverablesView />
+          </TabsContent>
+
+          <TabsContent value="settings" className="mt-6">
+            <div className="space-y-6">
+              <GoogleSheetsSync />
+            </div>
           </TabsContent>
         </Tabs>
       </div>

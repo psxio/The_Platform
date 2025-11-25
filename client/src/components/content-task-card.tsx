@@ -2,8 +2,35 @@ import type { ContentTask } from "@shared/schema";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Calendar, User, Building2, Paperclip, UserCheck } from "lucide-react";
+import { Calendar, User, Building2, Paperclip, UserCheck, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+function isOverdue(dueDate: string | null | undefined, status: string): boolean {
+  if (!dueDate || status === "COMPLETED") return false;
+  try {
+    const due = new Date(dueDate);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return due < today;
+  } catch {
+    return false;
+  }
+}
+
+function isDueSoon(dueDate: string | null | undefined, status: string): boolean {
+  if (!dueDate || status === "COMPLETED") return false;
+  try {
+    const due = new Date(dueDate);
+    const today = new Date();
+    const threeDaysFromNow = new Date();
+    threeDaysFromNow.setDate(today.getDate() + 3);
+    today.setHours(0, 0, 0, 0);
+    threeDaysFromNow.setHours(23, 59, 59, 999);
+    return due >= today && due <= threeDaysFromNow;
+  } catch {
+    return false;
+  }
+}
 
 interface ContentTaskCardProps {
   task: ContentTask;
@@ -29,6 +56,8 @@ const statusConfig = {
 
 export function ContentTaskCard({ task, isSelected, onSelectionChange, onEdit }: ContentTaskCardProps) {
   const statusStyle = statusConfig[task.status as keyof typeof statusConfig] || statusConfig["TO BE STARTED"];
+  const taskIsOverdue = isOverdue(task.dueDate, task.status);
+  const taskIsDueSoon = isDueSoon(task.dueDate, task.status);
 
   const handleCardClick = (e: React.MouseEvent) => {
     if ((e.target as HTMLElement).closest('[data-radix-collection-item]')) {
@@ -44,7 +73,9 @@ export function ContentTaskCard({ task, isSelected, onSelectionChange, onEdit }:
       className={cn(
         "hover-elevate active-elevate-2 transition-all",
         onEdit && "cursor-pointer",
-        isSelected && "ring-2 ring-primary"
+        isSelected && "ring-2 ring-primary",
+        taskIsOverdue && "border-destructive/50 bg-destructive/5",
+        taskIsDueSoon && !taskIsOverdue && "border-amber-500/50 bg-amber-500/5"
       )}
       onClick={handleCardClick}
       data-testid={`card-content-task-${task.id}`}
@@ -88,10 +119,19 @@ export function ContentTaskCard({ task, isSelected, onSelectionChange, onEdit }:
           )}
 
           {task.dueDate && (
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <Calendar className="w-3.5 h-3.5 flex-shrink-0" />
+            <div className={cn(
+              "flex items-center gap-2",
+              taskIsOverdue ? "text-destructive" : taskIsDueSoon ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"
+            )}>
+              {taskIsOverdue ? (
+                <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+              ) : (
+                <Calendar className="w-3.5 h-3.5 flex-shrink-0" />
+              )}
               <span className="truncate" data-testid={`text-duedate-${task.id}`}>
                 {task.dueDate}
+                {taskIsOverdue && " (Overdue)"}
+                {taskIsDueSoon && !taskIsOverdue && " (Due Soon)"}
               </span>
             </div>
           )}

@@ -7,6 +7,7 @@ import { storage } from "./storage";
 import { parseFile } from "./file-parser";
 import { createRequire } from "module";
 import { setupAuth, isAuthenticated, requireRole } from "./auth";
+import { googleSheetsService } from "./google-sheets";
 
 // Validate Ethereum address format
 function isValidEvmAddress(address: string): boolean {
@@ -1263,6 +1264,127 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error deleting deliverable:", error);
       res.status(500).json({ error: "Failed to delete deliverable" });
+    }
+  });
+
+  // ================== GOOGLE SHEETS SYNC ENDPOINTS ==================
+  // These require "content" or "admin" role
+
+  // Get Google Sheets sync status
+  app.get("/api/sheets/status", requireRole("content"), async (req, res) => {
+    try {
+      const isConfigured = googleSheetsService.isConfigured();
+      res.json({ 
+        configured: isConfigured,
+        sheetId: process.env.GOOGLE_SHEET_ID ? "***configured***" : null 
+      });
+    } catch (error) {
+      console.error("Error checking sheets status:", error);
+      res.status(500).json({ error: "Failed to check sheets status" });
+    }
+  });
+
+  // Initialize Google Sheets connection
+  app.post("/api/sheets/connect", requireRole("content"), async (req, res) => {
+    try {
+      const success = await googleSheetsService.initialize();
+      if (success) {
+        await googleSheetsService.ensureHeaderRow();
+        res.json({ success: true, message: "Connected to Google Sheets" });
+      } else {
+        res.status(400).json({ 
+          success: false, 
+          error: "Failed to connect - check credentials configuration" 
+        });
+      }
+    } catch (error) {
+      console.error("Error connecting to sheets:", error);
+      res.status(500).json({ error: "Failed to connect to Google Sheets" });
+    }
+  });
+
+  // Sync tasks TO Google Sheet (push database to sheet)
+  app.post("/api/sheets/sync/push", requireRole("content"), async (req, res) => {
+    try {
+      if (!googleSheetsService.isConfigured()) {
+        return res.status(400).json({ error: "Google Sheets not configured" });
+      }
+      
+      const tasks = await storage.getContentTasks();
+      await googleSheetsService.syncToSheet(tasks);
+      
+      res.json({ 
+        success: true, 
+        message: `Pushed ${tasks.length} tasks to Google Sheet` 
+      });
+    } catch (error) {
+      console.error("Error pushing to sheet:", error);
+      res.status(500).json({ error: "Failed to push tasks to Google Sheet" });
+    }
+  });
+
+  // Sync tasks FROM Google Sheet (pull sheet to database)
+  app.post("/api/sheets/sync/pull", requireRole("content"), async (req, res) => {
+    try {
+      if (!googleSheetsService.isConfigured()) {
+        return res.status(400).json({ error: "Google Sheets not configured" });
+      }
+      
+      const sheetRows = await googleSheetsService.getSheetData();
+      let created = 0;
+      let updated = 0;
+      
+      // Get existing tasks to compare
+      const existingTasks = await storage.getContentTasks();
+      const existingDescriptions = new Set(existingTasks.map(t => t.description.toLowerCase().trim()));
+      
+      for (const row of sheetRows) {
+        if (!row.description || row.description.trim() === "") {
+          continue;
+        }
+        
+        const descLower = row.description.toLowerCase().trim();
+        
+        // Check if task exists (by description match)
+        const existingTask = existingTasks.find(
+          t => t.description.toLowerCase().trim() === descLower
+        );
+        
+        if (existingTask) {
+          // Update existing task if data changed
+          await storage.updateContentTask(existingTask.id, {
+            status: row.status || existingTask.status,
+            assignedTo: row.assignedTo || existingTask.assignedTo || undefined,
+            dueDate: row.dueDate || existingTask.dueDate || undefined,
+            assignedBy: row.assignedBy || existingTask.assignedBy || undefined,
+            client: row.client || existingTask.client || undefined,
+            deliverable: row.deliverable || existingTask.deliverable || undefined,
+            notes: row.notes || existingTask.notes || undefined,
+          });
+          updated++;
+        } else {
+          // Create new task
+          await storage.createContentTask({
+            description: row.description,
+            status: row.status || "TO BE STARTED",
+            assignedTo: row.assignedTo,
+            dueDate: row.dueDate,
+            assignedBy: row.assignedBy,
+            client: row.client,
+            deliverable: row.deliverable,
+            notes: row.notes,
+          });
+          created++;
+        }
+      }
+      
+      res.json({ 
+        success: true, 
+        message: `Pulled from sheet: ${created} created, ${updated} updated` 
+      });
+    } catch (error) {
+      console.error("Error pulling from sheet:", error);
+      res.status(500).json({ error: "Failed to pull tasks from Google Sheet" });
     }
   });
 

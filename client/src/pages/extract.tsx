@@ -1,29 +1,35 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { Upload, FileText, Download, Search, Loader2, CheckCircle, FileSearch } from "lucide-react";
-import { apiRequest } from "@/lib/queryClient";
+import { Upload, FileText, Download, Search, Loader2, CheckCircle, FileSearch, Folder, File } from "lucide-react";
 
 interface ExtractResult {
   filename: string;
   totalFound: number;
   addresses: string[];
+  filesProcessed?: number;
+  filesWithAddresses?: number;
 }
 
 export default function Extract() {
-  const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
+  const [uploadMode, setUploadMode] = useState<"file" | "folder">("file");
   const [isDragOver, setIsDragOver] = useState(false);
   const [result, setResult] = useState<ExtractResult | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const { toast } = useToast();
+  const folderInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const extractMutation = useMutation({
-    mutationFn: async (file: File) => {
+    mutationFn: async (filesToProcess: File[]) => {
       const formData = new FormData();
-      formData.append("file", file);
+      filesToProcess.forEach(file => {
+        formData.append("files", file);
+      });
       
       const response = await fetch("/api/extract", {
         method: "POST",
@@ -39,9 +45,12 @@ export default function Extract() {
     },
     onSuccess: (data) => {
       setResult(data);
+      const filesInfo = data.filesProcessed && data.filesProcessed > 1 
+        ? ` from ${data.filesProcessed} files` 
+        : "";
       toast({
         title: "Extraction complete",
-        description: `Found ${data.totalFound} unique EVM addresses`,
+        description: `Found ${data.totalFound} unique EVM addresses${filesInfo}`,
       });
     },
     onError: (error: Error) => {
@@ -67,33 +76,47 @@ export default function Extract() {
     e.preventDefault();
     setIsDragOver(false);
     
-    const droppedFile = e.dataTransfer.files[0];
-    if (droppedFile) {
-      setFile(droppedFile);
+    const droppedFiles = Array.from(e.dataTransfer.files);
+    if (droppedFiles.length > 0) {
+      setFiles(droppedFiles);
       setResult(null);
     }
   }, []);
 
   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFile = e.target.files?.[0];
-    if (selectedFile) {
-      setFile(selectedFile);
+    const selectedFiles = Array.from(e.target.files || []);
+    if (selectedFiles.length > 0) {
+      setFiles(selectedFiles);
       setResult(null);
     }
   }, []);
 
-  const handleExtract = useCallback(() => {
-    if (!file) {
+  const handleFolderSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFiles = Array.from(e.target.files || []);
+    if (selectedFiles.length > 0) {
+      setFiles(selectedFiles);
+      setResult(null);
       toast({
-        title: "No file selected",
-        description: "Please upload a file to extract addresses from",
+        title: "Folder selected",
+        description: `${selectedFiles.length} files ready to scan`,
+      });
+    }
+  }, [toast]);
+
+  const handleExtract = useCallback(() => {
+    if (files.length === 0) {
+      toast({
+        title: "No files selected",
+        description: uploadMode === "folder" 
+          ? "Please select a folder to scan" 
+          : "Please upload a file to extract addresses from",
         variant: "destructive",
       });
       return;
     }
     
-    extractMutation.mutate(file);
-  }, [file, extractMutation, toast]);
+    extractMutation.mutate(files);
+  }, [files, uploadMode, extractMutation, toast]);
 
   const handleDownloadCSV = useCallback(() => {
     if (!result || result.addresses.length === 0) return;
@@ -116,14 +139,29 @@ export default function Extract() {
   }, [result, toast]);
 
   const handleClear = useCallback(() => {
-    setFile(null);
+    setFiles([]);
     setResult(null);
     setSearchQuery("");
+    if (fileInputRef.current) fileInputRef.current.value = "";
+    if (folderInputRef.current) folderInputRef.current.value = "";
   }, []);
 
   const filteredAddresses = result?.addresses.filter(addr => 
     addr.toLowerCase().includes(searchQuery.toLowerCase())
   ) || [];
+
+  const getFilesSummary = () => {
+    if (files.length === 0) return null;
+    if (files.length === 1) return files[0].name;
+    return `${files.length} files selected`;
+  };
+
+  const getTotalSize = () => {
+    const totalBytes = files.reduce((sum, f) => sum + f.size, 0);
+    if (totalBytes < 1024) return `${totalBytes} B`;
+    if (totalBytes < 1024 * 1024) return `${(totalBytes / 1024).toFixed(1)} KB`;
+    return `${(totalBytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -151,27 +189,60 @@ export default function Extract() {
               </CardDescription>
             </CardHeader>
             <CardContent>
+              <div className="flex gap-2 mb-4">
+                <Button
+                  variant={uploadMode === "file" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => {
+                    setUploadMode("file");
+                    handleClear();
+                  }}
+                  data-testid="button-mode-file"
+                >
+                  <File className="w-4 h-4 mr-2" />
+                  Single File
+                </Button>
+                <Button
+                  variant={uploadMode === "folder" ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => {
+                    setUploadMode("folder");
+                    handleClear();
+                  }}
+                  data-testid="button-mode-folder"
+                >
+                  <Folder className="w-4 h-4 mr-2" />
+                  Folder
+                </Button>
+              </div>
+
               <div
                 className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors cursor-pointer ${
                   isDragOver 
                     ? "border-primary bg-primary/5" 
-                    : file 
+                    : files.length > 0 
                     ? "border-green-500 bg-green-500/5" 
                     : "border-muted-foreground/25 hover:border-primary/50"
                 }`}
                 onDragOver={handleDragOver}
                 onDragLeave={handleDragLeave}
                 onDrop={handleDrop}
-                onClick={() => document.getElementById("file-upload")?.click()}
+                onClick={() => {
+                  if (uploadMode === "folder") {
+                    folderInputRef.current?.click();
+                  } else {
+                    fileInputRef.current?.click();
+                  }
+                }}
                 data-testid="dropzone-extract"
               >
-                {file ? (
+                {files.length > 0 ? (
                   <div className="flex flex-col items-center gap-3">
                     <CheckCircle className="w-12 h-12 text-green-500" />
                     <div>
-                      <p className="font-medium text-foreground">{file.name}</p>
+                      <p className="font-medium text-foreground">{getFilesSummary()}</p>
                       <p className="text-sm text-muted-foreground">
-                        {(file.size / 1024).toFixed(1)} KB
+                        {getTotalSize()}
                       </p>
                     </div>
                     <Button 
@@ -183,31 +254,49 @@ export default function Extract() {
                       }}
                       data-testid="button-clear-file"
                     >
-                      Choose Different File
+                      {uploadMode === "folder" ? "Choose Different Folder" : "Choose Different File"}
                     </Button>
                   </div>
                 ) : (
                   <div className="flex flex-col items-center gap-3">
-                    <Upload className="w-12 h-12 text-muted-foreground" />
+                    {uploadMode === "folder" ? (
+                      <Folder className="w-12 h-12 text-muted-foreground" />
+                    ) : (
+                      <Upload className="w-12 h-12 text-muted-foreground" />
+                    )}
                     <div>
-                      <p className="font-medium text-foreground">Drop file here</p>
-                      <p className="text-sm text-muted-foreground">or click to browse</p>
+                      <p className="font-medium text-foreground">
+                        {uploadMode === "folder" ? "Click to select a folder" : "Drop file here"}
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        {uploadMode === "folder" 
+                          ? "All files in the folder will be scanned" 
+                          : "or click to browse"}
+                      </p>
                     </div>
                   </div>
                 )}
                 <input
                   type="file"
-                  id="file-upload"
+                  ref={fileInputRef}
                   className="hidden"
                   onChange={handleFileSelect}
                   data-testid="input-extract-file"
+                />
+                <input
+                  type="file"
+                  ref={folderInputRef}
+                  className="hidden"
+                  onChange={handleFolderSelect}
+                  {...{ webkitdirectory: "", directory: "" } as any}
+                  data-testid="input-extract-folder"
                 />
               </div>
 
               <div className="mt-6 flex justify-center">
                 <Button
                   onClick={handleExtract}
-                  disabled={!file || extractMutation.isPending}
+                  disabled={files.length === 0 || extractMutation.isPending}
                   size="lg"
                   className="min-w-[200px]"
                   data-testid="button-extract"
@@ -215,7 +304,7 @@ export default function Extract() {
                   {extractMutation.isPending ? (
                     <>
                       <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Scanning...
+                      Scanning {files.length > 1 ? `${files.length} files...` : "..."}
                     </>
                   ) : (
                     <>

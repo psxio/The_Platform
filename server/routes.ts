@@ -106,36 +106,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Extract EVM addresses from any file
+  // Extract EVM addresses from any file(s) - supports single file or multiple files from folder
   app.post(
     "/api/extract",
-    upload.single("file"),
+    upload.array("files", 500),
     async (req, res) => {
       try {
-        const file = req.file;
+        const files = req.files as Express.Multer.File[];
         
-        if (!file) {
+        if (!files || files.length === 0) {
           return res.status(400).json({ 
-            error: "File is required" 
+            error: "At least one file is required" 
           });
         }
 
-        // Convert file to text content
-        const textContent = await fileToText(file.originalname, file.buffer);
-        
-        if (!textContent) {
-          return res.status(400).json({ 
-            error: "Could not read file content. The file may be empty or in an unsupported binary format." 
-          });
+        // Process all files and collect addresses
+        const allAddresses = new Set<string>();
+        const processedFiles: string[] = [];
+        let filesWithAddresses = 0;
+
+        for (const file of files) {
+          try {
+            const textContent = await fileToText(file.originalname, file.buffer);
+            
+            if (textContent) {
+              const addresses = extractEvmAddresses(textContent);
+              if (addresses.length > 0) {
+                filesWithAddresses++;
+                addresses.forEach(addr => allAddresses.add(addr));
+              }
+              processedFiles.push(file.originalname);
+            }
+          } catch (e) {
+            console.error(`Error processing file ${file.originalname}:`, e);
+          }
         }
 
-        // Extract all EVM addresses
-        const addresses = extractEvmAddresses(textContent);
+        const uniqueAddresses = Array.from(allAddresses);
+        const displayName = files.length === 1 
+          ? files[0].originalname 
+          : `${files.length} files (${filesWithAddresses} with addresses)`;
 
         res.json({
-          filename: file.originalname,
-          totalFound: addresses.length,
-          addresses: addresses,
+          filename: displayName,
+          totalFound: uniqueAddresses.length,
+          addresses: uniqueAddresses,
+          filesProcessed: processedFiles.length,
+          filesWithAddresses: filesWithAddresses,
         });
       } catch (error) {
         console.error("Error extracting addresses:", error);

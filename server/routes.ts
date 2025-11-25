@@ -109,7 +109,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Extract EVM addresses from any file(s) - supports single file or multiple files from folder
   app.post(
     "/api/extract",
-    upload.array("files", 500),
+    upload.array("files", 100),
     async (req, res) => {
       try {
         const files = req.files as Express.Multer.File[];
@@ -117,6 +117,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         if (!files || files.length === 0) {
           return res.status(400).json({ 
             error: "At least one file is required" 
+          });
+        }
+
+        if (files.length > 100) {
+          return res.status(400).json({ 
+            error: "Maximum 100 files allowed per extraction" 
           });
         }
 
@@ -129,7 +135,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           try {
             const textContent = await fileToText(file.originalname, file.buffer);
             
-            if (textContent) {
+            if (textContent && textContent.length > 0) {
               const addresses = extractEvmAddresses(textContent);
               if (addresses.length > 0) {
                 filesWithAddresses++;
@@ -139,6 +145,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             }
           } catch (e) {
             console.error(`Error processing file ${file.originalname}:`, e);
+            // Continue processing other files even if one fails
           }
         }
 

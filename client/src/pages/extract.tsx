@@ -86,20 +86,52 @@ export default function Extract() {
   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = Array.from(e.target.files || []);
     if (selectedFiles.length > 0) {
+      if (selectedFiles.length > 100) {
+        toast({
+          title: "Too many files",
+          description: `Selected ${selectedFiles.length} files, but maximum is 100.`,
+          variant: "destructive",
+        });
+        return;
+      }
       setFiles(selectedFiles);
       setResult(null);
     }
-  }, []);
+  }, [toast]);
 
   const handleFolderSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = Array.from(e.target.files || []);
     if (selectedFiles.length > 0) {
-      setFiles(selectedFiles);
-      setResult(null);
-      toast({
-        title: "Folder selected",
-        description: `${selectedFiles.length} files ready to scan`,
+      // Filter to supported file types and limit to 100 files
+      const supportedExtensions = ['.pdf', '.csv', '.txt', '.json', '.xlsx', '.xls', '.html', '.htm'];
+      const supportedMimes = ['application/pdf', 'text/csv', 'text/plain', 'application/json', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/vnd.ms-excel', 'text/html'];
+      
+      const filtered = selectedFiles.filter(file => {
+        const ext = file.name.toLowerCase().substring(file.name.lastIndexOf('.'));
+        return supportedExtensions.includes(ext) || supportedMimes.includes(file.type);
       });
+
+      if (filtered.length > 100) {
+        toast({
+          title: "Too many files",
+          description: `Selected ${filtered.length} supported files, but maximum is 100. Using first 100 files.`,
+          variant: "destructive",
+        });
+        setFiles(filtered.slice(0, 100));
+      } else if (filtered.length < selectedFiles.length) {
+        toast({
+          title: "Some files skipped",
+          description: `${selectedFiles.length - filtered.length} unsupported files were skipped. Using ${filtered.length} supported files.`,
+        });
+        setFiles(filtered);
+      } else {
+        setFiles(filtered);
+        toast({
+          title: "Folder selected",
+          description: `${filtered.length} supported files ready to scan`,
+        });
+      }
+      setResult(null);
     }
   }, [toast]);
 

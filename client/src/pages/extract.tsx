@@ -1,5 +1,4 @@
 import { useState, useCallback, useRef, useEffect } from "react";
-import { useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -17,7 +16,6 @@ interface ExtractResult {
 interface BatchProgress {
   currentBatch: number;
   totalBatches: number;
-  isProcessing: boolean;
 }
 
 export default function Extract() {
@@ -31,27 +29,25 @@ export default function Extract() {
   const folderInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Extract addresses from a single batch of files
-  const extractBatchMutation = useMutation({
-    mutationFn: async (filesToProcess: File[]) => {
-      const formData = new FormData();
-      filesToProcess.forEach(file => {
-        formData.append("files", file);
-      });
-      
-      const response = await fetch("/api/extract", {
-        method: "POST",
-        body: formData,
-      });
-      
-      if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || "Failed to extract addresses");
-      }
-      
-      return response.json() as Promise<ExtractResult>;
-    },
-  });
+  // Extract single batch via API
+  const extractBatch = useCallback(async (filesToProcess: File[]): Promise<ExtractResult> => {
+    const formData = new FormData();
+    filesToProcess.forEach(file => {
+      formData.append("files", file);
+    });
+    
+    const response = await fetch("/api/extract", {
+      method: "POST",
+      body: formData,
+    });
+    
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || "Failed to extract addresses");
+    }
+    
+    return response.json();
+  }, []);
 
   // Process files in batches of 100
   const processBatches = useCallback(async (filesToProcess: File[]) => {
@@ -71,10 +67,9 @@ export default function Extract() {
         setBatchProgress({
           currentBatch: i + 1,
           totalBatches: batches.length,
-          isProcessing: true,
         });
 
-        const batchResult = await extractBatchMutation.mutateAsync(batches[i]);
+        const batchResult = await extractBatch(batches[i]);
         
         // Accumulate addresses
         batchResult.addresses.forEach(addr => allAddresses.add(addr));
@@ -112,7 +107,7 @@ export default function Extract() {
         variant: "destructive",
       });
     }
-  }, [extractBatchMutation, toast]);
+  }, [extractBatch, toast]);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();

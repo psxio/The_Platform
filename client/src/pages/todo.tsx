@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Plus, Check, Clock, Circle, Trash2, Loader2, Globe, Lock, LogIn } from "lucide-react";
+import { Plus, Check, Clock, Circle, Trash2, Loader2, Globe, Lock } from "lucide-react";
+import { SiGoogle } from "react-icons/si";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -142,14 +143,15 @@ export default function Todo() {
         {!isAuthenticated ? (
           <Card className="mb-8">
             <CardContent className="py-8 text-center">
-              <LogIn className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
+              <SiGoogle className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
               <h2 className="text-lg font-medium mb-2">Sign in to manage your tasks</h2>
               <p className="text-muted-foreground mb-4">
                 Create your personal to-do list and optionally share items publicly.
               </p>
               <Button asChild>
-                <a href="/api/login" data-testid="button-login">
-                  Sign In
+                <a href="/api/auth/google" data-testid="button-login" className="flex items-center gap-2">
+                  <SiGoogle className="w-4 h-4" />
+                  Sign in with Google
                 </a>
               </Button>
             </CardContent>

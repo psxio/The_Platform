@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { NFTMetadataGenerator } from "@/components/nft-metadata-generator";
 import {
   Dialog,
   DialogContent,
@@ -411,83 +413,96 @@ export default function Collections() {
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-5xl mx-auto px-4 md:px-6 py-12">
-        <div className="text-center mb-12">
+        <div className="text-center mb-8">
           <h1 className="text-2xl md:text-3xl font-semibold mb-2">
-            NFT Collections
+            NFT Collections & Tools
           </h1>
           <p className="text-muted-foreground">
-            Manage minted addresses for each NFT collection
+            Manage minted addresses and generate metadata for NFT collections
           </p>
         </div>
 
-        <div className="flex justify-center mb-8">
-          <Button
-            onClick={() => setShowCreateDialog(true)}
-            size="lg"
-            data-testid="button-create-collection"
-          >
-            <Plus className="w-4 h-4 mr-2" />
-            New Collection
-          </Button>
-        </div>
+        <Tabs defaultValue="collections" className="space-y-6">
+          <TabsList className="grid w-full grid-cols-2 max-w-md mx-auto">
+            <TabsTrigger value="collections" data-testid="tab-collections">Collections</TabsTrigger>
+            <TabsTrigger value="metadata" data-testid="tab-metadata">Metadata Generator</TabsTrigger>
+          </TabsList>
 
-        {loadingCollections ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="w-6 h-6 animate-spin" />
-          </div>
-        ) : collections.length === 0 ? (
-          <Card className="border-dashed">
-            <CardContent className="pt-6">
-              <div className="text-center py-12">
-                <Database className="w-12 h-12 mx-auto mb-4 text-muted-foreground/50" />
-                <h3 className="text-xl font-medium mb-2">No Collections Yet</h3>
-                <p className="text-muted-foreground max-w-md mx-auto">
-                  Create a collection to store minted addresses for your NFT projects.
-                  Collections help you compare eligibility without uploading files each time.
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        ) : (
-          <div className="grid gap-4">
-            {collections.map((collection) => (
-              <Card
-                key={collection.id}
-                className="hover-elevate cursor-pointer transition-all"
-                onClick={() => setSelectedCollection(collection.id)}
-                data-testid={`card-collection-${collection.id}`}
+          <TabsContent value="collections" className="space-y-6">
+            <div className="flex justify-center">
+              <Button
+                onClick={() => setShowCreateDialog(true)}
+                size="lg"
+                data-testid="button-create-collection"
               >
-                <CardContent className="flex items-center justify-between py-4">
-                  <div className="flex items-center gap-4">
-                    <div className="p-3 bg-primary/10 rounded-lg">
-                      <Database className="w-6 h-6 text-primary" />
-                    </div>
-                    <div>
-                      <h3 className="font-medium">{collection.name}</h3>
-                      <p className="text-sm text-muted-foreground">
-                        {collection.addressCount.toLocaleString()} minted addresses
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setShowDeleteDialog(collection.id);
-                      }}
-                      data-testid={`button-delete-${collection.id}`}
-                    >
-                      <Trash2 className="w-4 h-4 text-muted-foreground" />
-                    </Button>
-                    <ChevronRight className="w-5 h-5 text-muted-foreground" />
+                <Plus className="w-4 h-4 mr-2" />
+                New Collection
+              </Button>
+            </div>
+
+            {loadingCollections ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 className="w-6 h-6 animate-spin" />
+              </div>
+            ) : collections.length === 0 ? (
+              <Card className="border-dashed">
+                <CardContent className="pt-6">
+                  <div className="text-center py-12">
+                    <Database className="w-12 h-12 mx-auto mb-4 text-muted-foreground/50" />
+                    <h3 className="text-xl font-medium mb-2">No Collections Yet</h3>
+                    <p className="text-muted-foreground max-w-md mx-auto">
+                      Create a collection to store minted addresses for your NFT projects.
+                      Collections help you compare eligibility without uploading files each time.
+                    </p>
                   </div>
                 </CardContent>
               </Card>
-            ))}
-          </div>
-        )}
+            ) : (
+              <div className="grid gap-4">
+                {collections.map((collection) => (
+                  <Card
+                    key={collection.id}
+                    className="hover-elevate cursor-pointer transition-all"
+                    onClick={() => setSelectedCollection(collection.id)}
+                    data-testid={`card-collection-${collection.id}`}
+                  >
+                    <CardContent className="flex items-center justify-between py-4">
+                      <div className="flex items-center gap-4">
+                        <div className="p-3 bg-primary/10 rounded-lg">
+                          <Database className="w-6 h-6 text-primary" />
+                        </div>
+                        <div>
+                          <h3 className="font-medium">{collection.name}</h3>
+                          <p className="text-sm text-muted-foreground">
+                            {collection.addressCount.toLocaleString()} minted addresses
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setShowDeleteDialog(collection.id);
+                          }}
+                          data-testid={`button-delete-${collection.id}`}
+                        >
+                          <Trash2 className="w-4 h-4 text-muted-foreground" />
+                        </Button>
+                        <ChevronRight className="w-5 h-5 text-muted-foreground" />
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="metadata">
+            <NFTMetadataGenerator />
+          </TabsContent>
+        </Tabs>
       </div>
 
       <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>

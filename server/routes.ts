@@ -1575,11 +1575,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ================== GOOGLE SHEETS SYNC ENDPOINTS ==================
   // These require "content" or "admin" role
 
-  // Get Google Sheets sync status
+  // Get Google Sheets sync status - auto-connect if not yet connected
   app.get("/api/sheets/status", requireRole("content"), async (req, res) => {
     try {
-      const isConfigured = googleSheetsService.isConfigured();
       const hasCredentials = !!(process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL && process.env.GOOGLE_PRIVATE_KEY);
+      const hasSheetId = !!process.env.GOOGLE_SHEET_ID;
+      
+      // Auto-connect if credentials and sheet ID are configured but not yet connected
+      if (!googleSheetsService.isConfigured() && hasCredentials && hasSheetId) {
+        try {
+          await googleSheetsService.initialize();
+          console.log("Auto-connected to Google Sheets on status check");
+        } catch (initError) {
+          console.error("Auto-connect failed:", initError);
+        }
+      }
+      
+      const isConfigured = googleSheetsService.isConfigured();
       res.json({ 
         configured: isConfigured,
         sheetId: process.env.GOOGLE_SHEET_ID || null,

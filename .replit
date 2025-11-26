@@ -62,3 +62,4 @@ integrations = ["javascript_log_in_with_replit:1.0.0"]
 
 [userenv.shared]
 INITIAL_ADMIN_CODE = "ADMIN2025FIRST"
+GOOGLE_SHEET_ID = "14l5LOsTo1xO4s7fh-bG_fFaRG09xueuVefEJ_bCBY4s"

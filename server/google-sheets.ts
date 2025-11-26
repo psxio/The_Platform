@@ -88,10 +88,23 @@ export class GoogleSheetsService {
       
       console.log("Google Sheets integration initialized successfully");
       return true;
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to initialize Google Sheets:", error);
       this.sheets = null;
-      return false;
+      
+      // Provide more specific error messages
+      const errorMessage = error?.message || String(error);
+      if (errorMessage.includes("API has not been used") || errorMessage.includes("it is disabled")) {
+        throw new Error("Google Sheets API is not enabled. Please enable it in Google Cloud Console: https://console.developers.google.com/apis/api/sheets.googleapis.com");
+      } else if (errorMessage.includes("permission") || errorMessage.includes("forbidden") || error?.code === 403) {
+        throw new Error("Permission denied. Make sure the Google Sheet is shared with the service account email.");
+      } else if (errorMessage.includes("not found") || error?.code === 404) {
+        throw new Error("Spreadsheet not found. Please check the Sheet ID or URL.");
+      } else if (errorMessage.includes("DECODER") || errorMessage.includes("unsupported")) {
+        throw new Error("Invalid private key format. Please re-enter your service account private key.");
+      }
+      
+      throw error;
     }
   }
 

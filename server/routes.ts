@@ -23,8 +23,9 @@ const upload = multer({ storage: multer.memoryStorage() });
 
 // Extract all EVM addresses from any text content
 function extractEvmAddresses(content: string): string[] {
-  // Regex to match Ethereum addresses: 0x followed by 40 hex characters
-  const addressRegex = /0x[a-fA-F0-9]{40}/g;
+  // Use word boundary to avoid matching within longer hex strings (like bytecode or tx data)
+  // This regex ensures the address stands alone and isn't part of a larger hex sequence
+  const addressRegex = /(?<![a-fA-F0-9])0x[a-fA-F0-9]{40}(?![a-fA-F0-9])/g;
   const matches = content.match(addressRegex) || [];
   
   // Remove duplicates and normalize to lowercase for consistency with comparison tool
@@ -33,6 +34,19 @@ function extractEvmAddresses(content: string): string[] {
   
   for (const addr of matches) {
     const lowerAddr = addr.toLowerCase();
+    // Skip addresses that are all zeros (null address pattern often in encoded data)
+    if (lowerAddr === '0x0000000000000000000000000000000000000000') {
+      continue;
+    }
+    // Skip addresses that look like padded zeros with a small value (common in ABI encoding)
+    // These have lots of leading zeros followed by a few hex chars
+    const withoutPrefix = lowerAddr.slice(2);
+    const leadingZeros = withoutPrefix.match(/^0+/)?.[0]?.length || 0;
+    if (leadingZeros >= 30) {
+      // More than 30 leading zeros is likely ABI-encoded data, not a real address
+      continue;
+    }
+    
     if (!seen.has(lowerAddr)) {
       seen.add(lowerAddr);
       uniqueAddresses.push(lowerAddr); // Return lowercase for consistency

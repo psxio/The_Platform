@@ -1518,25 +1518,76 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(404).json({ error: "Content task not found" });
         }
         
-        // Save file to uploads directory
-        const fs = await import("fs");
-        const path = await import("path");
-        const uploadsDir = path.join(process.cwd(), "uploads");
+        let filePath: string = "";
+        let driveLink: string | null = null;
         
-        if (!fs.existsSync(uploadsDir)) {
-          fs.mkdirSync(uploadsDir, { recursive: true });
+        // Limit file size to 50MB for memory safety
+        const maxFileSize = 50 * 1024 * 1024; // 50MB
+        if (file.size > maxFileSize) {
+          return res.status(400).json({ 
+            error: `File too large. Maximum size is ${maxFileSize / (1024 * 1024)}MB` 
+          });
         }
         
-        const uniqueName = `${Date.now()}-${file.originalname}`;
-        const filePath = path.join(uploadsDir, uniqueName);
-        fs.writeFileSync(filePath, file.buffer);
+        // Try to upload to Google Drive if credentials are configured
+        const hasGoogleCredentials = !!(
+          process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL && 
+          process.env.GOOGLE_PRIVATE_KEY &&
+          process.env.GOOGLE_SHEET_ID
+        );
+        
+        if (hasGoogleCredentials) {
+          try {
+            // Ensure Drive is initialized
+            if (!googleSheetsService.isDriveConfigured()) {
+              await googleSheetsService.initialize();
+            }
+            
+            if (googleSheetsService.isDriveConfigured()) {
+              driveLink = await googleSheetsService.uploadToDrive(
+                file.buffer,
+                file.originalname,
+                file.mimetype
+              );
+              filePath = driveLink;
+              console.log(`Uploaded to Google Drive: ${driveLink}`);
+            }
+          } catch (driveError) {
+            console.error("Google Drive upload failed, falling back to local:", driveError);
+            // Fall back to local storage
+            driveLink = null;
+          }
+        }
+        
+        // If Drive upload failed or not configured, save locally
+        if (!filePath) {
+          const fs = await import("fs");
+          const path = await import("path");
+          const uploadsDir = path.join(process.cwd(), "uploads");
+          
+          if (!fs.existsSync(uploadsDir)) {
+            fs.mkdirSync(uploadsDir, { recursive: true });
+          }
+          
+          const uniqueName = `${Date.now()}-${file.originalname}`;
+          const localPath = path.join(uploadsDir, uniqueName);
+          fs.writeFileSync(localPath, file.buffer);
+          filePath = `/uploads/${uniqueName}`;
+        }
         
         const deliverable = await storage.createDeliverable({
           taskId,
           fileName: file.originalname,
-          filePath: `/uploads/${uniqueName}`,
+          filePath,
           fileSize: `${(file.size / 1024).toFixed(1)} KB`,
         });
+        
+        // Update task's deliverable field with the link
+        if (driveLink) {
+          await storage.updateContentTask(taskId, {
+            deliverable: driveLink,
+          });
+        }
         
         res.status(201).json(deliverable);
       } catch (error) {
@@ -1556,13 +1607,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Deliverable not found" });
       }
       
-      // Delete file from disk
-      const fs = await import("fs");
-      const path = await import("path");
-      const filePath = path.join(process.cwd(), deliverable.filePath);
-      if (fs.existsSync(filePath)) {
-        fs.unlinkSync(filePath);
+      // Only delete local files (not Drive URLs)
+      const isLocalFile = deliverable.filePath.startsWith("/uploads/");
+      if (isLocalFile) {
+        const fs = await import("fs");
+        const path = await import("path");
+        const filePath = path.join(process.cwd(), deliverable.filePath);
+        if (fs.existsSync(filePath)) {
+          fs.unlinkSync(filePath);
+        }
       }
+      // Note: Drive files are not deleted - they remain accessible via the link
+      // This is intentional as the link may be referenced in Google Sheets
       
       await storage.deleteDeliverable(id);
       res.json({ success: true });

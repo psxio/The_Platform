@@ -192,6 +192,33 @@ To-Do Endpoints:
 - Drizzle ORM with PostgreSQL
 - @neondatabase/serverless driver
 
+## Recent Changes (November 26, 2025)
+
+### Google Drive & Sheets Integration Enhancements (Session 4)
+
+1. **Google Drive File Upload Integration**:
+   - Deliverable uploads now automatically upload to Google Drive
+   - Creates shareable "anyone with link" public URLs
+   - Falls back to local storage if Drive not configured
+   - Drive links stored in task's deliverable field for sync
+   - File size limit: 50MB for memory safety
+   - Required scope: `https://www.googleapis.com/auth/drive.file`
+
+2. **Persistent Google Sheet Connection**:
+   - Sheet ID stored in `GOOGLE_SHEET_ID` environment variable
+   - Auto-connects on startup/status check - no manual reconnection needed
+   - Simplified Settings UI (no need to re-enter sheet ID)
+
+3. **Sheet Name Case Sensitivity Fix**:
+   - Sheet tabs now correctly use uppercase names: "TASKS" and "DIRECTORY"
+   - Fixed directory sync error when sheet already exists
+
+4. **Environment Variables for Google Integration**:
+   - `GOOGLE_SERVICE_ACCOUNT_EMAIL` - Service account email
+   - `GOOGLE_PRIVATE_KEY` - Service account private key
+   - `GOOGLE_SHEET_ID` - Google Sheet ID (persistent)
+   - `GOOGLE_DRIVE_FOLDER_ID` - Optional: specific Drive folder for uploads
+
 ## Recent Changes (November 25, 2025)
 
 ### Enhanced ContentFlowStudio Features (Session 3)

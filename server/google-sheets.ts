@@ -21,13 +21,33 @@ export class GoogleSheetsService {
 
   async initialize(): Promise<boolean> {
     const clientEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
-    const privateKey = process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, "\n");
+    let privateKey = process.env.GOOGLE_PRIVATE_KEY;
     this.spreadsheetId = process.env.GOOGLE_SHEET_ID || null;
 
     if (!clientEmail || !privateKey || !this.spreadsheetId) {
       console.log("Google Sheets integration not configured - missing credentials");
       return false;
     }
+
+    // Handle various private key formats
+    // Replace literal \n with actual newlines
+    privateKey = privateKey.replace(/\\n/g, "\n");
+    // Handle double-escaped newlines
+    privateKey = privateKey.replace(/\\\\n/g, "\n");
+    // Ensure proper PEM format with newlines
+    if (!privateKey.includes("\n")) {
+      // Key might be all on one line, try to format it
+      privateKey = privateKey
+        .replace("-----BEGIN PRIVATE KEY-----", "-----BEGIN PRIVATE KEY-----\n")
+        .replace("-----END PRIVATE KEY-----", "\n-----END PRIVATE KEY-----");
+    }
+    
+    console.log("Private key format check:", {
+      hasBeginMarker: privateKey.includes("-----BEGIN PRIVATE KEY-----"),
+      hasEndMarker: privateKey.includes("-----END PRIVATE KEY-----"),
+      hasNewlines: privateKey.includes("\n"),
+      length: privateKey.length
+    });
 
     try {
       const auth = new google.auth.GoogleAuth({

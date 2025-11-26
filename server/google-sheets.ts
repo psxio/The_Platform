@@ -34,19 +34,38 @@ export class GoogleSheetsService {
     privateKey = privateKey.replace(/\\n/g, "\n");
     // Handle double-escaped newlines
     privateKey = privateKey.replace(/\\\\n/g, "\n");
-    // Ensure proper PEM format with newlines
-    if (!privateKey.includes("\n")) {
-      // Key might be all on one line, try to format it
-      privateKey = privateKey
-        .replace("-----BEGIN PRIVATE KEY-----", "-----BEGIN PRIVATE KEY-----\n")
-        .replace("-----END PRIVATE KEY-----", "\n-----END PRIVATE KEY-----");
+    
+    // Check if PEM headers are missing
+    const hasBeginMarker = privateKey.includes("-----BEGIN PRIVATE KEY-----");
+    const hasEndMarker = privateKey.includes("-----END PRIVATE KEY-----");
+    
+    if (!hasBeginMarker || !hasEndMarker) {
+      // Key is missing PEM headers - reconstruct them
+      // First, clean the key of any existing partial markers and whitespace
+      let cleanKey = privateKey
+        .replace(/-----BEGIN PRIVATE KEY-----/g, "")
+        .replace(/-----END PRIVATE KEY-----/g, "")
+        .replace(/\s/g, ""); // Remove all whitespace
+      
+      // Format the key with proper line breaks (64 chars per line for PEM)
+      const formattedKey = cleanKey.match(/.{1,64}/g)?.join("\n") || cleanKey;
+      
+      privateKey = `-----BEGIN PRIVATE KEY-----\n${formattedKey}\n-----END PRIVATE KEY-----\n`;
+    } else {
+      // Ensure proper PEM format with newlines after headers
+      if (!privateKey.includes("\n")) {
+        privateKey = privateKey
+          .replace("-----BEGIN PRIVATE KEY-----", "-----BEGIN PRIVATE KEY-----\n")
+          .replace("-----END PRIVATE KEY-----", "\n-----END PRIVATE KEY-----");
+      }
     }
     
     console.log("Private key format check:", {
       hasBeginMarker: privateKey.includes("-----BEGIN PRIVATE KEY-----"),
       hasEndMarker: privateKey.includes("-----END PRIVATE KEY-----"),
       hasNewlines: privateKey.includes("\n"),
-      length: privateKey.length
+      length: privateKey.length,
+      firstChars: privateKey.substring(0, 50)
     });
 
     try {

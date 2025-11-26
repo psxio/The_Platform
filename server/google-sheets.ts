@@ -275,27 +275,39 @@ export class GoogleSheetsService {
       });
 
       const sheets = spreadsheet.data.sheets || [];
+      const sheetNames = sheets.map((s) => s.properties?.title);
+      console.log("Available sheets:", sheetNames);
+      
       const directorySheetExists = sheets.some(
         (sheet) => sheet.properties?.title === this.directorySheetName
       );
 
       if (!directorySheetExists) {
-        // Create the Directory sheet
-        await this.sheets.spreadsheets.batchUpdate({
-          spreadsheetId: this.spreadsheetId,
-          requestBody: {
-            requests: [
-              {
-                addSheet: {
-                  properties: {
-                    title: this.directorySheetName,
+        try {
+          // Create the Directory sheet
+          await this.sheets.spreadsheets.batchUpdate({
+            spreadsheetId: this.spreadsheetId,
+            requestBody: {
+              requests: [
+                {
+                  addSheet: {
+                    properties: {
+                      title: this.directorySheetName,
+                    },
                   },
                 },
-              },
-            ],
-          },
-        });
-        console.log("Created Directory sheet");
+              ],
+            },
+          });
+          console.log("Created Directory sheet");
+        } catch (createError: any) {
+          // Handle case where sheet was created by another request
+          if (createError?.message?.includes("already exists")) {
+            console.log("Directory sheet already exists, continuing...");
+          } else {
+            throw createError;
+          }
+        }
       }
 
       // Ensure header row exists

@@ -56,6 +56,51 @@ function extractEvmAddresses(content: string): string[] {
   return uniqueAddresses;
 }
 
+// Extract text content from JSON, focusing on message/text fields (for chat exports like Telegram)
+function extractTextFromJson(obj: any, depth = 0): string {
+  if (depth > 10) return ''; // Prevent infinite recursion
+  
+  const textParts: string[] = [];
+  
+  if (typeof obj === 'string') {
+    return obj;
+  }
+  
+  if (Array.isArray(obj)) {
+    for (const item of obj) {
+      textParts.push(extractTextFromJson(item, depth + 1));
+    }
+  } else if (obj && typeof obj === 'object') {
+    // Only extract from fields that contain actual user content
+    const textFields = ['text', 'message', 'content', 'body', 'description', 'caption', 'bio'];
+    for (const field of textFields) {
+      if (obj[field]) {
+        if (typeof obj[field] === 'string') {
+          textParts.push(obj[field]);
+        } else if (Array.isArray(obj[field])) {
+          // Telegram stores text as array of objects sometimes
+          for (const part of obj[field]) {
+            if (typeof part === 'string') {
+              textParts.push(part);
+            } else if (part && typeof part === 'object' && part.text) {
+              textParts.push(part.text);
+            }
+          }
+        }
+      }
+    }
+    // Recurse into nested objects/arrays (like messages array)
+    const containerFields = ['messages', 'items', 'data', 'posts', 'comments', 'replies'];
+    for (const field of containerFields) {
+      if (obj[field] && Array.isArray(obj[field])) {
+        textParts.push(extractTextFromJson(obj[field], depth + 1));
+      }
+    }
+  }
+  
+  return textParts.join('\n');
+}
+
 // Convert file buffer to text content based on file type
 async function fileToText(filename: string, buffer: Buffer): Promise<string> {
   const ext = filename.toLowerCase().split('.').pop() || '';
@@ -85,6 +130,17 @@ async function fileToText(filename: string, buffer: Buffer): Promise<string> {
     } catch (e) {
       console.error('Error reading Excel file:', e);
       return '';
+    }
+  }
+  
+  // Handle JSON files (like Telegram exports) - only extract from text/message fields
+  if (ext === 'json') {
+    try {
+      const jsonContent = JSON.parse(buffer.toString('utf-8'));
+      return extractTextFromJson(jsonContent);
+    } catch (e) {
+      // If JSON parsing fails, treat as plain text
+      return buffer.toString('utf-8');
     }
   }
   

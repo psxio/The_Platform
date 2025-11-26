@@ -1733,6 +1733,82 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Sync directory TO Google Sheet (push database to sheet)
+  app.post("/api/sheets/sync/directory/push", requireRole("content"), async (req, res) => {
+    try {
+      if (!googleSheetsService.isConfigured()) {
+        return res.status(400).json({ error: "Google Sheets not configured" });
+      }
+      
+      const members = await storage.getDirectoryMembers();
+      await googleSheetsService.syncDirectoryToSheet(members);
+      
+      res.json({ 
+        success: true, 
+        message: `Pushed ${members.length} directory members to Google Sheet` 
+      });
+    } catch (error) {
+      console.error("Error pushing directory to sheet:", error);
+      res.status(500).json({ error: "Failed to push directory to Google Sheet" });
+    }
+  });
+
+  // Sync directory FROM Google Sheet (pull sheet to database)
+  app.post("/api/sheets/sync/directory/pull", requireRole("content"), async (req, res) => {
+    try {
+      if (!googleSheetsService.isConfigured()) {
+        return res.status(400).json({ error: "Google Sheets not configured" });
+      }
+      
+      const sheetRows = await googleSheetsService.getDirectoryData();
+      let created = 0;
+      let updated = 0;
+      
+      // Get existing members to compare
+      const existingMembers = await storage.getDirectoryMembers();
+      
+      for (const row of sheetRows) {
+        if (!row.person || row.person.trim() === "") {
+          continue;
+        }
+        
+        const personLower = row.person.toLowerCase().trim();
+        
+        // Check if member exists (by person name match)
+        const existingMember = existingMembers.find(
+          m => m.person.toLowerCase().trim() === personLower
+        );
+        
+        if (existingMember) {
+          // Update existing member if data changed
+          await storage.updateDirectoryMember(existingMember.id, {
+            skill: row.skill || existingMember.skill || undefined,
+            evmAddress: row.evmAddress || existingMember.evmAddress || undefined,
+            client: row.client || existingMember.client || undefined,
+          });
+          updated++;
+        } else {
+          // Create new member
+          await storage.createDirectoryMember({
+            person: row.person,
+            skill: row.skill,
+            evmAddress: row.evmAddress,
+            client: row.client,
+          });
+          created++;
+        }
+      }
+      
+      res.json({ 
+        success: true, 
+        message: `Pulled from sheet: ${created} created, ${updated} updated` 
+      });
+    } catch (error) {
+      console.error("Error pulling directory from sheet:", error);
+      res.status(500).json({ error: "Failed to pull directory from Google Sheet" });
+    }
+  });
+
   // ================== CAMPAIGN ENDPOINTS ==================
   // These require "content" or "admin" role
 

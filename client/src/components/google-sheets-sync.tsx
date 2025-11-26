@@ -146,7 +146,53 @@ export function GoogleSheetsSync() {
     },
   });
 
-  const isSyncing = pushMutation.isPending || pullMutation.isPending || connectMutation.isPending;
+  // Directory sync mutations
+  const pushDirectoryMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/sheets/sync/directory/push");
+      return await response.json() as SyncResult;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/directory"] });
+      setLastSync(new Date().toLocaleTimeString());
+      toast({
+        title: "Directory Push Complete",
+        description: data.message,
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Directory Push Failed",
+        description: error instanceof Error ? error.message : "Failed to push directory to Google Sheet",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const pullDirectoryMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/sheets/sync/directory/pull");
+      return await response.json() as SyncResult;
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/directory"] });
+      setLastSync(new Date().toLocaleTimeString());
+      toast({
+        title: "Directory Pull Complete",
+        description: data.message,
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Directory Pull Failed",
+        description: error instanceof Error ? error.message : "Failed to pull directory from Google Sheet",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const isSyncing = pushMutation.isPending || pullMutation.isPending || connectMutation.isPending || 
+                   pushDirectoryMutation.isPending || pullDirectoryMutation.isPending;
 
   const extractSheetId = (input: string): string => {
     if (input.includes("docs.google.com/spreadsheets")) {
@@ -374,12 +420,39 @@ export function GoogleSheetsSync() {
               </Button>
             </div>
             
+            <div className="border-t pt-4 mt-4">
+              <h4 className="font-medium mb-3 text-sm">Directory Sync</h4>
+              <div className="flex flex-wrap gap-3">
+                <Button 
+                  variant="outline" 
+                  onClick={() => pullDirectoryMutation.mutate()}
+                  disabled={isSyncing}
+                  data-testid="button-pull-directory-from-sheet"
+                >
+                  <ArrowDownToLine className={`h-4 w-4 mr-2 ${pullDirectoryMutation.isPending ? 'animate-spin' : ''}`} />
+                  {pullDirectoryMutation.isPending ? "Pulling..." : "Pull Directory"}
+                </Button>
+                <Button 
+                  variant="outline" 
+                  onClick={() => pushDirectoryMutation.mutate()}
+                  disabled={isSyncing}
+                  data-testid="button-push-directory-to-sheet"
+                >
+                  <ArrowUpFromLine className={`h-4 w-4 mr-2 ${pushDirectoryMutation.isPending ? 'animate-spin' : ''}`} />
+                  {pushDirectoryMutation.isPending ? "Pushing..." : "Push Directory"}
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground mt-2">
+                Directory syncs to a separate "Directory" sheet tab in your Google Sheet.
+              </p>
+            </div>
+
             <Alert>
               <AlertCircle className="h-4 w-4" />
               <AlertDescription className="text-sm">
-                <strong>Pull from Sheet:</strong> Import tasks from Google Sheets into the app.
+                <strong>Tasks:</strong> Pull/Push imports/exports tasks from the "Tasks" sheet.
                 <br />
-                <strong>Push to Sheet:</strong> Export all tasks from the app to Google Sheets.
+                <strong>Directory:</strong> Pull/Push imports/exports team members from the "Directory" sheet.
               </AlertDescription>
             </Alert>
           </div>

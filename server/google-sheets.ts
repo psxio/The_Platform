@@ -1,5 +1,5 @@
 import { google, sheets_v4 } from "googleapis";
-import type { ContentTask, InsertContentTask } from "@shared/schema";
+import type { ContentTask, InsertContentTask, DirectoryMember } from "@shared/schema";
 
 export interface SheetRow {
   description: string;
@@ -12,12 +12,20 @@ export interface SheetRow {
   notes?: string;
 }
 
+export interface DirectorySheetRow {
+  person: string;
+  skill?: string;
+  evmAddress?: string;
+  client?: string;
+}
+
 const SCOPES = ["https://www.googleapis.com/auth/spreadsheets"];
 
 export class GoogleSheetsService {
   private sheets: sheets_v4.Sheets | null = null;
   private spreadsheetId: string | null = null;
   private sheetName: string = "Tasks";
+  private directorySheetName: string = "Directory";
 
   async initialize(): Promise<boolean> {
     const clientEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
@@ -251,6 +259,148 @@ export class GoogleSheetsService {
       }
     } catch (error) {
       console.error("Failed to ensure header row:", error);
+    }
+  }
+
+  // Directory sync methods
+  async ensureDirectorySheet(): Promise<void> {
+    if (!this.sheets || !this.spreadsheetId) {
+      throw new Error("Google Sheets not initialized");
+    }
+
+    try {
+      // Get spreadsheet info to check if Directory sheet exists
+      const spreadsheet = await this.sheets.spreadsheets.get({
+        spreadsheetId: this.spreadsheetId,
+      });
+
+      const sheets = spreadsheet.data.sheets || [];
+      const directorySheetExists = sheets.some(
+        (sheet) => sheet.properties?.title === this.directorySheetName
+      );
+
+      if (!directorySheetExists) {
+        // Create the Directory sheet
+        await this.sheets.spreadsheets.batchUpdate({
+          spreadsheetId: this.spreadsheetId,
+          requestBody: {
+            requests: [
+              {
+                addSheet: {
+                  properties: {
+                    title: this.directorySheetName,
+                  },
+                },
+              },
+            ],
+          },
+        });
+        console.log("Created Directory sheet");
+      }
+
+      // Ensure header row exists
+      await this.ensureDirectoryHeaderRow();
+    } catch (error) {
+      console.error("Failed to ensure Directory sheet:", error);
+      throw error;
+    }
+  }
+
+  async ensureDirectoryHeaderRow(): Promise<void> {
+    if (!this.sheets || !this.spreadsheetId) {
+      throw new Error("Google Sheets not initialized");
+    }
+
+    try {
+      const response = await this.sheets.spreadsheets.values.get({
+        spreadsheetId: this.spreadsheetId,
+        range: `${this.directorySheetName}!A1:D1`,
+      });
+
+      const headerRow = response.data.values?.[0];
+      const expectedHeaders = ["Person", "Skill", "EVM Address", "Client"];
+
+      if (!headerRow || headerRow.length === 0) {
+        await this.sheets.spreadsheets.values.update({
+          spreadsheetId: this.spreadsheetId,
+          range: `${this.directorySheetName}!A1:D1`,
+          valueInputOption: "RAW",
+          requestBody: {
+            values: [expectedHeaders],
+          },
+        });
+        console.log("Created Directory header row in Google Sheet");
+      }
+    } catch (error) {
+      console.error("Failed to ensure Directory header row:", error);
+    }
+  }
+
+  async getDirectoryData(): Promise<DirectorySheetRow[]> {
+    if (!this.sheets || !this.spreadsheetId) {
+      throw new Error("Google Sheets not initialized");
+    }
+
+    try {
+      await this.ensureDirectorySheet();
+
+      const response = await this.sheets.spreadsheets.values.get({
+        spreadsheetId: this.spreadsheetId,
+        range: `${this.directorySheetName}!A2:D`, // Skip header row
+      });
+
+      const rows = response.data.values || [];
+      return rows.map((row) => ({
+        person: row[0] || "",
+        skill: row[1] || undefined,
+        evmAddress: row[2] || undefined,
+        client: row[3] || undefined,
+      }));
+    } catch (error) {
+      console.error("Failed to get directory data:", error);
+      throw error;
+    }
+  }
+
+  async syncDirectoryToSheet(members: DirectoryMember[]): Promise<void> {
+    if (!this.sheets || !this.spreadsheetId) {
+      throw new Error("Google Sheets not initialized");
+    }
+
+    try {
+      await this.ensureDirectorySheet();
+
+      // Clear existing data (except header)
+      await this.sheets.spreadsheets.values.clear({
+        spreadsheetId: this.spreadsheetId,
+        range: `${this.directorySheetName}!A2:D`,
+      });
+
+      if (members.length === 0) {
+        return;
+      }
+
+      // Write all members to sheet
+      const values = members.map((member) => [
+        member.person,
+        member.skill || "",
+        member.evmAddress || "",
+        member.client || "",
+      ]);
+
+      await this.sheets.spreadsheets.values.update({
+        spreadsheetId: this.spreadsheetId,
+        range: `${this.directorySheetName}!A2`,
+        valueInputOption: "RAW",
+        requestBody: {
+          values,
+        },
+      });
+
+      console.log(`Synced ${members.length} directory members to Google Sheet`);
+    } catch (error) {
+      console.error("Failed to sync directory to sheet:", error);
+      throw error;
     }
   }
 }

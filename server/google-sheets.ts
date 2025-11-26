@@ -1,5 +1,6 @@
-import { google, sheets_v4 } from "googleapis";
+import { google, sheets_v4, drive_v3 } from "googleapis";
 import type { ContentTask, InsertContentTask, DirectoryMember } from "@shared/schema";
+import { Readable } from "stream";
 
 export interface SheetRow {
   description: string;
@@ -19,13 +20,18 @@ export interface DirectorySheetRow {
   client?: string;
 }
 
-const SCOPES = ["https://www.googleapis.com/auth/spreadsheets"];
+const SCOPES = [
+  "https://www.googleapis.com/auth/spreadsheets",
+  "https://www.googleapis.com/auth/drive.file"
+];
 
 export class GoogleSheetsService {
   private sheets: sheets_v4.Sheets | null = null;
+  private drive: drive_v3.Drive | null = null;
   private spreadsheetId: string | null = null;
   private sheetName: string = "TASKS";
   private directorySheetName: string = "DIRECTORY";
+  private driveFolderId: string | null = null; // Optional: folder to store files
 
   async initialize(): Promise<boolean> {
     const clientEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
@@ -88,13 +94,17 @@ export class GoogleSheetsService {
       });
 
       this.sheets = google.sheets({ version: "v4", auth });
+      this.drive = google.drive({ version: "v3", auth });
+      
+      // Get optional Drive folder ID from env
+      this.driveFolderId = process.env.GOOGLE_DRIVE_FOLDER_ID || null;
       
       // Test connection by getting spreadsheet info
       await this.sheets.spreadsheets.get({
         spreadsheetId: this.spreadsheetId,
       });
       
-      console.log("Google Sheets integration initialized successfully");
+      console.log("Google Sheets & Drive integration initialized successfully");
       return true;
     } catch (error: any) {
       console.error("Failed to initialize Google Sheets:", error);
@@ -414,6 +424,72 @@ export class GoogleSheetsService {
       console.error("Failed to sync directory to sheet:", error);
       throw error;
     }
+  }
+
+  // Google Drive file upload methods
+  async uploadToDrive(
+    fileBuffer: Buffer,
+    fileName: string,
+    mimeType: string
+  ): Promise<string> {
+    if (!this.drive) {
+      throw new Error("Google Drive not initialized");
+    }
+
+    try {
+      // Convert buffer to readable stream
+      const stream = new Readable();
+      stream.push(fileBuffer);
+      stream.push(null);
+
+      // Prepare file metadata
+      const fileMetadata: drive_v3.Schema$File = {
+        name: fileName,
+      };
+
+      // If a folder ID is configured, upload to that folder
+      if (this.driveFolderId) {
+        fileMetadata.parents = [this.driveFolderId];
+      }
+
+      // Upload the file
+      const response = await this.drive.files.create({
+        requestBody: fileMetadata,
+        media: {
+          mimeType,
+          body: stream,
+        },
+        fields: "id, webViewLink, webContentLink",
+      });
+
+      const fileId = response.data.id;
+      if (!fileId) {
+        throw new Error("File upload failed - no file ID returned");
+      }
+
+      // Make the file publicly accessible (anyone with link can view)
+      await this.drive.permissions.create({
+        fileId,
+        requestBody: {
+          role: "reader",
+          type: "anyone",
+        },
+      });
+
+      // Return the shareable link
+      const webViewLink = response.data.webViewLink || 
+        `https://drive.google.com/file/d/${fileId}/view`;
+      
+      console.log(`Uploaded file to Google Drive: ${fileName} -> ${webViewLink}`);
+      return webViewLink;
+    } catch (error) {
+      console.error("Failed to upload file to Google Drive:", error);
+      throw error;
+    }
+  }
+
+  isDriveConfigured(): boolean {
+    return this.drive !== null;
   }
 }
 

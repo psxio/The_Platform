@@ -72,12 +72,17 @@ export async function setupAuth(app: Express) {
         lastName,
       });
 
-      // Set session
+      // Set session and explicitly save before responding
       req.session.userId = user.id;
-
-      // Return user without password
-      const { password: _, ...userWithoutPassword } = user;
-      res.status(201).json(userWithoutPassword);
+      req.session.save((err) => {
+        if (err) {
+          console.error("Session save error:", err);
+          return res.status(500).json({ error: "Registration failed" });
+        }
+        // Return user without password
+        const { password: _, ...userWithoutPassword } = user;
+        res.status(201).json(userWithoutPassword);
+      });
     } catch (error) {
       console.error("Registration error:", error);
       res.status(500).json({ error: "Registration failed" });
@@ -109,12 +114,17 @@ export async function setupAuth(app: Express) {
         return res.status(401).json({ error: "Invalid email or password" });
       }
 
-      // Set session
+      // Set session and explicitly save before responding
       req.session.userId = user.id;
-
-      // Return user without password
-      const { password: _, ...userWithoutPassword } = user;
-      res.json(userWithoutPassword);
+      req.session.save((err) => {
+        if (err) {
+          console.error("Session save error:", err);
+          return res.status(500).json({ error: "Login failed" });
+        }
+        // Return user without password
+        const { password: _, ...userWithoutPassword } = user;
+        res.json(userWithoutPassword);
+      });
     } catch (error) {
       console.error("Login error:", error);
       res.status(500).json({ error: "Login failed" });

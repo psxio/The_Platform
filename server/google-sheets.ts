@@ -35,37 +35,39 @@ export class GoogleSheetsService {
     // Handle double-escaped newlines
     privateKey = privateKey.replace(/\\\\n/g, "\n");
     
-    // Check if PEM headers are missing
-    const hasBeginMarker = privateKey.includes("-----BEGIN PRIVATE KEY-----");
-    const hasEndMarker = privateKey.includes("-----END PRIVATE KEY-----");
+    // Extract and clean the base64 content
+    // Remove any headers, whitespace, and stray characters
+    let cleanKey = privateKey
+      .replace(/-----BEGIN PRIVATE KEY-----/g, "")
+      .replace(/-----END PRIVATE KEY-----/g, "")
+      .replace(/\s/g, ""); // Remove all whitespace including newlines
     
-    if (!hasBeginMarker || !hasEndMarker) {
-      // Key is missing PEM headers - reconstruct them
-      // First, clean the key of any existing partial markers and whitespace
-      let cleanKey = privateKey
-        .replace(/-----BEGIN PRIVATE KEY-----/g, "")
-        .replace(/-----END PRIVATE KEY-----/g, "")
-        .replace(/\s/g, ""); // Remove all whitespace
-      
-      // Format the key with proper line breaks (64 chars per line for PEM)
-      const formattedKey = cleanKey.match(/.{1,64}/g)?.join("\n") || cleanKey;
-      
-      privateKey = `-----BEGIN PRIVATE KEY-----\n${formattedKey}\n-----END PRIVATE KEY-----\n`;
-    } else {
-      // Ensure proper PEM format with newlines after headers
-      if (!privateKey.includes("\n")) {
-        privateKey = privateKey
-          .replace("-----BEGIN PRIVATE KEY-----", "-----BEGIN PRIVATE KEY-----\n")
-          .replace("-----END PRIVATE KEY-----", "\n-----END PRIVATE KEY-----");
-      }
+    // Remove leading 'n' characters that might be artifacts from \n parsing issues
+    while (cleanKey.startsWith("n") && !cleanKey.startsWith("MIIE") && !cleanKey.startsWith("MII")) {
+      cleanKey = cleanKey.substring(1);
     }
+    
+    // Also remove trailing 'n' characters
+    while (cleanKey.endsWith("n") && cleanKey.length > 10) {
+      cleanKey = cleanKey.substring(0, cleanKey.length - 1);
+    }
+    
+    // Validate that the key looks like base64 (starts with MII for PKCS#8 private key)
+    if (!cleanKey.startsWith("MII")) {
+      console.error("Private key doesn't appear to be valid PKCS#8 format. Expected to start with 'MII', got:", cleanKey.substring(0, 10));
+    }
+    
+    // Format the key with proper line breaks (64 chars per line for PEM)
+    const formattedKey = cleanKey.match(/.{1,64}/g)?.join("\n") || cleanKey;
+    
+    privateKey = `-----BEGIN PRIVATE KEY-----\n${formattedKey}\n-----END PRIVATE KEY-----\n`;
     
     console.log("Private key format check:", {
       hasBeginMarker: privateKey.includes("-----BEGIN PRIVATE KEY-----"),
       hasEndMarker: privateKey.includes("-----END PRIVATE KEY-----"),
       hasNewlines: privateKey.includes("\n"),
       length: privateKey.length,
-      firstChars: privateKey.substring(0, 50)
+      keyStartsWith: cleanKey.substring(0, 10)
     });
 
     try {

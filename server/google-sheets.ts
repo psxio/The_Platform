@@ -24,8 +24,8 @@ const SCOPES = ["https://www.googleapis.com/auth/spreadsheets"];
 export class GoogleSheetsService {
   private sheets: sheets_v4.Sheets | null = null;
   private spreadsheetId: string | null = null;
-  private sheetName: string = "Tasks";
-  private directorySheetName: string = "Directory";
+  private sheetName: string = "TASKS";
+  private directorySheetName: string = "DIRECTORY";
 
   async initialize(): Promise<boolean> {
     const clientEmail = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;

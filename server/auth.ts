@@ -114,16 +114,23 @@ export async function setupAuth(app: Express) {
         return res.status(401).json({ error: "Invalid email or password" });
       }
 
-      // Set session and explicitly save before responding
-      req.session.userId = user.id;
-      req.session.save((err) => {
-        if (err) {
-          console.error("Session save error:", err);
+      // Regenerate session to prevent session fixation and ensure fresh session ID
+      req.session.regenerate((regenerateErr) => {
+        if (regenerateErr) {
+          console.error("Session regenerate error:", regenerateErr);
           return res.status(500).json({ error: "Login failed" });
         }
-        // Return user without password
-        const { password: _, ...userWithoutPassword } = user;
-        res.json(userWithoutPassword);
+        
+        req.session.userId = user.id;
+        req.session.save((saveErr) => {
+          if (saveErr) {
+            console.error("Session save error:", saveErr);
+            return res.status(500).json({ error: "Login failed" });
+          }
+          // Return user without password
+          const { password: _, ...userWithoutPassword } = user;
+          res.json(userWithoutPassword);
+        });
       });
     } catch (error) {
       console.error("Login error:", error);

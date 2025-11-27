@@ -2577,21 +2577,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Watch a task
+  // Watch a task (can add any user as watcher if userId is provided)
   app.post("/api/content-tasks/:id/watch", requireRole("content"), async (req, res) => {
     try {
       const taskId = parseInt(req.params.id);
-      const userId = (req as any).user?.id;
-      if (!userId) {
+      const currentUserId = (req as any).user?.id;
+      const targetUserId = req.body.userId || currentUserId;
+      
+      if (!targetUserId) {
         return res.status(401).json({ error: "Unauthorized" });
       }
       
-      const isAlreadyWatching = await storage.isWatchingTask(taskId, userId);
+      const isAlreadyWatching = await storage.isWatchingTask(taskId, targetUserId);
       if (isAlreadyWatching) {
         return res.json({ success: true, message: "Already watching" });
       }
       
-      await storage.watchTask(taskId, userId);
+      await storage.watchTask(taskId, targetUserId);
       res.status(201).json({ success: true });
     } catch (error) {
       console.error("Error watching task:", error);
@@ -2599,20 +2601,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Unwatch a task
+  // Unwatch a task (can remove any user if userId is provided, but only current user can remove themselves)
   app.delete("/api/content-tasks/:id/watch", requireRole("content"), async (req, res) => {
     try {
       const taskId = parseInt(req.params.id);
-      const userId = (req as any).user?.id;
-      if (!userId) {
+      const currentUserId = (req as any).user?.id;
+      const targetUserId = req.body.userId || currentUserId;
+      
+      if (!targetUserId) {
         return res.status(401).json({ error: "Unauthorized" });
       }
       
-      await storage.unwatchTask(taskId, userId);
+      // Users can only remove themselves as watchers
+      if (targetUserId !== currentUserId) {
+        return res.status(403).json({ error: "Can only remove yourself as a watcher" });
+      }
+      
+      await storage.unwatchTask(taskId, targetUserId);
       res.json({ success: true });
     } catch (error) {
       console.error("Error unwatching task:", error);
       res.status(500).json({ error: "Failed to unwatch task" });
+    }
+  });
+
+  // ================== USER LIST ENDPOINT ==================
+
+  // Get all users (for watchers/approvals selection)
+  app.get("/api/users", requireRole("content"), async (req, res) => {
+    try {
+      const users = await storage.getAllUsers();
+      // Return safe user data (no passwords)
+      const safeUsers = users.map(u => ({
+        id: u.id,
+        firstName: u.firstName,
+        lastName: u.lastName,
+        email: u.email,
+        profileImageUrl: u.profileImageUrl,
+        role: u.role,
+      }));
+      res.json(safeUsers);
+    } catch (error) {
+      console.error("Error fetching users:", error);
+      res.status(500).json({ error: "Failed to fetch users" });
     }
   });
 

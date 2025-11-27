@@ -32,6 +32,9 @@ import {
 import { cn } from "@/lib/utils";
 import { TaskComments } from "./task-comments";
 import { TaskActivityTimeline } from "./task-activity-timeline";
+import { TaskTimeTracking } from "./task-time-tracking";
+import { TaskWatchers } from "./task-watchers";
+import { TaskApprovals } from "./task-approvals";
 
 interface TaskDetailsDialogProps {
   open: boolean;
@@ -242,6 +245,10 @@ export function TaskDetailsDialog({ open, onOpenChange, task, onEdit, currentUse
             </div>
           )}
 
+          {currentUserId && (
+            <TaskWatchers taskId={task.id} currentUserId={currentUserId} />
+          )}
+
           <Separator />
 
           <div className="space-y-4">
@@ -371,6 +378,16 @@ export function TaskDetailsDialog({ open, onOpenChange, task, onEdit, currentUse
               </div>
             )}
           </div>
+
+          <Separator />
+
+          {currentUserId && (
+            <TaskApprovals taskId={task.id} currentUserId={currentUserId} />
+          )}
+
+          <Separator />
+
+          <TaskTimeTracking taskId={task.id} currentUserId={currentUserId} />
 
           <Separator />
 

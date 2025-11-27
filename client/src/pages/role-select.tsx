@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Wallet, FileText, Shield, Loader2, Key } from "lucide-react";
+import { Wallet, FileText, Shield, Loader2, Key, Lock } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { UserRole } from "@shared/schema";
@@ -19,7 +19,6 @@ const roles = [
     description: "Access wallet address comparison tools, NFT collection management, and address extraction features.",
     icon: Wallet,
     features: ["Compare wallet addresses", "Manage NFT collections", "Extract EVM addresses", "View comparison history"],
-    requiresCode: false,
   },
   {
     id: "content" as UserRole,
@@ -27,36 +26,41 @@ const roles = [
     description: "Access content production management, team directory, and deliverables tracking.",
     icon: FileText,
     features: ["Manage content tasks", "Team directory", "Upload deliverables", "Track production progress"],
-    requiresCode: false,
   },
   {
     id: "admin" as UserRole,
     title: "Administrator",
-    description: "Full access to both Web3 tools and Content management features. Requires invite code.",
+    description: "Full access to both Web3 tools and Content management features plus admin controls.",
     icon: Shield,
     features: ["All Web3 features", "All Content features", "Generate invite codes", "Full system access"],
-    requiresCode: true,
   },
 ];
+
+const roleLabels: Record<UserRole, string> = {
+  web3: "Web3",
+  content: "Content Team",
+  admin: "Administrator",
+};
 
 export default function RoleSelect() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [selectedRole, setSelectedRole] = useState<UserRole | null>(null);
   const [showCodeDialog, setShowCodeDialog] = useState(false);
-  const [adminCode, setAdminCode] = useState("");
+  const [inviteCode, setInviteCode] = useState("");
 
   const updateRoleMutation = useMutation({
-    mutationFn: async ({ role, adminCode }: { role: UserRole; adminCode?: string }) => {
-      return await apiRequest("PATCH", "/api/auth/role", { role, adminCode });
+    mutationFn: async ({ role, inviteCode }: { role: UserRole; inviteCode: string }) => {
+      return await apiRequest("PATCH", "/api/auth/role", { role, inviteCode });
     },
     onSuccess: (_, { role }) => {
       queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
       toast({
         title: "Role set successfully",
-        description: `You now have ${role} access.`,
+        description: `You now have ${roleLabels[role]} access.`,
       });
       setShowCodeDialog(false);
+      setInviteCode("");
       if (role === "web3") {
         setLocation("/compare");
       } else if (role === "content") {
@@ -69,36 +73,45 @@ export default function RoleSelect() {
       const message = error?.message || "Failed to set role. Please try again.";
       toast({
         title: "Error",
-        description: message.includes("Invalid") ? "Invalid or expired admin invite code." : message,
+        description: message.includes("Invalid") ? "Invalid or expired invite code." : message,
         variant: "destructive",
       });
     },
   });
 
   const handleRoleSelect = (role: UserRole) => {
-    const roleConfig = roles.find(r => r.id === role);
-    if (roleConfig?.requiresCode) {
-      setSelectedRole(role);
-      setShowCodeDialog(true);
-    } else {
-      setSelectedRole(role);
-      updateRoleMutation.mutate({ role });
-    }
+    setSelectedRole(role);
+    setShowCodeDialog(true);
   };
 
-  const handleAdminCodeSubmit = () => {
-    if (!adminCode.trim()) {
+  const handleInviteCodeSubmit = () => {
+    if (!inviteCode.trim()) {
       toast({
         title: "Code required",
-        description: "Please enter your admin invite code.",
+        description: "Please enter your invite code.",
         variant: "destructive",
       });
       return;
     }
     if (selectedRole) {
-      updateRoleMutation.mutate({ role: selectedRole, adminCode: adminCode.trim() });
+      updateRoleMutation.mutate({ role: selectedRole, inviteCode: inviteCode.trim() });
     }
   };
+
+  const getDialogContent = () => {
+    if (!selectedRole) return null;
+    const role = roles.find(r => r.id === selectedRole);
+    if (!role) return null;
+    
+    const Icon = role.icon;
+    return {
+      icon: Icon,
+      title: `${role.title} Access`,
+      description: `Enter your invite code to access ${role.title.toLowerCase()} features. This code can be obtained from an administrator.`,
+    };
+  };
+
+  const dialogContent = getDialogContent();
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-background">
@@ -108,7 +121,7 @@ export default function RoleSelect() {
             Select Your Role
           </h1>
           <p className="text-muted-foreground">
-            Choose which features you need access to. You can change this later.
+            Choose which features you need access to. All access requires a valid invite code.
           </p>
         </div>
 
@@ -152,18 +165,16 @@ export default function RoleSelect() {
                       disabled={updateRoleMutation.isPending}
                       data-testid={`button-select-${role.id}`}
                     >
-                      {isPending && !role.requiresCode ? (
+                      {isPending ? (
                         <>
                           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                           Setting up...
                         </>
-                      ) : role.requiresCode ? (
+                      ) : (
                         <>
-                          <Key className="mr-2 h-4 w-4" />
+                          <Lock className="mr-2 h-4 w-4" />
                           Enter Code
                         </>
-                      ) : (
-                        `Select ${role.title}`
                       )}
                     </Button>
                   </div>
@@ -172,58 +183,77 @@ export default function RoleSelect() {
             );
           })}
         </div>
+
+        <div className="text-center">
+          <p className="text-sm text-muted-foreground">
+            Don't have an invite code? Contact an administrator to request access.
+          </p>
+        </div>
       </div>
 
       <Dialog open={showCodeDialog} onOpenChange={setShowCodeDialog}>
         <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Shield className="h-5 w-5 text-primary" />
-              Admin Access Required
-            </DialogTitle>
-            <DialogDescription>
-              Enter your admin invite code to gain administrator access. This code can be obtained from an existing administrator.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="admin-code">Invite Code</Label>
-              <Input
-                id="admin-code"
-                placeholder="Enter your invite code"
-                value={adminCode}
-                onChange={(e) => setAdminCode(e.target.value.toUpperCase())}
-                className="font-mono tracking-wider"
-                data-testid="input-admin-code"
-              />
-            </div>
-          </div>
-          <DialogFooter className="flex gap-2 sm:gap-0">
-            <Button 
-              variant="outline" 
-              onClick={() => {
-                setShowCodeDialog(false);
-                setAdminCode("");
-              }}
-              data-testid="button-cancel-admin"
-            >
-              Cancel
-            </Button>
-            <Button 
-              onClick={handleAdminCodeSubmit}
-              disabled={updateRoleMutation.isPending}
-              data-testid="button-submit-admin-code"
-            >
-              {updateRoleMutation.isPending ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Verifying...
-                </>
-              ) : (
-                "Verify & Continue"
-              )}
-            </Button>
-          </DialogFooter>
+          {dialogContent && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <dialogContent.icon className="h-5 w-5 text-primary" />
+                  {dialogContent.title}
+                </DialogTitle>
+                <DialogDescription>
+                  {dialogContent.description}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="invite-code">Invite Code</Label>
+                  <Input
+                    id="invite-code"
+                    placeholder="Enter your invite code"
+                    value={inviteCode}
+                    onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
+                    className="font-mono tracking-wider"
+                    data-testid="input-invite-code"
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        handleInviteCodeSubmit();
+                      }
+                    }}
+                  />
+                </div>
+              </div>
+              <DialogFooter className="flex gap-2 sm:gap-0">
+                <Button 
+                  variant="outline" 
+                  onClick={() => {
+                    setShowCodeDialog(false);
+                    setInviteCode("");
+                    setSelectedRole(null);
+                  }}
+                  data-testid="button-cancel-invite"
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  onClick={handleInviteCodeSubmit}
+                  disabled={updateRoleMutation.isPending}
+                  data-testid="button-submit-invite-code"
+                >
+                  {updateRoleMutation.isPending ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Verifying...
+                    </>
+                  ) : (
+                    <>
+                      <Key className="mr-2 h-4 w-4" />
+                      Verify & Continue
+                    </>
+                  )}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
         </DialogContent>
       </Dialog>
     </div>

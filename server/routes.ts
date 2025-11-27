@@ -1116,39 +1116,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
     return code;
   }
 
-  // Update user role - admin role requires valid invite code
+  // Update user role - ALL roles require valid invite codes
   app.patch("/api/auth/role", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.id;
-      const { role, adminCode } = req.body;
+      const { role, inviteCode } = req.body;
       
       if (!role || !["web3", "content", "admin"].includes(role)) {
         return res.status(400).json({ error: "Valid role is required (web3, content, or admin)" });
       }
       
-      // Admin role requires a valid invite code
-      if (role === "admin") {
-        // Check for initial admin code from environment variable
-        const initialAdminCode = process.env.INITIAL_ADMIN_CODE;
-        
-        if (!adminCode) {
-          return res.status(400).json({ error: "Admin invite code is required" });
+      // All roles require a valid invite code
+      if (!inviteCode) {
+        return res.status(400).json({ error: `Invite code is required for ${role} access` });
+      }
+      
+      // Check for initial admin code from environment variable (admin only)
+      const initialAdminCode = process.env.INITIAL_ADMIN_CODE;
+      if (role === "admin" && initialAdminCode && inviteCode === initialAdminCode) {
+        // Use the initial code - it can only be used once
+        // After first use, they should generate codes for others
+      } else {
+        // Check database for valid invite code for the requested role
+        const validCode = await storage.getValidInviteCode(inviteCode, role);
+        if (!validCode) {
+          return res.status(400).json({ error: `Invalid or expired invite code for ${role} access` });
         }
         
-        // First check if it's the initial admin code
-        if (initialAdminCode && adminCode === initialAdminCode) {
-          // Use the initial code - it can only be used once
-          // After first use, they should generate codes for others
-        } else {
-          // Check database for valid invite code
-          const validCode = await storage.getValidAdminInviteCode(adminCode);
-          if (!validCode) {
-            return res.status(400).json({ error: "Invalid or expired admin invite code" });
-          }
-          
-          // Mark the code as used
-          await storage.useAdminInviteCode(adminCode, userId);
-        }
+        // Mark the code as used
+        await storage.useInviteCode(inviteCode, userId);
       }
       
       const user = await storage.updateUserRole(userId, role);
@@ -1163,10 +1159,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // ================== ADMIN INVITE CODE ENDPOINTS ==================
+  // ================== INVITE CODE ENDPOINTS ==================
   // These require admin role
 
-  // Generate new admin invite code (admins only)
+  // Generate new invite code (admins only)
   app.post("/api/admin/invite-codes", isAuthenticated, async (req: any, res) => {
     try {
       const user = await storage.getUser(req.user.id);
@@ -1174,8 +1170,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ error: "Only admins can generate invite codes" });
       }
       
+      const { forRole } = req.body;
+      if (!forRole || !["web3", "content", "admin"].includes(forRole)) {
+        return res.status(400).json({ error: "Valid role is required (web3, content, or admin)" });
+      }
+      
       const code = generateInviteCode();
-      const inviteCode = await storage.createAdminInviteCode(code, req.user.id);
+      const inviteCode = await storage.createInviteCode(code, forRole, req.user.id);
       
       res.status(201).json(inviteCode);
     } catch (error) {
@@ -1192,7 +1193,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ error: "Only admins can view invite codes" });
       }
       
-      const codes = await storage.getAdminInviteCodes(req.user.id);
+      const codes = await storage.getInviteCodes(req.user.id);
       res.json(codes);
     } catch (error) {
       console.error("Error fetching invite codes:", error);
@@ -1209,7 +1210,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const id = parseInt(req.params.id);
-      const success = await storage.deactivateAdminInviteCode(id);
+      const success = await storage.deactivateInviteCode(id);
       
       if (!success) {
         return res.status(404).json({ error: "Invite code not found" });
@@ -1222,24 +1223,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Validate an admin code (for frontend validation before submitting)
+  // Validate an invite code (for frontend validation before submitting)
   app.post("/api/admin/validate-code", async (req, res) => {
     try {
-      const { code } = req.body;
+      const { code, forRole } = req.body;
       
       if (!code) {
         return res.status(400).json({ valid: false, error: "Code is required" });
       }
       
-      // Check initial admin code
-      const initialAdminCode = process.env.INITIAL_ADMIN_CODE;
-      if (initialAdminCode && code === initialAdminCode) {
-        return res.json({ valid: true });
+      // Check initial admin code (admin only)
+      if (forRole === "admin") {
+        const initialAdminCode = process.env.INITIAL_ADMIN_CODE;
+        if (initialAdminCode && code === initialAdminCode) {
+          return res.json({ valid: true, role: "admin" });
+        }
       }
       
-      // Check database
-      const validCode = await storage.getValidAdminInviteCode(code);
-      res.json({ valid: !!validCode });
+      // Check database for role-specific code
+      if (forRole) {
+        const validCode = await storage.getValidInviteCode(code, forRole);
+        return res.json({ valid: !!validCode, role: validCode?.forRole });
+      }
+      
+      // Check database for any valid code (returns the role it's for)
+      const validCode = await storage.getValidInviteCodeAnyRole(code);
+      res.json({ valid: !!validCode, role: validCode?.forRole });
     } catch (error) {
       console.error("Error validating code:", error);
       res.status(500).json({ valid: false, error: "Failed to validate code" });

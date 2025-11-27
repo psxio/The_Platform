@@ -6,31 +6,55 @@ import { Calendar, User, Building2, Paperclip, UserCheck, AlertTriangle, Flag, F
 import { cn } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 
+function parseDate(dueDate: string): Date | null {
+  try {
+    let date: Date;
+    
+    // Handle dates like "Nov 30" (without year) - assume current year
+    if (/^[A-Za-z]{3}\s+\d{1,2}$/.test(dueDate.trim())) {
+      const currentYear = new Date().getFullYear();
+      date = new Date(`${dueDate.trim()}, ${currentYear}`);
+    } else {
+      date = new Date(dueDate);
+    }
+    
+    // Check if valid date
+    if (isNaN(date.getTime())) return null;
+    
+    // Normalize to midnight for consistent comparison
+    date.setHours(0, 0, 0, 0);
+    return date;
+  } catch {
+    return null;
+  }
+}
+
 function isOverdue(dueDate: string | null | undefined, status: string): boolean {
   if (!dueDate || status === "COMPLETED") return false;
-  try {
-    const due = new Date(dueDate);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    return due < today;
-  } catch {
-    return false;
-  }
+  
+  const due = parseDate(dueDate);
+  if (!due) return false;
+  
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  
+  return due < today;
 }
 
 function isDueSoon(dueDate: string | null | undefined, status: string): boolean {
   if (!dueDate || status === "COMPLETED") return false;
-  try {
-    const due = new Date(dueDate);
-    const today = new Date();
-    const threeDaysFromNow = new Date();
-    threeDaysFromNow.setDate(today.getDate() + 3);
-    today.setHours(0, 0, 0, 0);
-    threeDaysFromNow.setHours(23, 59, 59, 999);
-    return due >= today && due <= threeDaysFromNow;
-  } catch {
-    return false;
-  }
+  
+  const due = parseDate(dueDate);
+  if (!due) return false;
+  
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  
+  const threeDaysFromNow = new Date();
+  threeDaysFromNow.setDate(today.getDate() + 3);
+  threeDaysFromNow.setHours(23, 59, 59, 999);
+  
+  return due >= today && due <= threeDaysFromNow;
 }
 
 interface ContentTaskCardProps {

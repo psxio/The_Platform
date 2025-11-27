@@ -32,16 +32,36 @@ const priorityConfig = {
   urgent: { className: "text-destructive" },
 };
 
+function parseDate(dueDate: string): Date | null {
+  try {
+    let date: Date;
+    
+    // Handle dates like "Nov 30" (without year) - assume current year
+    if (/^[A-Za-z]{3}\s+\d{1,2}$/.test(dueDate.trim())) {
+      const currentYear = new Date().getFullYear();
+      date = new Date(`${dueDate.trim()}, ${currentYear}`);
+    } else {
+      date = new Date(dueDate);
+    }
+    
+    if (isNaN(date.getTime())) return null;
+    date.setHours(0, 0, 0, 0);
+    return date;
+  } catch {
+    return null;
+  }
+}
+
 function isOverdue(dueDate: string | null | undefined, status: string): boolean {
   if (!dueDate || status === "COMPLETED") return false;
-  try {
-    const due = new Date(dueDate);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    return due < today;
-  } catch {
-    return false;
-  }
+  
+  const due = parseDate(dueDate);
+  if (!due) return false;
+  
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  
+  return due < today;
 }
 
 interface KanbanCardProps {

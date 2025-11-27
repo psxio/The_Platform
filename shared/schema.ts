@@ -350,3 +350,212 @@ export const insertAdminInviteCodeSchema = createInsertSchema(adminInviteCodes).
 
 export type InsertAdminInviteCode = z.infer<typeof insertAdminInviteCodeSchema>;
 export type AdminInviteCode = typeof adminInviteCodes.$inferSelect;
+
+// ==================== ENHANCED CONTENTFLOWSTUDIO TABLES ====================
+
+// Task Templates - reusable task structures
+export const taskTemplates = pgTable("task_templates", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  description: text("description"),
+  defaultPriority: varchar("default_priority", { length: 20 }).default("medium"),
+  defaultClient: varchar("default_client", { length: 255 }),
+  estimatedHours: integer("estimated_hours"),
+  category: varchar("category", { length: 100 }),
+  createdBy: varchar("created_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertTaskTemplateSchema = createInsertSchema(taskTemplates).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertTaskTemplate = z.infer<typeof insertTaskTemplateSchema>;
+export type TaskTemplate = typeof taskTemplates.$inferSelect;
+
+// Template Subtasks - subtask definitions within templates
+export const templateSubtasks = pgTable("template_subtasks", {
+  id: serial("id").primaryKey(),
+  templateId: integer("template_id").notNull().references(() => taskTemplates.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  order: integer("order").notNull().default(0),
+});
+
+export const insertTemplateSubtaskSchema = createInsertSchema(templateSubtasks).omit({
+  id: true,
+});
+
+export type InsertTemplateSubtask = z.infer<typeof insertTemplateSubtaskSchema>;
+export type TemplateSubtask = typeof templateSubtasks.$inferSelect;
+
+// Task Watchers - users watching task updates
+export const taskWatchers = pgTable("task_watchers", {
+  id: serial("id").primaryKey(),
+  taskId: integer("task_id").notNull().references(() => contentTasks.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertTaskWatcherSchema = createInsertSchema(taskWatchers).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertTaskWatcher = z.infer<typeof insertTaskWatcherSchema>;
+export type TaskWatcher = typeof taskWatchers.$inferSelect;
+
+// Approvals - for multi-stage approval workflow
+export const approvals = pgTable("approvals", {
+  id: serial("id").primaryKey(),
+  taskId: integer("task_id").notNull().references(() => contentTasks.id, { onDelete: "cascade" }),
+  reviewerId: varchar("reviewer_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  status: varchar("status", { length: 50 }).notNull().default("pending"), // pending, approved, rejected
+  comments: text("comments"),
+  reviewedAt: timestamp("reviewed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertApprovalSchema = createInsertSchema(approvals).omit({
+  id: true,
+  createdAt: true,
+  reviewedAt: true,
+});
+
+export type InsertApproval = z.infer<typeof insertApprovalSchema>;
+export type Approval = typeof approvals.$inferSelect;
+
+// Time Entries - for time tracking per task
+export const timeEntries = pgTable("time_entries", {
+  id: serial("id").primaryKey(),
+  taskId: integer("task_id").notNull().references(() => contentTasks.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  hours: integer("hours").notNull().default(0),
+  minutes: integer("minutes").notNull().default(0),
+  description: text("description"),
+  date: varchar("date", { length: 50 }).notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertTimeEntrySchema = createInsertSchema(timeEntries).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertTimeEntry = z.infer<typeof insertTimeEntrySchema>;
+export type TimeEntry = typeof timeEntries.$inferSelect;
+
+// Assets - brand assets library
+export const assets = pgTable("assets", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  fileName: varchar("file_name", { length: 255 }).notNull(),
+  filePath: text("file_path").notNull(),
+  fileSize: varchar("file_size", { length: 50 }),
+  fileType: varchar("file_type", { length: 100 }),
+  category: varchar("category", { length: 100 }),
+  tags: text("tags"), // comma-separated tags
+  description: text("description"),
+  uploadedBy: varchar("uploaded_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertAssetSchema = createInsertSchema(assets).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertAsset = z.infer<typeof insertAssetSchema>;
+export type Asset = typeof assets.$inferSelect;
+
+// Deliverable Versions - track file versions
+export const deliverableVersions = pgTable("deliverable_versions", {
+  id: serial("id").primaryKey(),
+  deliverableId: integer("deliverable_id").notNull().references(() => deliverables.id, { onDelete: "cascade" }),
+  versionNumber: integer("version_number").notNull().default(1),
+  fileName: varchar("file_name", { length: 255 }).notNull(),
+  filePath: text("file_path").notNull(),
+  fileSize: varchar("file_size", { length: 50 }),
+  uploadedBy: varchar("uploaded_by").references(() => users.id, { onDelete: "set null" }),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertDeliverableVersionSchema = createInsertSchema(deliverableVersions).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertDeliverableVersion = z.infer<typeof insertDeliverableVersionSchema>;
+export type DeliverableVersion = typeof deliverableVersions.$inferSelect;
+
+// Saved Filters - user's saved filter presets
+export const savedFilters = pgTable("saved_filters", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  name: varchar("name", { length: 255 }).notNull(),
+  filters: jsonb("filters").notNull(), // JSON of filter settings
+  isDefault: boolean("is_default").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertSavedFilterSchema = createInsertSchema(savedFilters).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertSavedFilter = z.infer<typeof insertSavedFilterSchema>;
+export type SavedFilter = typeof savedFilters.$inferSelect;
+
+// Recurring Tasks - configuration for auto-generated tasks
+export const recurringTasks = pgTable("recurring_tasks", {
+  id: serial("id").primaryKey(),
+  templateId: integer("template_id").references(() => taskTemplates.id, { onDelete: "set null" }),
+  name: varchar("name", { length: 255 }).notNull(),
+  description: text("description"),
+  frequency: varchar("frequency", { length: 50 }).notNull(), // daily, weekly, biweekly, monthly
+  dayOfWeek: integer("day_of_week"), // 0-6 for weekly
+  dayOfMonth: integer("day_of_month"), // 1-31 for monthly
+  assignedTo: varchar("assigned_to", { length: 255 }),
+  client: varchar("client", { length: 255 }),
+  priority: varchar("priority", { length: 20 }).default("medium"),
+  isActive: boolean("is_active").notNull().default(true),
+  lastGeneratedAt: timestamp("last_generated_at"),
+  nextGenerationAt: timestamp("next_generation_at"),
+  createdBy: varchar("created_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertRecurringTaskSchema = createInsertSchema(recurringTasks).omit({
+  id: true,
+  createdAt: true,
+  lastGeneratedAt: true,
+});
+
+export type InsertRecurringTask = z.infer<typeof insertRecurringTaskSchema>;
+export type RecurringTask = typeof recurringTasks.$inferSelect;
+
+// Notification Preferences - user notification settings
+export const notificationPreferences = pgTable("notification_preferences", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }).unique(),
+  emailAssignments: boolean("email_assignments").notNull().default(true),
+  emailComments: boolean("email_comments").notNull().default(true),
+  emailDueSoon: boolean("email_due_soon").notNull().default(true),
+  emailOverdue: boolean("email_overdue").notNull().default(true),
+  inAppAssignments: boolean("in_app_assignments").notNull().default(true),
+  inAppComments: boolean("in_app_comments").notNull().default(true),
+  inAppMentions: boolean("in_app_mentions").notNull().default(true),
+  inAppDueSoon: boolean("in_app_due_soon").notNull().default(true),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertNotificationPreferencesSchema = createInsertSchema(notificationPreferences).omit({
+  id: true,
+  updatedAt: true,
+});
+
+export type InsertNotificationPreferences = z.infer<typeof insertNotificationPreferencesSchema>;
+export type NotificationPreferences = typeof notificationPreferences.$inferSelect;

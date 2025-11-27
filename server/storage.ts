@@ -13,7 +13,18 @@ import {
   type Comment, type InsertComment, comments,
   type ActivityLog, type InsertActivityLog, activityLog,
   type Notification, type InsertNotification, notifications,
-  type UserRole
+  type UserRole,
+  // Enhanced ContentFlowStudio types
+  type TaskTemplate, type InsertTaskTemplate, taskTemplates,
+  type TemplateSubtask, type InsertTemplateSubtask, templateSubtasks,
+  type TaskWatcher, type InsertTaskWatcher, taskWatchers,
+  type Approval, type InsertApproval, approvals,
+  type TimeEntry, type InsertTimeEntry, timeEntries,
+  type Asset, type InsertAsset, assets,
+  type DeliverableVersion, type InsertDeliverableVersion, deliverableVersions,
+  type SavedFilter, type InsertSavedFilter, savedFilters,
+  type RecurringTask, type InsertRecurringTask, recurringTasks,
+  type NotificationPreferences, type InsertNotificationPreferences, notificationPreferences,
 } from "@shared/schema";
 import { db } from "./db";
 import { desc, eq, and, sql, or, isNull } from "drizzle-orm";
@@ -110,6 +121,67 @@ export interface IStorage {
   createNotification(notification: InsertNotification): Promise<Notification>;
   markNotificationRead(id: number, userId: string): Promise<boolean>;
   markAllNotificationsRead(userId: string): Promise<void>;
+  
+  // ==================== ENHANCED CONTENTFLOWSTUDIO METHODS ====================
+  
+  // Task Template methods
+  getTaskTemplates(): Promise<TaskTemplate[]>;
+  getTaskTemplate(id: number): Promise<TaskTemplate | undefined>;
+  createTaskTemplate(template: InsertTaskTemplate): Promise<TaskTemplate>;
+  updateTaskTemplate(id: number, template: Partial<InsertTaskTemplate>): Promise<TaskTemplate | undefined>;
+  deleteTaskTemplate(id: number): Promise<boolean>;
+  
+  // Template Subtask methods
+  getTemplateSubtasks(templateId: number): Promise<TemplateSubtask[]>;
+  createTemplateSubtask(subtask: InsertTemplateSubtask): Promise<TemplateSubtask>;
+  deleteTemplateSubtask(id: number): Promise<boolean>;
+  
+  // Task Watcher methods
+  getTaskWatchers(taskId: number): Promise<TaskWatcher[]>;
+  isWatchingTask(taskId: number, userId: string): Promise<boolean>;
+  watchTask(taskId: number, userId: string): Promise<TaskWatcher>;
+  unwatchTask(taskId: number, userId: string): Promise<boolean>;
+  
+  // Approval methods
+  getApprovals(taskId: number): Promise<Approval[]>;
+  createApproval(approval: InsertApproval): Promise<Approval>;
+  updateApprovalStatus(id: number, status: string, comments?: string): Promise<Approval | undefined>;
+  
+  // Time Entry methods
+  getTimeEntries(taskId: number): Promise<TimeEntry[]>;
+  getUserTimeEntries(userId: string, startDate?: string, endDate?: string): Promise<TimeEntry[]>;
+  createTimeEntry(entry: InsertTimeEntry): Promise<TimeEntry>;
+  updateTimeEntry(id: number, entry: Partial<InsertTimeEntry>): Promise<TimeEntry | undefined>;
+  deleteTimeEntry(id: number): Promise<boolean>;
+  
+  // Asset methods
+  getAssets(category?: string): Promise<Asset[]>;
+  getAsset(id: number): Promise<Asset | undefined>;
+  createAsset(asset: InsertAsset): Promise<Asset>;
+  updateAsset(id: number, asset: Partial<InsertAsset>): Promise<Asset | undefined>;
+  deleteAsset(id: number): Promise<boolean>;
+  
+  // Deliverable Version methods
+  getDeliverableVersions(deliverableId: number): Promise<DeliverableVersion[]>;
+  createDeliverableVersion(version: InsertDeliverableVersion): Promise<DeliverableVersion>;
+  
+  // Saved Filter methods
+  getSavedFilters(userId: string): Promise<SavedFilter[]>;
+  createSavedFilter(filter: InsertSavedFilter): Promise<SavedFilter>;
+  updateSavedFilter(id: number, filter: Partial<InsertSavedFilter>): Promise<SavedFilter | undefined>;
+  deleteSavedFilter(id: number): Promise<boolean>;
+  
+  // Recurring Task methods
+  getRecurringTasks(): Promise<RecurringTask[]>;
+  getRecurringTask(id: number): Promise<RecurringTask | undefined>;
+  createRecurringTask(task: InsertRecurringTask): Promise<RecurringTask>;
+  updateRecurringTask(id: number, task: Partial<InsertRecurringTask>): Promise<RecurringTask | undefined>;
+  deleteRecurringTask(id: number): Promise<boolean>;
+  getDueRecurringTasks(): Promise<RecurringTask[]>;
+  
+  // Notification Preferences methods
+  getNotificationPreferences(userId: string): Promise<NotificationPreferences | undefined>;
+  upsertNotificationPreferences(prefs: InsertNotificationPreferences): Promise<NotificationPreferences>;
 }
 
 export class DbStorage implements IStorage {
@@ -651,6 +723,256 @@ export class DbStorage implements IStorage {
       .update(notifications)
       .set({ read: true })
       .where(eq(notifications.userId, userId));
+  }
+
+  // ==================== ENHANCED CONTENTFLOWSTUDIO IMPLEMENTATIONS ====================
+
+  // Task Template methods
+  async getTaskTemplates(): Promise<TaskTemplate[]> {
+    return await db.select().from(taskTemplates).orderBy(desc(taskTemplates.createdAt));
+  }
+
+  async getTaskTemplate(id: number): Promise<TaskTemplate | undefined> {
+    const [template] = await db.select().from(taskTemplates).where(eq(taskTemplates.id, id));
+    return template;
+  }
+
+  async createTaskTemplate(template: InsertTaskTemplate): Promise<TaskTemplate> {
+    const [created] = await db.insert(taskTemplates).values(template).returning();
+    return created;
+  }
+
+  async updateTaskTemplate(id: number, template: Partial<InsertTaskTemplate>): Promise<TaskTemplate | undefined> {
+    const [updated] = await db
+      .update(taskTemplates)
+      .set({ ...template, updatedAt: new Date() })
+      .where(eq(taskTemplates.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteTaskTemplate(id: number): Promise<boolean> {
+    const result = await db.delete(taskTemplates).where(eq(taskTemplates.id, id)).returning();
+    return result.length > 0;
+  }
+
+  // Template Subtask methods
+  async getTemplateSubtasks(templateId: number): Promise<TemplateSubtask[]> {
+    return await db
+      .select()
+      .from(templateSubtasks)
+      .where(eq(templateSubtasks.templateId, templateId))
+      .orderBy(templateSubtasks.order);
+  }
+
+  async createTemplateSubtask(subtask: InsertTemplateSubtask): Promise<TemplateSubtask> {
+    const [created] = await db.insert(templateSubtasks).values(subtask).returning();
+    return created;
+  }
+
+  async deleteTemplateSubtask(id: number): Promise<boolean> {
+    const result = await db.delete(templateSubtasks).where(eq(templateSubtasks.id, id)).returning();
+    return result.length > 0;
+  }
+
+  // Task Watcher methods
+  async getTaskWatchers(taskId: number): Promise<TaskWatcher[]> {
+    return await db.select().from(taskWatchers).where(eq(taskWatchers.taskId, taskId));
+  }
+
+  async isWatchingTask(taskId: number, userId: string): Promise<boolean> {
+    const [watcher] = await db
+      .select()
+      .from(taskWatchers)
+      .where(and(eq(taskWatchers.taskId, taskId), eq(taskWatchers.userId, userId)));
+    return !!watcher;
+  }
+
+  async watchTask(taskId: number, userId: string): Promise<TaskWatcher> {
+    const [watcher] = await db
+      .insert(taskWatchers)
+      .values({ taskId, userId })
+      .returning();
+    return watcher;
+  }
+
+  async unwatchTask(taskId: number, userId: string): Promise<boolean> {
+    const result = await db
+      .delete(taskWatchers)
+      .where(and(eq(taskWatchers.taskId, taskId), eq(taskWatchers.userId, userId)))
+      .returning();
+    return result.length > 0;
+  }
+
+  // Approval methods
+  async getApprovals(taskId: number): Promise<Approval[]> {
+    return await db.select().from(approvals).where(eq(approvals.taskId, taskId)).orderBy(desc(approvals.createdAt));
+  }
+
+  async createApproval(approval: InsertApproval): Promise<Approval> {
+    const [created] = await db.insert(approvals).values(approval).returning();
+    return created;
+  }
+
+  async updateApprovalStatus(id: number, status: string, comments?: string): Promise<Approval | undefined> {
+    const [updated] = await db
+      .update(approvals)
+      .set({ status, comments, reviewedAt: new Date() })
+      .where(eq(approvals.id, id))
+      .returning();
+    return updated;
+  }
+
+  // Time Entry methods
+  async getTimeEntries(taskId: number): Promise<TimeEntry[]> {
+    return await db.select().from(timeEntries).where(eq(timeEntries.taskId, taskId)).orderBy(desc(timeEntries.date));
+  }
+
+  async getUserTimeEntries(userId: string, startDate?: string, endDate?: string): Promise<TimeEntry[]> {
+    let query = db.select().from(timeEntries).where(eq(timeEntries.userId, userId));
+    // Note: Date filtering would need proper implementation with date comparisons
+    return await query.orderBy(desc(timeEntries.date));
+  }
+
+  async createTimeEntry(entry: InsertTimeEntry): Promise<TimeEntry> {
+    const [created] = await db.insert(timeEntries).values(entry).returning();
+    return created;
+  }
+
+  async updateTimeEntry(id: number, entry: Partial<InsertTimeEntry>): Promise<TimeEntry | undefined> {
+    const [updated] = await db.update(timeEntries).set(entry).where(eq(timeEntries.id, id)).returning();
+    return updated;
+  }
+
+  async deleteTimeEntry(id: number): Promise<boolean> {
+    const result = await db.delete(timeEntries).where(eq(timeEntries.id, id)).returning();
+    return result.length > 0;
+  }
+
+  // Asset methods
+  async getAssets(category?: string): Promise<Asset[]> {
+    if (category) {
+      return await db.select().from(assets).where(eq(assets.category, category)).orderBy(desc(assets.createdAt));
+    }
+    return await db.select().from(assets).orderBy(desc(assets.createdAt));
+  }
+
+  async getAsset(id: number): Promise<Asset | undefined> {
+    const [asset] = await db.select().from(assets).where(eq(assets.id, id));
+    return asset;
+  }
+
+  async createAsset(asset: InsertAsset): Promise<Asset> {
+    const [created] = await db.insert(assets).values(asset).returning();
+    return created;
+  }
+
+  async updateAsset(id: number, asset: Partial<InsertAsset>): Promise<Asset | undefined> {
+    const [updated] = await db.update(assets).set(asset).where(eq(assets.id, id)).returning();
+    return updated;
+  }
+
+  async deleteAsset(id: number): Promise<boolean> {
+    const result = await db.delete(assets).where(eq(assets.id, id)).returning();
+    return result.length > 0;
+  }
+
+  // Deliverable Version methods
+  async getDeliverableVersions(deliverableId: number): Promise<DeliverableVersion[]> {
+    return await db
+      .select()
+      .from(deliverableVersions)
+      .where(eq(deliverableVersions.deliverableId, deliverableId))
+      .orderBy(desc(deliverableVersions.versionNumber));
+  }
+
+  async createDeliverableVersion(version: InsertDeliverableVersion): Promise<DeliverableVersion> {
+    const [created] = await db.insert(deliverableVersions).values(version).returning();
+    return created;
+  }
+
+  // Saved Filter methods
+  async getSavedFilters(userId: string): Promise<SavedFilter[]> {
+    return await db.select().from(savedFilters).where(eq(savedFilters.userId, userId)).orderBy(savedFilters.name);
+  }
+
+  async createSavedFilter(filter: InsertSavedFilter): Promise<SavedFilter> {
+    const [created] = await db.insert(savedFilters).values(filter).returning();
+    return created;
+  }
+
+  async updateSavedFilter(id: number, filter: Partial<InsertSavedFilter>): Promise<SavedFilter | undefined> {
+    const [updated] = await db.update(savedFilters).set(filter).where(eq(savedFilters.id, id)).returning();
+    return updated;
+  }
+
+  async deleteSavedFilter(id: number): Promise<boolean> {
+    const result = await db.delete(savedFilters).where(eq(savedFilters.id, id)).returning();
+    return result.length > 0;
+  }
+
+  // Recurring Task methods
+  async getRecurringTasks(): Promise<RecurringTask[]> {
+    return await db.select().from(recurringTasks).orderBy(desc(recurringTasks.createdAt));
+  }
+
+  async getRecurringTask(id: number): Promise<RecurringTask | undefined> {
+    const [task] = await db.select().from(recurringTasks).where(eq(recurringTasks.id, id));
+    return task;
+  }
+
+  async createRecurringTask(task: InsertRecurringTask): Promise<RecurringTask> {
+    const [created] = await db.insert(recurringTasks).values(task).returning();
+    return created;
+  }
+
+  async updateRecurringTask(id: number, task: Partial<InsertRecurringTask>): Promise<RecurringTask | undefined> {
+    const [updated] = await db.update(recurringTasks).set(task).where(eq(recurringTasks.id, id)).returning();
+    return updated;
+  }
+
+  async deleteRecurringTask(id: number): Promise<boolean> {
+    const result = await db.delete(recurringTasks).where(eq(recurringTasks.id, id)).returning();
+    return result.length > 0;
+  }
+
+  async getDueRecurringTasks(): Promise<RecurringTask[]> {
+    return await db
+      .select()
+      .from(recurringTasks)
+      .where(
+        and(
+          eq(recurringTasks.isActive, true),
+          or(
+            isNull(recurringTasks.nextGenerationAt),
+            sql`${recurringTasks.nextGenerationAt} <= NOW()`
+          )
+        )
+      );
+  }
+
+  // Notification Preferences methods
+  async getNotificationPreferences(userId: string): Promise<NotificationPreferences | undefined> {
+    const [prefs] = await db
+      .select()
+      .from(notificationPreferences)
+      .where(eq(notificationPreferences.userId, userId));
+    return prefs;
+  }
+
+  async upsertNotificationPreferences(prefs: InsertNotificationPreferences): Promise<NotificationPreferences> {
+    const existing = await this.getNotificationPreferences(prefs.userId);
+    if (existing) {
+      const [updated] = await db
+        .update(notificationPreferences)
+        .set({ ...prefs, updatedAt: new Date() })
+        .where(eq(notificationPreferences.userId, prefs.userId))
+        .returning();
+      return updated;
+    } else {
+      const [created] = await db.insert(notificationPreferences).values(prefs).returning();
+      return created;
+    }
   }
 }
 

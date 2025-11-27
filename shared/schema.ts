@@ -334,11 +334,13 @@ export const adminInviteCodes = pgTable("admin_invite_codes", {
   id: serial("id").primaryKey(),
   code: varchar("code", { length: 32 }).notNull().unique(),
   forRole: varchar("for_role", { length: 20 }).notNull().default("admin"), // Role this code grants: web3, content, or admin
+  maxUses: integer("max_uses").default(1), // null = unlimited, otherwise max number of uses
+  usedCount: integer("used_count").notNull().default(0), // how many times code has been used
   createdBy: varchar("created_by").references(() => users.id, { onDelete: "set null" }),
-  usedBy: varchar("used_by").references(() => users.id, { onDelete: "set null" }),
-  usedAt: timestamp("used_at"),
+  usedBy: varchar("used_by").references(() => users.id, { onDelete: "set null" }), // last person who used it
+  usedAt: timestamp("used_at"), // last time it was used
   createdAt: timestamp("created_at").defaultNow().notNull(),
-  expiresAt: timestamp("expires_at"),
+  expiresAt: timestamp("expires_at"), // null = never expires
   isActive: boolean("is_active").notNull().default(true),
 });
 

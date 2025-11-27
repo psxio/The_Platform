@@ -90,7 +90,7 @@ export interface IStorage {
   deleteDeliverable(id: number): Promise<boolean>;
   
   // Invite code methods (for all roles)
-  createInviteCode(code: string, forRole: string, createdById: string | null): Promise<AdminInviteCode>;
+  createInviteCode(code: string, forRole: string, createdById: string | null, maxUses?: number | null, expiresAt?: Date | null): Promise<AdminInviteCode>;
   getValidInviteCode(code: string, forRole: string): Promise<AdminInviteCode | undefined>;
   getValidInviteCodeAnyRole(code: string): Promise<AdminInviteCode | undefined>;
   useInviteCode(code: string, usedById: string): Promise<AdminInviteCode | undefined>;
@@ -501,13 +501,16 @@ export class DbStorage implements IStorage {
   }
 
   // Invite code methods (for all roles)
-  async createInviteCode(code: string, forRole: string, createdById: string | null): Promise<AdminInviteCode> {
+  async createInviteCode(code: string, forRole: string, createdById: string | null, maxUses?: number | null, expiresAt?: Date | null): Promise<AdminInviteCode> {
     const [inviteCode] = await db
       .insert(adminInviteCodes)
       .values({
         code,
         forRole,
+        maxUses: maxUses === undefined ? 1 : maxUses, // null = unlimited, otherwise default to 1
+        usedCount: 0,
         createdBy: createdById,
+        expiresAt: expiresAt || null,
         isActive: true,
       })
       .returning();
@@ -515,6 +518,7 @@ export class DbStorage implements IStorage {
   }
 
   async getValidInviteCode(code: string, forRole: string): Promise<AdminInviteCode | undefined> {
+    // Get the code first
     const [inviteCode] = await db
       .select()
       .from(adminInviteCodes)
@@ -522,10 +526,22 @@ export class DbStorage implements IStorage {
         and(
           eq(adminInviteCodes.code, code),
           eq(adminInviteCodes.forRole, forRole),
-          eq(adminInviteCodes.isActive, true),
-          isNull(adminInviteCodes.usedBy)
+          eq(adminInviteCodes.isActive, true)
         )
       );
+    
+    if (!inviteCode) return undefined;
+    
+    // Check if expired
+    if (inviteCode.expiresAt && new Date(inviteCode.expiresAt) < new Date()) {
+      return undefined;
+    }
+    
+    // Check if usage limit reached (null maxUses = unlimited)
+    if (inviteCode.maxUses !== null && inviteCode.usedCount >= inviteCode.maxUses) {
+      return undefined;
+    }
+    
     return inviteCode;
   }
 
@@ -536,28 +552,43 @@ export class DbStorage implements IStorage {
       .where(
         and(
           eq(adminInviteCodes.code, code),
-          eq(adminInviteCodes.isActive, true),
-          isNull(adminInviteCodes.usedBy)
+          eq(adminInviteCodes.isActive, true)
         )
       );
+    
+    if (!inviteCode) return undefined;
+    
+    // Check if expired
+    if (inviteCode.expiresAt && new Date(inviteCode.expiresAt) < new Date()) {
+      return undefined;
+    }
+    
+    // Check if usage limit reached (null maxUses = unlimited)
+    if (inviteCode.maxUses !== null && inviteCode.usedCount >= inviteCode.maxUses) {
+      return undefined;
+    }
+    
     return inviteCode;
   }
 
   async useInviteCode(code: string, usedById: string): Promise<AdminInviteCode | undefined> {
+    // First get the code to check its current state
+    const existingCode = await this.getValidInviteCodeAnyRole(code);
+    if (!existingCode) return undefined;
+    
+    // Increment usage count and update last used info
+    const newUsedCount = existingCode.usedCount + 1;
+    const shouldDeactivate = existingCode.maxUses !== null && newUsedCount >= existingCode.maxUses;
+    
     const [inviteCode] = await db
       .update(adminInviteCodes)
       .set({
         usedBy: usedById,
         usedAt: new Date(),
-        isActive: false,
+        usedCount: newUsedCount,
+        isActive: !shouldDeactivate, // Only deactivate if usage limit reached
       })
-      .where(
-        and(
-          eq(adminInviteCodes.code, code),
-          eq(adminInviteCodes.isActive, true),
-          isNull(adminInviteCodes.usedBy)
-        )
-      )
+      .where(eq(adminInviteCodes.id, existingCode.id))
       .returning();
     return inviteCode;
   }

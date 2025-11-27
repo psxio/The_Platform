@@ -1170,13 +1170,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ error: "Only admins can generate invite codes" });
       }
       
-      const { forRole } = req.body;
+      const { forRole, maxUses, expiresAt } = req.body;
       if (!forRole || !["web3", "content", "admin"].includes(forRole)) {
         return res.status(400).json({ error: "Valid role is required (web3, content, or admin)" });
       }
       
+      // Parse maxUses: null = unlimited, number = limited uses
+      let parsedMaxUses: number | null = 1;
+      if (maxUses === null || maxUses === "unlimited") {
+        parsedMaxUses = null;
+      } else if (typeof maxUses === "number" && maxUses > 0) {
+        parsedMaxUses = maxUses;
+      }
+      
+      // Parse expiresAt: null = never, string = parse as date
+      let parsedExpiresAt: Date | null = null;
+      if (expiresAt) {
+        parsedExpiresAt = new Date(expiresAt);
+        if (isNaN(parsedExpiresAt.getTime())) {
+          return res.status(400).json({ error: "Invalid expiration date" });
+        }
+      }
+      
       const code = generateInviteCode();
-      const inviteCode = await storage.createInviteCode(code, forRole, req.user.id);
+      const inviteCode = await storage.createInviteCode(code, forRole, req.user.id, parsedMaxUses, parsedExpiresAt);
       
       res.status(201).json(inviteCode);
     } catch (error) {

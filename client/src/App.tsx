@@ -13,7 +13,7 @@ import {
   DropdownMenuSeparator, 
   DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu";
-import { FileText, History as HistoryIcon, FileSearch, Database, CheckSquare, ClipboardList, LogOut, Settings, Loader2, Key } from "lucide-react";
+import { FileText, History as HistoryIcon, FileSearch, Database, CheckSquare, ClipboardList, LogOut, Settings, Loader2, Key, Combine } from "lucide-react";
 import { NotificationBell } from "@/components/notification-bell";
 import { useAuth } from "@/hooks/useAuth";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -23,6 +23,7 @@ import History from "@/pages/history";
 import Extract from "@/pages/extract";
 import Collections from "@/pages/collections";
 import Todo from "@/pages/todo";
+import Merge from "@/pages/merge";
 import ContentDashboard from "@/pages/content-dashboard";
 import AdminCodes from "@/pages/admin-codes";
 import RoleSelect from "@/pages/role-select";
@@ -136,6 +137,16 @@ function Nav() {
                     Extract
                   </Button>
                 </Link>
+                <Link href="/merge">
+                  <Button 
+                    variant={location === "/merge" ? "default" : "ghost"}
+                    size="sm"
+                    data-testid="nav-merge"
+                  >
+                    <Combine className="w-4 h-4 mr-2" />
+                    Merge
+                  </Button>
+                </Link>
                 <Link href="/collections">
                   <Button 
                     variant={location === "/collections" ? "default" : "ghost"}
@@ -226,6 +237,7 @@ function AuthenticatedRouter() {
           <Route path="/" component={Home} />
           <Route path="/compare" component={Home} />
           <Route path="/extract" component={Extract} />
+          <Route path="/merge" component={Merge} />
           <Route path="/collections" component={Collections} />
           <Route path="/history" component={History} />
           <Route path="/todo" component={Todo} />

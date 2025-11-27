@@ -89,12 +89,13 @@ export interface IStorage {
   createDeliverable(deliverable: InsertDeliverable): Promise<Deliverable>;
   deleteDeliverable(id: number): Promise<boolean>;
   
-  // Admin invite code methods
-  createAdminInviteCode(code: string, createdById: string | null): Promise<AdminInviteCode>;
-  getValidAdminInviteCode(code: string): Promise<AdminInviteCode | undefined>;
-  useAdminInviteCode(code: string, usedById: string): Promise<AdminInviteCode | undefined>;
-  getAdminInviteCodes(createdById?: string): Promise<AdminInviteCode[]>;
-  deactivateAdminInviteCode(id: number): Promise<boolean>;
+  // Invite code methods (for all roles)
+  createInviteCode(code: string, forRole: string, createdById: string | null): Promise<AdminInviteCode>;
+  getValidInviteCode(code: string, forRole: string): Promise<AdminInviteCode | undefined>;
+  getValidInviteCodeAnyRole(code: string): Promise<AdminInviteCode | undefined>;
+  useInviteCode(code: string, usedById: string): Promise<AdminInviteCode | undefined>;
+  getInviteCodes(createdById?: string): Promise<AdminInviteCode[]>;
+  deactivateInviteCode(id: number): Promise<boolean>;
   
   // Campaign methods
   getCampaigns(): Promise<Campaign[]>;
@@ -499,12 +500,13 @@ export class DbStorage implements IStorage {
     return result.length > 0;
   }
 
-  // Admin invite code methods
-  async createAdminInviteCode(code: string, createdById: string | null): Promise<AdminInviteCode> {
+  // Invite code methods (for all roles)
+  async createInviteCode(code: string, forRole: string, createdById: string | null): Promise<AdminInviteCode> {
     const [inviteCode] = await db
       .insert(adminInviteCodes)
       .values({
         code,
+        forRole,
         createdBy: createdById,
         isActive: true,
       })
@@ -512,7 +514,22 @@ export class DbStorage implements IStorage {
     return inviteCode;
   }
 
-  async getValidAdminInviteCode(code: string): Promise<AdminInviteCode | undefined> {
+  async getValidInviteCode(code: string, forRole: string): Promise<AdminInviteCode | undefined> {
+    const [inviteCode] = await db
+      .select()
+      .from(adminInviteCodes)
+      .where(
+        and(
+          eq(adminInviteCodes.code, code),
+          eq(adminInviteCodes.forRole, forRole),
+          eq(adminInviteCodes.isActive, true),
+          isNull(adminInviteCodes.usedBy)
+        )
+      );
+    return inviteCode;
+  }
+
+  async getValidInviteCodeAnyRole(code: string): Promise<AdminInviteCode | undefined> {
     const [inviteCode] = await db
       .select()
       .from(adminInviteCodes)
@@ -526,7 +543,7 @@ export class DbStorage implements IStorage {
     return inviteCode;
   }
 
-  async useAdminInviteCode(code: string, usedById: string): Promise<AdminInviteCode | undefined> {
+  async useInviteCode(code: string, usedById: string): Promise<AdminInviteCode | undefined> {
     const [inviteCode] = await db
       .update(adminInviteCodes)
       .set({
@@ -545,7 +562,7 @@ export class DbStorage implements IStorage {
     return inviteCode;
   }
 
-  async getAdminInviteCodes(createdById?: string): Promise<AdminInviteCode[]> {
+  async getInviteCodes(createdById?: string): Promise<AdminInviteCode[]> {
     if (createdById) {
       return db
         .select()
@@ -559,7 +576,7 @@ export class DbStorage implements IStorage {
       .orderBy(desc(adminInviteCodes.createdAt));
   }
 
-  async deactivateAdminInviteCode(id: number): Promise<boolean> {
+  async deactivateInviteCode(id: number): Promise<boolean> {
     const result = await db
       .update(adminInviteCodes)
       .set({ isActive: false })

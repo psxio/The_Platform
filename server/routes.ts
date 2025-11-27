@@ -2,6 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import multer from "multer";
 import * as XLSX from "xlsx";
+import crypto from "crypto";
 import type { ComparisonResult, InsertCollection } from "@shared/schema";
 import { storage } from "./storage";
 import { parseFile } from "./file-parser";
@@ -9,6 +10,7 @@ import { createRequire } from "module";
 import { setupAuth, isAuthenticated, requireRole } from "./auth";
 import { googleSheetsService } from "./google-sheets";
 import { emailService } from "./email-service";
+import { channelNotificationService } from "./channel-notification-service";
 
 // Validate Ethereum address format
 function isValidEvmAddress(address: string): boolean {
@@ -3168,6 +3170,333 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error updating notification preferences:", error);
       res.status(500).json({ error: "Failed to update notification preferences" });
+    }
+  });
+
+  // ================== TEAM INTEGRATION SETTINGS ENDPOINTS ==================
+
+  // Get team integration settings (admin only)
+  app.get("/api/integration-settings", requireRole("admin"), async (req, res) => {
+    try {
+      const settings = await storage.getTeamIntegrationSettings();
+      if (!settings) {
+        return res.json({
+          telegramEnabled: false,
+          discordEnabled: false,
+          notifyOnTaskCreate: true,
+          notifyOnTaskComplete: true,
+          notifyOnTaskAssign: true,
+          notifyOnComment: false,
+          notifyOnDueSoon: true,
+          notifyOnOverdue: true,
+        });
+      }
+      res.json({
+        ...settings,
+        telegramBotToken: settings.telegramBotToken ? '***configured***' : null,
+        discordWebhookUrl: settings.discordWebhookUrl ? '***configured***' : null,
+      });
+    } catch (error) {
+      console.error("Error fetching integration settings:", error);
+      res.status(500).json({ error: "Failed to fetch integration settings" });
+    }
+  });
+
+  // Update team integration settings (admin only)
+  app.put("/api/integration-settings", requireRole("admin"), async (req, res) => {
+    try {
+      const userId = (req as any).user?.id;
+      const settings = await storage.upsertTeamIntegrationSettings({
+        ...req.body,
+        updatedBy: userId,
+      });
+      res.json({
+        ...settings,
+        telegramBotToken: settings.telegramBotToken ? '***configured***' : null,
+        discordWebhookUrl: settings.discordWebhookUrl ? '***configured***' : null,
+      });
+    } catch (error) {
+      console.error("Error updating integration settings:", error);
+      res.status(500).json({ error: "Failed to update integration settings" });
+    }
+  });
+
+  // Test Telegram connection
+  app.post("/api/integration-settings/test-telegram", requireRole("admin"), async (req, res) => {
+    try {
+      const { botToken, chatId } = req.body;
+      if (!botToken || !chatId) {
+        return res.status(400).json({ error: "Bot token and chat ID are required" });
+      }
+      const result = await channelNotificationService.testTelegramConnection(botToken, chatId);
+      res.json(result);
+    } catch (error) {
+      console.error("Error testing Telegram:", error);
+      res.status(500).json({ error: "Failed to test Telegram connection" });
+    }
+  });
+
+  // Test Discord webhook
+  app.post("/api/integration-settings/test-discord", requireRole("admin"), async (req, res) => {
+    try {
+      const { webhookUrl } = req.body;
+      if (!webhookUrl) {
+        return res.status(400).json({ error: "Webhook URL is required" });
+      }
+      const result = await channelNotificationService.testDiscordWebhook(webhookUrl);
+      res.json(result);
+    } catch (error) {
+      console.error("Error testing Discord:", error);
+      res.status(500).json({ error: "Failed to test Discord webhook" });
+    }
+  });
+
+  // ================== USER INVITE ENDPOINTS ==================
+
+  // Get all user invites (admin only)
+  app.get("/api/user-invites", requireRole("admin"), async (req, res) => {
+    try {
+      const invites = await storage.getUserInvites();
+      res.json(invites);
+    } catch (error) {
+      console.error("Error fetching user invites:", error);
+      res.status(500).json({ error: "Failed to fetch user invites" });
+    }
+  });
+
+  // Create a user invite (admin only)
+  app.post("/api/user-invites", requireRole("admin"), async (req, res) => {
+    try {
+      const userId = (req as any).user?.id;
+      const { email, role } = req.body;
+
+      if (!email) {
+        return res.status(400).json({ error: "Email is required" });
+      }
+
+      // Check if user already exists
+      const existingUser = await storage.getUserByEmail(email);
+      if (existingUser) {
+        return res.status(400).json({ error: "A user with this email already exists" });
+      }
+
+      // Check if there's already a pending invite
+      const existingInvite = await storage.getUserInviteByEmail(email);
+      if (existingInvite) {
+        return res.status(400).json({ error: "An invite for this email already exists" });
+      }
+
+      // Generate token and expiration (7 days)
+      const token = crypto.randomBytes(32).toString('hex');
+      const expiresAt = new Date();
+      expiresAt.setDate(expiresAt.getDate() + 7);
+
+      const invite = await storage.createUserInvite({
+        email,
+        role: role || 'content',
+        token,
+        invitedBy: userId,
+        expiresAt,
+      });
+
+      // Send invite email if email service is configured
+      if (emailService.isReady()) {
+        const baseUrl = process.env.REPLIT_DEV_DOMAIN 
+          ? `https://${process.env.REPLIT_DEV_DOMAIN}`
+          : process.env.REPLIT_DOMAINS 
+            ? `https://${process.env.REPLIT_DOMAINS.split(',')[0]}`
+            : 'http://localhost:5000';
+        
+        const inviteLink = `${baseUrl}/invite/${token}`;
+        
+        await emailService.sendEmail(email, "You're invited to ContentFlowStudio", `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #3B82F6;">You've Been Invited!</h2>
+            <p>You've been invited to join ContentFlowStudio as a ${role || 'content'} team member.</p>
+            <p>Click the link below to create your account:</p>
+            <p style="margin: 20px 0;">
+              <a href="${inviteLink}" style="background: #3B82F6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px;">
+                Accept Invitation
+              </a>
+            </p>
+            <p style="color: #6B7280; font-size: 14px;">This invitation expires in 7 days.</p>
+          </div>
+        `);
+      }
+
+      res.json(invite);
+    } catch (error) {
+      console.error("Error creating user invite:", error);
+      res.status(500).json({ error: "Failed to create user invite" });
+    }
+  });
+
+  // Verify invite token (public endpoint)
+  app.get("/api/user-invites/verify/:token", async (req, res) => {
+    try {
+      const { token } = req.params;
+      const invite = await storage.getUserInviteByToken(token);
+      
+      if (!invite) {
+        return res.status(404).json({ error: "Invalid or expired invite" });
+      }
+
+      res.json({ email: invite.email, role: invite.role });
+    } catch (error) {
+      console.error("Error verifying invite:", error);
+      res.status(500).json({ error: "Failed to verify invite" });
+    }
+  });
+
+  // Accept invite and create account (public endpoint)
+  app.post("/api/user-invites/accept/:token", async (req, res) => {
+    try {
+      const { token } = req.params;
+      const { password, firstName, lastName } = req.body;
+
+      const invite = await storage.getUserInviteByToken(token);
+      if (!invite) {
+        return res.status(404).json({ error: "Invalid or expired invite" });
+      }
+
+      if (!password || password.length < 6) {
+        return res.status(400).json({ error: "Password must be at least 6 characters" });
+      }
+
+      if (!firstName) {
+        return res.status(400).json({ error: "First name is required" });
+      }
+
+      // Hash password
+      const bcrypt = await import('bcryptjs');
+      const hashedPassword = await bcrypt.hash(password, 10);
+
+      // Create user
+      const user = await storage.createUser({
+        email: invite.email,
+        password: hashedPassword,
+        firstName,
+        lastName,
+      });
+
+      // Update user role
+      await storage.updateUserRole(user.id, invite.role as any);
+
+      // Mark invite as used
+      await storage.markInviteUsed(invite.id);
+
+      // Create onboarding record
+      await storage.upsertUserOnboarding({
+        userId: user.id,
+        hasSeenWelcome: false,
+      });
+
+      res.json({ success: true, message: "Account created successfully" });
+    } catch (error) {
+      console.error("Error accepting invite:", error);
+      res.status(500).json({ error: "Failed to create account" });
+    }
+  });
+
+  // Delete invite (admin only)
+  app.delete("/api/user-invites/:id", requireRole("admin"), async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const deleted = await storage.deleteUserInvite(id);
+      if (!deleted) {
+        return res.status(404).json({ error: "Invite not found" });
+      }
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting invite:", error);
+      res.status(500).json({ error: "Failed to delete invite" });
+    }
+  });
+
+  // ================== USER ONBOARDING ENDPOINTS ==================
+
+  // Get user onboarding status
+  app.get("/api/onboarding", isAuthenticated, async (req, res) => {
+    try {
+      const userId = (req as any).user?.id;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const onboarding = await storage.getUserOnboarding(userId);
+      res.json(onboarding || {
+        userId,
+        hasSeenWelcome: false,
+        hasCreatedTask: false,
+        hasAddedTeamMember: false,
+        hasUploadedDeliverable: false,
+      });
+    } catch (error) {
+      console.error("Error fetching onboarding:", error);
+      res.status(500).json({ error: "Failed to fetch onboarding status" });
+    }
+  });
+
+  // Update onboarding step
+  app.post("/api/onboarding/:step", isAuthenticated, async (req, res) => {
+    try {
+      const userId = (req as any).user?.id;
+      const { step } = req.params;
+      
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const onboarding = await storage.updateOnboardingStep(userId, step);
+      res.json(onboarding);
+    } catch (error) {
+      console.error("Error updating onboarding:", error);
+      res.status(500).json({ error: "Failed to update onboarding" });
+    }
+  });
+
+  // ================== TASK EXPORT ENDPOINTS ==================
+
+  // Export all tasks as JSON
+  app.get("/api/content-tasks/export/json", requireRole("content"), async (req, res) => {
+    try {
+      const tasks = await storage.getContentTasks();
+      res.setHeader('Content-Type', 'application/json');
+      res.setHeader('Content-Disposition', 'attachment; filename=tasks-export.json');
+      res.json(tasks);
+    } catch (error) {
+      console.error("Error exporting tasks:", error);
+      res.status(500).json({ error: "Failed to export tasks" });
+    }
+  });
+
+  // Export all tasks as CSV
+  app.get("/api/content-tasks/export/csv", requireRole("content"), async (req, res) => {
+    try {
+      const tasks = await storage.getContentTasks();
+      
+      // Convert to CSV
+      const headers = ['ID', 'Description', 'Status', 'Assigned To', 'Due Date', 'Priority', 'Client', 'Notes', 'Created At'];
+      const rows = tasks.map(task => [
+        task.id,
+        `"${(task.description || '').replace(/"/g, '""')}"`,
+        task.status,
+        task.assignedTo || '',
+        task.dueDate || '',
+        task.priority || '',
+        task.client || '',
+        `"${(task.notes || '').replace(/"/g, '""')}"`,
+        task.createdAt?.toISOString() || '',
+      ]);
+
+      const csv = [headers.join(','), ...rows.map(row => row.join(','))].join('\n');
+      
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', 'attachment; filename=tasks-export.csv');
+      res.send(csv);
+    } catch (error) {
+      console.error("Error exporting tasks:", error);
+      res.status(500).json({ error: "Failed to export tasks" });
     }
   });
 

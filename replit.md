@@ -31,6 +31,9 @@ The system utilizes a **PostgreSQL** database managed with **Drizzle ORM**. Key 
 -   `admin_invite_codes`: For secure admin access.
 -   `task_templates`, `template_subtasks`, `task_watchers`, `approvals`, `time_entries`: For advanced ContentFlowStudio features.
 -   `assets`, `recurring_tasks`, `saved_filters`, `deliverable_versions`, `campaigns`: For enhanced ContentFlowStudio features.
+-   `team_integration_settings`: Stores Telegram bot tokens and Discord webhook URLs for external notifications.
+-   `user_invites`: Manages team invitation tokens with role assignments and expiration.
+-   `user_onboarding`: Tracks first-time user onboarding completion status.
 
 ### UI/UX Decisions
 -   **Color Schemes**: Leverages Shadcn UI's New York style for a modern and clean aesthetic.
@@ -56,7 +59,10 @@ The system utilizes a **PostgreSQL** database managed with **Drizzle ORM**. Key 
     -   Saved Filters for quick access to custom filter presets.
     -   Time Reports with date range filtering, grouping, and CSV/JSON export.
     -   Campaign management for organizing related tasks.
--   **Admin Features**: Invite code generation and management.
+    -   External Integrations: Telegram Bot API and Discord webhooks for sending task notifications to external channels.
+    -   Data Export: Full task data export in CSV and JSON formats for backup and analysis.
+    -   Welcome Onboarding: First-time user welcome modal highlighting key features.
+-   **Admin Features**: Invite code generation and management, team invitation system via email, integration settings for Telegram/Discord.
 -   **Security**: Role-based access control, bcrypt hashing, server-side middleware for route protection.
 
 ## External Dependencies

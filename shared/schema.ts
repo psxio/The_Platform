@@ -559,3 +559,72 @@ export const insertNotificationPreferencesSchema = createInsertSchema(notificati
 
 export type InsertNotificationPreferences = z.infer<typeof insertNotificationPreferencesSchema>;
 export type NotificationPreferences = typeof notificationPreferences.$inferSelect;
+
+// Team Integration Settings - Telegram/Discord channel notifications
+export const teamIntegrationSettings = pgTable("team_integration_settings", {
+  id: serial("id").primaryKey(),
+  telegramBotToken: text("telegram_bot_token"),
+  telegramChatId: text("telegram_chat_id"),
+  telegramEnabled: boolean("telegram_enabled").notNull().default(false),
+  discordWebhookUrl: text("discord_webhook_url"),
+  discordEnabled: boolean("discord_enabled").notNull().default(false),
+  notifyOnTaskCreate: boolean("notify_on_task_create").notNull().default(true),
+  notifyOnTaskComplete: boolean("notify_on_task_complete").notNull().default(true),
+  notifyOnTaskAssign: boolean("notify_on_task_assign").notNull().default(true),
+  notifyOnComment: boolean("notify_on_comment").notNull().default(false),
+  notifyOnDueSoon: boolean("notify_on_due_soon").notNull().default(true),
+  notifyOnOverdue: boolean("notify_on_overdue").notNull().default(true),
+  updatedAt: timestamp("updated_at").defaultNow(),
+  updatedBy: varchar("updated_by").references(() => users.id, { onDelete: "set null" }),
+});
+
+export const insertTeamIntegrationSettingsSchema = createInsertSchema(teamIntegrationSettings).omit({
+  id: true,
+  updatedAt: true,
+});
+
+export type InsertTeamIntegrationSettings = z.infer<typeof insertTeamIntegrationSettingsSchema>;
+export type TeamIntegrationSettings = typeof teamIntegrationSettings.$inferSelect;
+
+// User Invites - admin-generated invites for new team members
+export const userInvites = pgTable("user_invites", {
+  id: serial("id").primaryKey(),
+  email: varchar("email", { length: 255 }).notNull(),
+  role: varchar("role", { length: 50 }).$type<UserRole>().notNull().default("content"),
+  token: varchar("token", { length: 255 }).notNull().unique(),
+  invitedBy: varchar("invited_by").references(() => users.id, { onDelete: "set null" }),
+  expiresAt: timestamp("expires_at").notNull(),
+  usedAt: timestamp("used_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertUserInviteSchema = createInsertSchema(userInvites).omit({
+  id: true,
+  token: true,
+  createdAt: true,
+  usedAt: true,
+});
+
+export type InsertUserInvite = z.infer<typeof insertUserInviteSchema>;
+export type UserInvite = typeof userInvites.$inferSelect;
+
+// User Onboarding Status - track if user has completed onboarding
+export const userOnboarding = pgTable("user_onboarding", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }).unique(),
+  hasSeenWelcome: boolean("has_seen_welcome").notNull().default(false),
+  hasCreatedTask: boolean("has_created_task").notNull().default(false),
+  hasAddedTeamMember: boolean("has_added_team_member").notNull().default(false),
+  hasUploadedDeliverable: boolean("has_uploaded_deliverable").notNull().default(false),
+  completedAt: timestamp("completed_at"),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertUserOnboardingSchema = createInsertSchema(userOnboarding).omit({
+  id: true,
+  updatedAt: true,
+  completedAt: true,
+});
+
+export type InsertUserOnboarding = z.infer<typeof insertUserOnboardingSchema>;
+export type UserOnboarding = typeof userOnboarding.$inferSelect;

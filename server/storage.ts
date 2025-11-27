@@ -25,6 +25,10 @@ import {
   type SavedFilter, type InsertSavedFilter, savedFilters,
   type RecurringTask, type InsertRecurringTask, recurringTasks,
   type NotificationPreferences, type InsertNotificationPreferences, notificationPreferences,
+  // New integration and invite types
+  type TeamIntegrationSettings, type InsertTeamIntegrationSettings, teamIntegrationSettings,
+  type UserInvite, type InsertUserInvite, userInvites,
+  type UserOnboarding, type InsertUserOnboarding, userOnboarding,
 } from "@shared/schema";
 import { db } from "./db";
 import { desc, eq, and, sql, or, isNull } from "drizzle-orm";
@@ -183,6 +187,24 @@ export interface IStorage {
   // Notification Preferences methods
   getNotificationPreferences(userId: string): Promise<NotificationPreferences | undefined>;
   upsertNotificationPreferences(prefs: InsertNotificationPreferences): Promise<NotificationPreferences>;
+  
+  // Team Integration Settings methods
+  getTeamIntegrationSettings(): Promise<TeamIntegrationSettings | undefined>;
+  upsertTeamIntegrationSettings(settings: InsertTeamIntegrationSettings): Promise<TeamIntegrationSettings>;
+  
+  // User Invite methods
+  getUserInvites(): Promise<UserInvite[]>;
+  getUserInvite(id: number): Promise<UserInvite | undefined>;
+  getUserInviteByToken(token: string): Promise<UserInvite | undefined>;
+  getUserInviteByEmail(email: string): Promise<UserInvite | undefined>;
+  createUserInvite(invite: InsertUserInvite & { token: string }): Promise<UserInvite>;
+  markInviteUsed(id: number): Promise<boolean>;
+  deleteUserInvite(id: number): Promise<boolean>;
+  
+  // User Onboarding methods
+  getUserOnboarding(userId: string): Promise<UserOnboarding | undefined>;
+  upsertUserOnboarding(onboarding: InsertUserOnboarding): Promise<UserOnboarding>;
+  updateOnboardingStep(userId: string, step: string): Promise<UserOnboarding | undefined>;
 }
 
 export class DbStorage implements IStorage {
@@ -976,6 +998,135 @@ export class DbStorage implements IStorage {
       return updated;
     } else {
       const [created] = await db.insert(notificationPreferences).values(prefs).returning();
+      return created;
+    }
+  }
+
+  // Team Integration Settings methods
+  async getTeamIntegrationSettings(): Promise<TeamIntegrationSettings | undefined> {
+    const [settings] = await db.select().from(teamIntegrationSettings);
+    return settings;
+  }
+
+  async upsertTeamIntegrationSettings(settings: InsertTeamIntegrationSettings): Promise<TeamIntegrationSettings> {
+    const existing = await this.getTeamIntegrationSettings();
+    if (existing) {
+      const [updated] = await db
+        .update(teamIntegrationSettings)
+        .set({ ...settings, updatedAt: new Date() })
+        .where(eq(teamIntegrationSettings.id, existing.id))
+        .returning();
+      return updated;
+    } else {
+      const [created] = await db.insert(teamIntegrationSettings).values(settings).returning();
+      return created;
+    }
+  }
+
+  // User Invite methods
+  async getUserInvites(): Promise<UserInvite[]> {
+    return await db.select().from(userInvites).orderBy(desc(userInvites.createdAt));
+  }
+
+  async getUserInvite(id: number): Promise<UserInvite | undefined> {
+    const [invite] = await db.select().from(userInvites).where(eq(userInvites.id, id));
+    return invite;
+  }
+
+  async getUserInviteByToken(token: string): Promise<UserInvite | undefined> {
+    const [invite] = await db
+      .select()
+      .from(userInvites)
+      .where(
+        and(
+          eq(userInvites.token, token),
+          isNull(userInvites.usedAt),
+          sql`${userInvites.expiresAt} > NOW()`
+        )
+      );
+    return invite;
+  }
+
+  async getUserInviteByEmail(email: string): Promise<UserInvite | undefined> {
+    const [invite] = await db
+      .select()
+      .from(userInvites)
+      .where(
+        and(
+          eq(userInvites.email, email),
+          isNull(userInvites.usedAt),
+          sql`${userInvites.expiresAt} > NOW()`
+        )
+      );
+    return invite;
+  }
+
+  async createUserInvite(invite: InsertUserInvite & { token: string }): Promise<UserInvite> {
+    const [created] = await db.insert(userInvites).values(invite).returning();
+    return created;
+  }
+
+  async markInviteUsed(id: number): Promise<boolean> {
+    const result = await db
+      .update(userInvites)
+      .set({ usedAt: new Date() })
+      .where(eq(userInvites.id, id))
+      .returning();
+    return result.length > 0;
+  }
+
+  async deleteUserInvite(id: number): Promise<boolean> {
+    const result = await db.delete(userInvites).where(eq(userInvites.id, id)).returning();
+    return result.length > 0;
+  }
+
+  // User Onboarding methods
+  async getUserOnboarding(userId: string): Promise<UserOnboarding | undefined> {
+    const [onboarding] = await db
+      .select()
+      .from(userOnboarding)
+      .where(eq(userOnboarding.userId, userId));
+    return onboarding;
+  }
+
+  async upsertUserOnboarding(onboardingData: InsertUserOnboarding): Promise<UserOnboarding> {
+    const existing = await this.getUserOnboarding(onboardingData.userId);
+    if (existing) {
+      const [updated] = await db
+        .update(userOnboarding)
+        .set({ ...onboardingData, updatedAt: new Date() })
+        .where(eq(userOnboarding.userId, onboardingData.userId))
+        .returning();
+      return updated;
+    } else {
+      const [created] = await db.insert(userOnboarding).values(onboardingData).returning();
+      return created;
+    }
+  }
+
+  async updateOnboardingStep(userId: string, step: string): Promise<UserOnboarding | undefined> {
+    const stepMap: Record<string, any> = {
+      hasSeenWelcome: { hasSeenWelcome: true },
+      hasCreatedTask: { hasCreatedTask: true },
+      hasAddedTeamMember: { hasAddedTeamMember: true },
+      hasUploadedDeliverable: { hasUploadedDeliverable: true },
+    };
+    
+    if (!stepMap[step]) return undefined;
+    
+    const existing = await this.getUserOnboarding(userId);
+    if (existing) {
+      const [updated] = await db
+        .update(userOnboarding)
+        .set({ ...stepMap[step], updatedAt: new Date() })
+        .where(eq(userOnboarding.userId, userId))
+        .returning();
+      return updated;
+    } else {
+      const [created] = await db
+        .insert(userOnboarding)
+        .values({ userId, ...stepMap[step] })
+        .returning();
       return created;
     }
   }

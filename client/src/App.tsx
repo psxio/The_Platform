@@ -28,6 +28,7 @@ import ContentDashboard from "@/pages/content-dashboard";
 import AdminCodes from "@/pages/admin-codes";
 import RoleSelect from "@/pages/role-select";
 import AuthPage from "@/pages/auth";
+import InvitePage from "@/pages/invite";
 import NotFound from "@/pages/not-found";
 
 function UserMenu() {
@@ -267,6 +268,12 @@ function AuthenticatedRouter() {
 
 function Router() {
   const { isAuthenticated, isLoading } = useAuth();
+  const [location] = useLocation();
+  
+  // Handle invite page separately - it's a public route
+  if (location.startsWith("/invite/")) {
+    return <InvitePage />;
+  }
   
   return (
     <>

@@ -197,7 +197,7 @@ export class EmailService {
     return this.sendEmail(recipient.email, subject, html);
   }
 
-  private async sendEmail(
+  async sendEmail(
     to: string,
     subject: string,
     html: string

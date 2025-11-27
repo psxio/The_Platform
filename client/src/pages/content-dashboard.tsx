@@ -13,11 +13,18 @@ import { RecurringTasksView } from "@/components/recurring-tasks-view";
 import { TimeReportsView } from "@/components/time-reports-view";
 import { AddContentTaskDialog } from "@/components/add-content-task-dialog";
 import { AddCampaignDialog } from "@/components/add-campaign-dialog";
+import { WelcomeModal } from "@/components/welcome-modal";
+import { IntegrationSettings } from "@/components/integration-settings";
+import { UserInvites } from "@/components/user-invites";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
-import { Plus, ClipboardList, Users, Upload, Settings, FolderKanban, BarChart3, LayoutGrid, Columns3, Calendar, FileText, Image, Repeat, Clock } from "lucide-react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Separator } from "@/components/ui/separator";
+import { Plus, ClipboardList, Users, Upload, Settings, FolderKanban, BarChart3, LayoutGrid, Columns3, Calendar, FileText, Image, Repeat, Clock, Download } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
+import { useToast } from "@/hooks/use-toast";
 
 type TaskViewMode = "grid" | "kanban" | "calendar";
 
@@ -26,6 +33,31 @@ export default function ContentDashboard() {
   const [isAddCampaignDialogOpen, setIsAddCampaignDialogOpen] = useState(false);
   const [activeTab, setActiveTab] = useState("tasks");
   const [taskViewMode, setTaskViewMode] = useState<TaskViewMode>("grid");
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const isAdmin = user?.role === "admin";
+
+  const handleExport = async (format: "json" | "csv") => {
+    try {
+      const response = await fetch(`/api/content-tasks/export/${format}`, {
+        credentials: "include",
+      });
+      if (!response.ok) throw new Error("Export failed");
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `tasks-export.${format}`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      toast({ title: `Tasks exported as ${format.toUpperCase()}` });
+    } catch {
+      toast({ title: "Failed to export tasks", variant: "destructive" });
+    }
+  };
 
   return (
     <div className="container mx-auto py-6 px-4 max-w-7xl">
@@ -162,6 +194,49 @@ export default function ContentDashboard() {
           <TabsContent value="settings" className="mt-6">
             <div className="space-y-6">
               <GoogleSheetsSync />
+              
+              <Separator />
+              
+              {/* Data Export */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Download className="h-5 w-5" />
+                    Data Export
+                  </CardTitle>
+                  <CardDescription>
+                    Export all your task data for backup or analysis
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex gap-2">
+                    <Button 
+                      variant="outline" 
+                      onClick={() => handleExport("csv")}
+                      data-testid="button-export-csv"
+                    >
+                      Export as CSV
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      onClick={() => handleExport("json")}
+                      data-testid="button-export-json"
+                    >
+                      Export as JSON
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+              
+              {/* Admin-only settings */}
+              {isAdmin && (
+                <>
+                  <Separator />
+                  <IntegrationSettings />
+                  <Separator />
+                  <UserInvites />
+                </>
+              )}
             </div>
           </TabsContent>
         </Tabs>
@@ -176,6 +251,8 @@ export default function ContentDashboard() {
         open={isAddCampaignDialogOpen}
         onOpenChange={setIsAddCampaignDialogOpen}
       />
+      
+      <WelcomeModal />
     </div>
   );
 }

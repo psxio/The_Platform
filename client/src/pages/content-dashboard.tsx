@@ -7,12 +7,13 @@ import { CampaignsView } from "@/components/campaigns-view";
 import { AnalyticsDashboard } from "@/components/analytics-dashboard";
 import { KanbanView } from "@/components/kanban-view";
 import { CalendarView } from "@/components/calendar-view";
+import { TemplatesView } from "@/components/templates-view";
 import { AddContentTaskDialog } from "@/components/add-content-task-dialog";
 import { AddCampaignDialog } from "@/components/add-campaign-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { Plus, ClipboardList, Users, Upload, Settings, FolderKanban, BarChart3, LayoutGrid, Columns3, Calendar } from "lucide-react";
+import { Plus, ClipboardList, Users, Upload, Settings, FolderKanban, BarChart3, LayoutGrid, Columns3, Calendar, FileText } from "lucide-react";
 
 type TaskViewMode = "grid" | "kanban" | "calendar";
 
@@ -70,7 +71,7 @@ export default function ContentDashboard() {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full max-w-3xl grid-cols-6">
+          <TabsList className="grid w-full max-w-4xl grid-cols-7">
             <TabsTrigger value="tasks" className="gap-2" data-testid="tab-tasks">
               <ClipboardList className="h-4 w-4" />
               <span className="hidden sm:inline">Tasks</span>
@@ -78,6 +79,10 @@ export default function ContentDashboard() {
             <TabsTrigger value="campaigns" className="gap-2" data-testid="tab-campaigns">
               <FolderKanban className="h-4 w-4" />
               <span className="hidden sm:inline">Campaigns</span>
+            </TabsTrigger>
+            <TabsTrigger value="templates" className="gap-2" data-testid="tab-templates">
+              <FileText className="h-4 w-4" />
+              <span className="hidden sm:inline">Templates</span>
             </TabsTrigger>
             <TabsTrigger value="directory" className="gap-2" data-testid="tab-directory">
               <Users className="h-4 w-4" />
@@ -105,6 +110,10 @@ export default function ContentDashboard() {
 
           <TabsContent value="campaigns" className="mt-6">
             <CampaignsView />
+          </TabsContent>
+
+          <TabsContent value="templates" className="mt-6">
+            <TemplatesView />
           </TabsContent>
 
           <TabsContent value="directory" className="mt-6">

@@ -1298,7 +1298,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Log activity
       await storage.createActivityLog({
         taskId: task.id,
-        userId: req.user?.id,
+        userId: (req as any).user?.id,
         action: "created",
         details: { description: task.description },
       });
@@ -1309,7 +1309,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         
         if (assigneeInfo) {
           // Create in-app notification only if we have a user account
-          if (assigneeInfo.user && assigneeInfo.user.id !== req.user?.id) {
+          if (assigneeInfo.user && assigneeInfo.user.id !== (req as any).user?.id) {
             await storage.createNotification({
               userId: assigneeInfo.user.id,
               type: "assignment",
@@ -1321,11 +1321,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
           
           // Send email notification (works with user or directory member email)
           const targetEmail = assigneeInfo.user?.email || assigneeInfo.email;
-          if (targetEmail && assigneeInfo.user?.id !== req.user?.id) {
+          if (targetEmail && assigneeInfo.user?.id !== (req as any).user?.id) {
             await emailService.sendTaskAssignmentEmail(
               task,
               { email: targetEmail, name: assigneeInfo.name },
-              assignedBy || req.user?.firstName || "Someone"
+              assignedBy || (req as any).user?.firstName || "Someone"
             );
           }
         }
@@ -1356,7 +1356,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       // Log specific changes
-      const userId = req.user?.id;
+      const userId = (req as any).user?.id;
       
       if (existingTask.status !== task.status) {
         await storage.createActivityLog({
@@ -1403,7 +1403,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             // Send email notification (works with user or directory member email)
             const targetEmail = assigneeInfo.user?.email || assigneeInfo.email;
             if (targetEmail && assigneeInfo.user?.id !== userId) {
-              const assignerName = req.user?.firstName || updates.assignedBy || "Someone";
+              const assignerName = (req as any).user?.firstName || updates.assignedBy || "Someone";
               await emailService.sendTaskAssignmentEmail(
                 task,
                 { email: targetEmail, name: assigneeInfo.name },
@@ -1984,7 +1984,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Log activity
       await storage.createActivityLog({
         campaignId: campaign.id,
-        userId: req.user?.id || null,
+        userId: (req as any).user?.id || null,
         action: "campaign_created",
         details: { name: campaign.name },
       });
@@ -2008,7 +2008,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Log activity
       await storage.createActivityLog({
         campaignId: id,
-        userId: req.user?.id || null,
+        userId: (req as any).user?.id || null,
         action: "campaign_updated",
         details: { updates: req.body },
       });
@@ -2082,7 +2082,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Log activity
       await storage.createActivityLog({
         taskId,
-        userId: req.user?.id || null,
+        userId: (req as any).user?.id || null,
         action: "subtask_added",
         details: { title },
       });
@@ -2107,7 +2107,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (req.body.completed !== undefined) {
         await storage.createActivityLog({
           taskId: subtask.taskId,
-          userId: req.user?.id || null,
+          userId: (req as any).user?.id || null,
           action: req.body.completed ? "subtask_completed" : "subtask_uncompleted",
           details: { title: subtask.title },
         });
@@ -2154,7 +2154,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const taskId = parseInt(req.params.id);
       const { content, parentId } = req.body;
-      const userId = req.user?.id;
+      const userId = (req as any).user?.id;
       
       if (!content) {
         return res.status(400).json({ error: "Content is required" });
@@ -2392,6 +2392,740 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching task analytics:", error);
       res.status(500).json({ error: "Failed to fetch task analytics" });
+    }
+  });
+
+  // ================== TASK TEMPLATE ENDPOINTS ==================
+
+  // Get all task templates
+  app.get("/api/task-templates", requireRole("content"), async (req, res) => {
+    try {
+      const templates = await storage.getTaskTemplates();
+      res.json(templates);
+    } catch (error) {
+      console.error("Error fetching task templates:", error);
+      res.status(500).json({ error: "Failed to fetch task templates" });
+    }
+  });
+
+  // Get a single task template with subtasks
+  app.get("/api/task-templates/:id", requireRole("content"), async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const template = await storage.getTaskTemplate(id);
+      if (!template) {
+        return res.status(404).json({ error: "Template not found" });
+      }
+      const subtasks = await storage.getTemplateSubtasks(id);
+      res.json({ ...template, subtasks });
+    } catch (error) {
+      console.error("Error fetching task template:", error);
+      res.status(500).json({ error: "Failed to fetch task template" });
+    }
+  });
+
+  // Create a new task template
+  app.post("/api/task-templates", requireRole("content"), async (req, res) => {
+    try {
+      const { subtasks, ...templateData } = req.body;
+      const template = await storage.createTaskTemplate({
+        ...templateData,
+        createdBy: (req as any).user?.id,
+      });
+      
+      // Create subtasks if provided
+      if (subtasks && Array.isArray(subtasks)) {
+        for (let i = 0; i < subtasks.length; i++) {
+          await storage.createTemplateSubtask({
+            templateId: template.id,
+            title: subtasks[i].title || subtasks[i],
+            order: i,
+          });
+        }
+      }
+      
+      const createdSubtasks = await storage.getTemplateSubtasks(template.id);
+      res.status(201).json({ ...template, subtasks: createdSubtasks });
+    } catch (error) {
+      console.error("Error creating task template:", error);
+      res.status(500).json({ error: "Failed to create task template" });
+    }
+  });
+
+  // Update a task template
+  app.put("/api/task-templates/:id", requireRole("content"), async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const { subtasks, ...templateData } = req.body;
+      
+      const updated = await storage.updateTaskTemplate(id, templateData);
+      if (!updated) {
+        return res.status(404).json({ error: "Template not found" });
+      }
+      
+      // Update subtasks if provided - delete existing and recreate
+      if (subtasks && Array.isArray(subtasks)) {
+        const existingSubtasks = await storage.getTemplateSubtasks(id);
+        for (const sub of existingSubtasks) {
+          await storage.deleteTemplateSubtask(sub.id);
+        }
+        for (let i = 0; i < subtasks.length; i++) {
+          await storage.createTemplateSubtask({
+            templateId: id,
+            title: subtasks[i].title || subtasks[i],
+            order: i,
+          });
+        }
+      }
+      
+      const updatedSubtasks = await storage.getTemplateSubtasks(id);
+      res.json({ ...updated, subtasks: updatedSubtasks });
+    } catch (error) {
+      console.error("Error updating task template:", error);
+      res.status(500).json({ error: "Failed to update task template" });
+    }
+  });
+
+  // Delete a task template
+  app.delete("/api/task-templates/:id", requireRole("content"), async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const deleted = await storage.deleteTaskTemplate(id);
+      if (!deleted) {
+        return res.status(404).json({ error: "Template not found" });
+      }
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting task template:", error);
+      res.status(500).json({ error: "Failed to delete task template" });
+    }
+  });
+
+  // Create task from template
+  app.post("/api/task-templates/:id/create-task", requireRole("content"), async (req, res) => {
+    try {
+      const templateId = parseInt(req.params.id);
+      const { overrides } = req.body; // Allow overriding template defaults
+      
+      const template = await storage.getTaskTemplate(templateId);
+      if (!template) {
+        return res.status(404).json({ error: "Template not found" });
+      }
+      
+      // Create the task from template
+      const task = await storage.createContentTask({
+        description: overrides?.description || template.description || template.name,
+        status: "TO BE STARTED",
+        priority: overrides?.priority || template.defaultPriority || "medium",
+        client: overrides?.client || template.defaultClient,
+        assignedTo: overrides?.assignedTo,
+        dueDate: overrides?.dueDate,
+      });
+      
+      // Create subtasks from template
+      const templateSubtasks = await storage.getTemplateSubtasks(templateId);
+      for (const sub of templateSubtasks) {
+        await storage.createSubtask({
+          taskId: task.id,
+          title: sub.title,
+          completed: false,
+        });
+      }
+      
+      // Log activity
+      await storage.createActivityLog({
+        taskId: task.id,
+        userId: (req as any).user?.id || null,
+        action: "created_from_template",
+        details: `Created from template: ${template.name}`,
+      });
+      
+      res.status(201).json(task);
+    } catch (error) {
+      console.error("Error creating task from template:", error);
+      res.status(500).json({ error: "Failed to create task from template" });
+    }
+  });
+
+  // ================== TASK WATCHER ENDPOINTS ==================
+
+  // Get watchers for a task
+  app.get("/api/content-tasks/:id/watchers", requireRole("content"), async (req, res) => {
+    try {
+      const taskId = parseInt(req.params.id);
+      const watchers = await storage.getTaskWatchers(taskId);
+      res.json(watchers);
+    } catch (error) {
+      console.error("Error fetching task watchers:", error);
+      res.status(500).json({ error: "Failed to fetch task watchers" });
+    }
+  });
+
+  // Check if current user is watching a task
+  app.get("/api/content-tasks/:id/watching", requireRole("content"), async (req, res) => {
+    try {
+      const taskId = parseInt(req.params.id);
+      const userId = (req as any).user?.id;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const isWatching = await storage.isWatchingTask(taskId, userId);
+      res.json({ isWatching });
+    } catch (error) {
+      console.error("Error checking watch status:", error);
+      res.status(500).json({ error: "Failed to check watch status" });
+    }
+  });
+
+  // Watch a task
+  app.post("/api/content-tasks/:id/watch", requireRole("content"), async (req, res) => {
+    try {
+      const taskId = parseInt(req.params.id);
+      const userId = (req as any).user?.id;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      
+      const isAlreadyWatching = await storage.isWatchingTask(taskId, userId);
+      if (isAlreadyWatching) {
+        return res.json({ success: true, message: "Already watching" });
+      }
+      
+      await storage.watchTask(taskId, userId);
+      res.status(201).json({ success: true });
+    } catch (error) {
+      console.error("Error watching task:", error);
+      res.status(500).json({ error: "Failed to watch task" });
+    }
+  });
+
+  // Unwatch a task
+  app.delete("/api/content-tasks/:id/watch", requireRole("content"), async (req, res) => {
+    try {
+      const taskId = parseInt(req.params.id);
+      const userId = (req as any).user?.id;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      
+      await storage.unwatchTask(taskId, userId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error unwatching task:", error);
+      res.status(500).json({ error: "Failed to unwatch task" });
+    }
+  });
+
+  // ================== APPROVAL ENDPOINTS ==================
+
+  // Get approvals for a task
+  app.get("/api/content-tasks/:id/approvals", requireRole("content"), async (req, res) => {
+    try {
+      const taskId = parseInt(req.params.id);
+      const taskApprovals = await storage.getApprovals(taskId);
+      res.json(taskApprovals);
+    } catch (error) {
+      console.error("Error fetching approvals:", error);
+      res.status(500).json({ error: "Failed to fetch approvals" });
+    }
+  });
+
+  // Request approval for a task
+  app.post("/api/content-tasks/:id/approvals", requireRole("content"), async (req, res) => {
+    try {
+      const taskId = parseInt(req.params.id);
+      const { reviewerId } = req.body;
+      
+      if (!reviewerId) {
+        return res.status(400).json({ error: "Reviewer ID is required" });
+      }
+      
+      const approval = await storage.createApproval({
+        taskId,
+        reviewerId,
+        status: "pending",
+      });
+      
+      // Create notification for reviewer
+      await storage.createNotification({
+        userId: reviewerId,
+        type: "approval_request",
+        title: "Approval Request",
+        message: `You have been requested to review a task`,
+        taskId,
+      });
+      
+      // Log activity
+      await storage.createActivityLog({
+        taskId,
+        userId: (req as any).user?.id || null,
+        action: "approval_requested",
+        details: `Requested approval from reviewer`,
+      });
+      
+      res.status(201).json(approval);
+    } catch (error) {
+      console.error("Error requesting approval:", error);
+      res.status(500).json({ error: "Failed to request approval" });
+    }
+  });
+
+  // Update approval status (approve/reject)
+  app.patch("/api/approvals/:id", requireRole("content"), async (req, res) => {
+    try {
+      const approvalId = parseInt(req.params.id);
+      const { status, comments } = req.body;
+      
+      if (!status || !["approved", "rejected", "revision_requested"].includes(status)) {
+        return res.status(400).json({ error: "Valid status required" });
+      }
+      
+      const updated = await storage.updateApprovalStatus(approvalId, status, comments);
+      if (!updated) {
+        return res.status(404).json({ error: "Approval not found" });
+      }
+      
+      // Log activity
+      if (updated.taskId) {
+        await storage.createActivityLog({
+          taskId: updated.taskId,
+          userId: (req as any).user?.id || null,
+          action: `approval_${status}`,
+          details: comments || `Task ${status}`,
+        });
+      }
+      
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating approval:", error);
+      res.status(500).json({ error: "Failed to update approval" });
+    }
+  });
+
+  // ================== TIME ENTRY ENDPOINTS ==================
+
+  // Get time entries for a task
+  app.get("/api/content-tasks/:id/time-entries", requireRole("content"), async (req, res) => {
+    try {
+      const taskId = parseInt(req.params.id);
+      const entries = await storage.getTimeEntries(taskId);
+      res.json(entries);
+    } catch (error) {
+      console.error("Error fetching time entries:", error);
+      res.status(500).json({ error: "Failed to fetch time entries" });
+    }
+  });
+
+  // Get current user's time entries
+  app.get("/api/time-entries/me", requireRole("content"), async (req, res) => {
+    try {
+      const userId = (req as any).user?.id;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      
+      const { startDate, endDate } = req.query;
+      const entries = await storage.getUserTimeEntries(
+        userId,
+        startDate as string | undefined,
+        endDate as string | undefined
+      );
+      res.json(entries);
+    } catch (error) {
+      console.error("Error fetching user time entries:", error);
+      res.status(500).json({ error: "Failed to fetch time entries" });
+    }
+  });
+
+  // Log time entry
+  app.post("/api/content-tasks/:id/time-entries", requireRole("content"), async (req, res) => {
+    try {
+      const taskId = parseInt(req.params.id);
+      const userId = (req as any).user?.id;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      
+      const { hours, minutes, description, date } = req.body;
+      
+      const entry = await storage.createTimeEntry({
+        taskId,
+        userId,
+        hours: parseInt(hours) || 0,
+        minutes: parseInt(minutes) || 0,
+        description,
+        date: date || new Date().toISOString().split('T')[0],
+      });
+      
+      // Log activity
+      await storage.createActivityLog({
+        taskId,
+        userId,
+        action: "time_logged",
+        details: `Logged ${hours || 0}h ${minutes || 0}m`,
+      });
+      
+      res.status(201).json(entry);
+    } catch (error) {
+      console.error("Error creating time entry:", error);
+      res.status(500).json({ error: "Failed to create time entry" });
+    }
+  });
+
+  // Update time entry
+  app.patch("/api/time-entries/:id", requireRole("content"), async (req, res) => {
+    try {
+      const entryId = parseInt(req.params.id);
+      const updated = await storage.updateTimeEntry(entryId, req.body);
+      if (!updated) {
+        return res.status(404).json({ error: "Time entry not found" });
+      }
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating time entry:", error);
+      res.status(500).json({ error: "Failed to update time entry" });
+    }
+  });
+
+  // Delete time entry
+  app.delete("/api/time-entries/:id", requireRole("content"), async (req, res) => {
+    try {
+      const entryId = parseInt(req.params.id);
+      const deleted = await storage.deleteTimeEntry(entryId);
+      if (!deleted) {
+        return res.status(404).json({ error: "Time entry not found" });
+      }
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting time entry:", error);
+      res.status(500).json({ error: "Failed to delete time entry" });
+    }
+  });
+
+  // ================== ASSET LIBRARY ENDPOINTS ==================
+
+  // Get all assets
+  app.get("/api/assets", requireRole("content"), async (req, res) => {
+    try {
+      const { category } = req.query;
+      const allAssets = await storage.getAssets(category as string | undefined);
+      res.json(allAssets);
+    } catch (error) {
+      console.error("Error fetching assets:", error);
+      res.status(500).json({ error: "Failed to fetch assets" });
+    }
+  });
+
+  // Get single asset
+  app.get("/api/assets/:id", requireRole("content"), async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const asset = await storage.getAsset(id);
+      if (!asset) {
+        return res.status(404).json({ error: "Asset not found" });
+      }
+      res.json(asset);
+    } catch (error) {
+      console.error("Error fetching asset:", error);
+      res.status(500).json({ error: "Failed to fetch asset" });
+    }
+  });
+
+  // Upload asset
+  app.post("/api/assets", requireRole("content"), upload.single("file"), async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ error: "No file provided" });
+      }
+      
+      const { name, category, tags, description } = req.body;
+      const file = req.file;
+      
+      // Check file size limit (50MB)
+      if (file.size > 50 * 1024 * 1024) {
+        return res.status(400).json({ error: "File too large. Maximum size is 50MB." });
+      }
+      
+      // Determine file type from mimetype
+      let fileType = "other";
+      if (file.mimetype.startsWith("image/")) fileType = "image";
+      else if (file.mimetype.startsWith("video/")) fileType = "video";
+      else if (file.mimetype.startsWith("audio/")) fileType = "audio";
+      else if (file.mimetype.includes("pdf")) fileType = "document";
+      
+      // Import and use Google Drive service
+      const { uploadToGoogleDrive } = await import("./google-drive");
+      const driveResult = await uploadToGoogleDrive(file.buffer, file.originalname, file.mimetype);
+      
+      const asset = await storage.createAsset({
+        name: name || file.originalname,
+        fileName: file.originalname,
+        filePath: driveResult?.webViewLink || `/uploads/assets/${file.originalname}`,
+        fileSize: `${(file.size / 1024).toFixed(1)} KB`,
+        fileType,
+        category: category || "general",
+        tags,
+        description,
+        uploadedBy: (req as any).user?.id,
+      });
+      
+      res.status(201).json(asset);
+    } catch (error) {
+      console.error("Error uploading asset:", error);
+      res.status(500).json({ error: "Failed to upload asset" });
+    }
+  });
+
+  // Update asset metadata
+  app.patch("/api/assets/:id", requireRole("content"), async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const updated = await storage.updateAsset(id, req.body);
+      if (!updated) {
+        return res.status(404).json({ error: "Asset not found" });
+      }
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating asset:", error);
+      res.status(500).json({ error: "Failed to update asset" });
+    }
+  });
+
+  // Delete asset
+  app.delete("/api/assets/:id", requireRole("content"), async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const deleted = await storage.deleteAsset(id);
+      if (!deleted) {
+        return res.status(404).json({ error: "Asset not found" });
+      }
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting asset:", error);
+      res.status(500).json({ error: "Failed to delete asset" });
+    }
+  });
+
+  // ================== DELIVERABLE VERSION ENDPOINTS ==================
+
+  // Get versions for a deliverable
+  app.get("/api/deliverables/:id/versions", requireRole("content"), async (req, res) => {
+    try {
+      const deliverableId = parseInt(req.params.id);
+      const versions = await storage.getDeliverableVersions(deliverableId);
+      res.json(versions);
+    } catch (error) {
+      console.error("Error fetching deliverable versions:", error);
+      res.status(500).json({ error: "Failed to fetch versions" });
+    }
+  });
+
+  // Upload new version
+  app.post("/api/deliverables/:id/versions", requireRole("content"), upload.single("file"), async (req, res) => {
+    try {
+      const deliverableId = parseInt(req.params.id);
+      if (!req.file) {
+        return res.status(400).json({ error: "No file provided" });
+      }
+      
+      // Get existing versions to determine new version number
+      const existingVersions = await storage.getDeliverableVersions(deliverableId);
+      const newVersionNumber = existingVersions.length > 0
+        ? Math.max(...existingVersions.map(v => v.versionNumber)) + 1
+        : 1;
+      
+      const file = req.file;
+      const { notes } = req.body;
+      
+      // Upload to Google Drive
+      const { uploadToGoogleDrive } = await import("./google-drive");
+      const driveResult = await uploadToGoogleDrive(file.buffer, file.originalname, file.mimetype);
+      
+      const version = await storage.createDeliverableVersion({
+        deliverableId,
+        versionNumber: newVersionNumber,
+        fileName: file.originalname,
+        filePath: driveResult?.webViewLink || `/uploads/versions/${file.originalname}`,
+        fileSize: `${(file.size / 1024).toFixed(1)} KB`,
+        uploadedBy: (req as any).user?.id,
+        notes,
+      });
+      
+      res.status(201).json(version);
+    } catch (error) {
+      console.error("Error uploading deliverable version:", error);
+      res.status(500).json({ error: "Failed to upload version" });
+    }
+  });
+
+  // ================== SAVED FILTER ENDPOINTS ==================
+
+  // Get user's saved filters
+  app.get("/api/saved-filters", requireRole("content"), async (req, res) => {
+    try {
+      const userId = (req as any).user?.id;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const filters = await storage.getSavedFilters(userId);
+      res.json(filters);
+    } catch (error) {
+      console.error("Error fetching saved filters:", error);
+      res.status(500).json({ error: "Failed to fetch saved filters" });
+    }
+  });
+
+  // Create saved filter
+  app.post("/api/saved-filters", requireRole("content"), async (req, res) => {
+    try {
+      const userId = (req as any).user?.id;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      
+      const { name, filters, isDefault } = req.body;
+      const savedFilter = await storage.createSavedFilter({
+        userId,
+        name,
+        filters,
+        isDefault: isDefault || false,
+      });
+      res.status(201).json(savedFilter);
+    } catch (error) {
+      console.error("Error creating saved filter:", error);
+      res.status(500).json({ error: "Failed to create saved filter" });
+    }
+  });
+
+  // Update saved filter
+  app.patch("/api/saved-filters/:id", requireRole("content"), async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const updated = await storage.updateSavedFilter(id, req.body);
+      if (!updated) {
+        return res.status(404).json({ error: "Saved filter not found" });
+      }
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating saved filter:", error);
+      res.status(500).json({ error: "Failed to update saved filter" });
+    }
+  });
+
+  // Delete saved filter
+  app.delete("/api/saved-filters/:id", requireRole("content"), async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const deleted = await storage.deleteSavedFilter(id);
+      if (!deleted) {
+        return res.status(404).json({ error: "Saved filter not found" });
+      }
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting saved filter:", error);
+      res.status(500).json({ error: "Failed to delete saved filter" });
+    }
+  });
+
+  // ================== RECURRING TASK ENDPOINTS ==================
+
+  // Get all recurring tasks
+  app.get("/api/recurring-tasks", requireRole("content"), async (req, res) => {
+    try {
+      const tasks = await storage.getRecurringTasks();
+      res.json(tasks);
+    } catch (error) {
+      console.error("Error fetching recurring tasks:", error);
+      res.status(500).json({ error: "Failed to fetch recurring tasks" });
+    }
+  });
+
+  // Create recurring task
+  app.post("/api/recurring-tasks", requireRole("content"), async (req, res) => {
+    try {
+      const task = await storage.createRecurringTask({
+        ...req.body,
+        createdBy: (req as any).user?.id,
+      });
+      res.status(201).json(task);
+    } catch (error) {
+      console.error("Error creating recurring task:", error);
+      res.status(500).json({ error: "Failed to create recurring task" });
+    }
+  });
+
+  // Update recurring task
+  app.patch("/api/recurring-tasks/:id", requireRole("content"), async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const updated = await storage.updateRecurringTask(id, req.body);
+      if (!updated) {
+        return res.status(404).json({ error: "Recurring task not found" });
+      }
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating recurring task:", error);
+      res.status(500).json({ error: "Failed to update recurring task" });
+    }
+  });
+
+  // Delete recurring task
+  app.delete("/api/recurring-tasks/:id", requireRole("content"), async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const deleted = await storage.deleteRecurringTask(id);
+      if (!deleted) {
+        return res.status(404).json({ error: "Recurring task not found" });
+      }
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting recurring task:", error);
+      res.status(500).json({ error: "Failed to delete recurring task" });
+    }
+  });
+
+  // ================== NOTIFICATION PREFERENCES ENDPOINTS ==================
+
+  // Get user's notification preferences
+  app.get("/api/notification-preferences", requireRole("content"), async (req, res) => {
+    try {
+      const userId = (req as any).user?.id;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const prefs = await storage.getNotificationPreferences(userId);
+      res.json(prefs || {
+        userId,
+        emailAssignments: true,
+        emailComments: true,
+        emailDueSoon: true,
+        emailOverdue: true,
+        inAppAssignments: true,
+        inAppComments: true,
+        inAppMentions: true,
+        inAppDueSoon: true,
+      });
+    } catch (error) {
+      console.error("Error fetching notification preferences:", error);
+      res.status(500).json({ error: "Failed to fetch notification preferences" });
+    }
+  });
+
+  // Update notification preferences
+  app.put("/api/notification-preferences", requireRole("content"), async (req, res) => {
+    try {
+      const userId = (req as any).user?.id;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const prefs = await storage.upsertNotificationPreferences({
+        userId,
+        ...req.body,
+      });
+      res.json(prefs);
+    } catch (error) {
+      console.error("Error updating notification preferences:", error);
+      res.status(500).json({ error: "Failed to update notification preferences" });
     }
   });
 

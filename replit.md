@@ -30,6 +30,7 @@ The system utilizes a **PostgreSQL** database managed with **Drizzle ORM**. Key 
 -   `content_tasks`, `directory_members`, `deliverables`: For ContentFlowStudio core.
 -   `admin_invite_codes`: For secure admin access.
 -   `task_templates`, `template_subtasks`, `task_watchers`, `approvals`, `time_entries`: For advanced ContentFlowStudio features.
+-   `assets`, `recurring_tasks`, `saved_filters`, `deliverable_versions`, `campaigns`: For enhanced ContentFlowStudio features.
 
 ### UI/UX Decisions
 -   **Color Schemes**: Leverages Shadcn UI's New York style for a modern and clean aesthetic.
@@ -37,19 +38,24 @@ The system utilizes a **PostgreSQL** database managed with **Drizzle ORM**. Key 
 -   **Design Approaches**: Implements multiple task views (Grid, Kanban, Calendar), visual indicators for task status (overdue, due soon), and an analytics dashboard for data visualization. Enhanced dialogs for task details integrate watchers, approvals, time tracking, subtasks, comments, and activity seamlessly.
 
 ### Feature Specifications
--   **Web3 Wallet Tools**: Address comparison, EVM address extraction from various file types (CSV, TXT, JSON, Excel, PDF), NFT collection management, and comparison history.
+-   **Web3 Wallet Tools**: Address comparison, EVM address extraction from various file types (CSV, TXT, JSON, Excel, PDF, ZIP archives), NFT collection management, comparison history, and CSV merge with deduplication.
 -   **ContentFlowStudio**:
     -   Comprehensive task management (CRUD, filtering, bulk actions, subtasks, comments, activity timeline).
     -   Multiple task views (Grid, Kanban, Calendar).
-    -   Team directory.
-    -   Deliverable file uploads (with Google Drive integration).
+    -   Team directory with member management.
+    -   Deliverable file uploads with version history and file previews (Google Drive integration).
     -   Email notifications for assignments and due dates.
     -   In-app notification system.
     -   Task templates with subtask templates.
-    -   Task watchers.
+    -   Task watchers for collaboration.
     -   Approval workflows.
     -   Time tracking with timer functionality.
-    -   Analytics dashboard.
+    -   Analytics dashboard with visual charts.
+    -   Asset Library for managing images, videos, and documents with categories/tags.
+    -   Recurring Tasks for automated task scheduling (daily/weekly/monthly/yearly).
+    -   Saved Filters for quick access to custom filter presets.
+    -   Time Reports with date range filtering, grouping, and CSV/JSON export.
+    -   Campaign management for organizing related tasks.
 -   **Admin Features**: Invite code generation and management.
 -   **Security**: Role-based access control, bcrypt hashing, server-side middleware for route protection.
 

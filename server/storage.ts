@@ -150,6 +150,7 @@ export interface IStorage {
   // Time Entry methods
   getTimeEntries(taskId: number): Promise<TimeEntry[]>;
   getUserTimeEntries(userId: string, startDate?: string, endDate?: string): Promise<TimeEntry[]>;
+  getAllTimeEntries(): Promise<TimeEntry[]>;
   createTimeEntry(entry: InsertTimeEntry): Promise<TimeEntry>;
   updateTimeEntry(id: number, entry: Partial<InsertTimeEntry>): Promise<TimeEntry | undefined>;
   deleteTimeEntry(id: number): Promise<boolean>;
@@ -832,6 +833,10 @@ export class DbStorage implements IStorage {
     let query = db.select().from(timeEntries).where(eq(timeEntries.userId, userId));
     // Note: Date filtering would need proper implementation with date comparisons
     return await query.orderBy(desc(timeEntries.date));
+  }
+
+  async getAllTimeEntries(): Promise<TimeEntry[]> {
+    return await db.select().from(timeEntries).orderBy(desc(timeEntries.date));
   }
 
   async createTimeEntry(entry: InsertTimeEntry): Promise<TimeEntry> {

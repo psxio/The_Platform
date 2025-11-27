@@ -2735,6 +2735,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ================== TIME ENTRY ENDPOINTS ==================
 
+  // Get all time entries (for reports)
+  app.get("/api/time-entries/all", requireRole("content"), async (req, res) => {
+    try {
+      const entries = await storage.getAllTimeEntries();
+      res.json(entries);
+    } catch (error) {
+      console.error("Error fetching all time entries:", error);
+      res.status(500).json({ error: "Failed to fetch time entries" });
+    }
+  });
+
   // Get time entries for a task
   app.get("/api/content-tasks/:id/time-entries", requireRole("content"), async (req, res) => {
     try {

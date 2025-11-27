@@ -8,12 +8,16 @@ import { AnalyticsDashboard } from "@/components/analytics-dashboard";
 import { KanbanView } from "@/components/kanban-view";
 import { CalendarView } from "@/components/calendar-view";
 import { TemplatesView } from "@/components/templates-view";
+import { AssetsLibrary } from "@/components/assets-library";
+import { RecurringTasksView } from "@/components/recurring-tasks-view";
+import { TimeReportsView } from "@/components/time-reports-view";
 import { AddContentTaskDialog } from "@/components/add-content-task-dialog";
 import { AddCampaignDialog } from "@/components/add-campaign-dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { Plus, ClipboardList, Users, Upload, Settings, FolderKanban, BarChart3, LayoutGrid, Columns3, Calendar, FileText } from "lucide-react";
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
+import { Plus, ClipboardList, Users, Upload, Settings, FolderKanban, BarChart3, LayoutGrid, Columns3, Calendar, FileText, Image, Repeat, Clock } from "lucide-react";
 
 type TaskViewMode = "grid" | "kanban" | "calendar";
 
@@ -29,7 +33,7 @@ export default function ContentDashboard() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold tracking-tight" data-testid="heading-content-dashboard">
-              Content Tracker
+              ContentFlowStudio
             </h1>
             <p className="text-muted-foreground">
               Manage tasks, track assignments, and collaborate with your team
@@ -71,36 +75,51 @@ export default function ContentDashboard() {
         </div>
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full max-w-4xl grid-cols-7">
-            <TabsTrigger value="tasks" className="gap-2" data-testid="tab-tasks">
-              <ClipboardList className="h-4 w-4" />
-              <span className="hidden sm:inline">Tasks</span>
-            </TabsTrigger>
-            <TabsTrigger value="campaigns" className="gap-2" data-testid="tab-campaigns">
-              <FolderKanban className="h-4 w-4" />
-              <span className="hidden sm:inline">Campaigns</span>
-            </TabsTrigger>
-            <TabsTrigger value="templates" className="gap-2" data-testid="tab-templates">
-              <FileText className="h-4 w-4" />
-              <span className="hidden sm:inline">Templates</span>
-            </TabsTrigger>
-            <TabsTrigger value="directory" className="gap-2" data-testid="tab-directory">
-              <Users className="h-4 w-4" />
-              <span className="hidden sm:inline">Directory</span>
-            </TabsTrigger>
-            <TabsTrigger value="deliverables" className="gap-2" data-testid="tab-deliverables">
-              <Upload className="h-4 w-4" />
-              <span className="hidden sm:inline">Deliverables</span>
-            </TabsTrigger>
-            <TabsTrigger value="analytics" className="gap-2" data-testid="tab-analytics">
-              <BarChart3 className="h-4 w-4" />
-              <span className="hidden sm:inline">Analytics</span>
-            </TabsTrigger>
-            <TabsTrigger value="settings" className="gap-2" data-testid="tab-settings">
-              <Settings className="h-4 w-4" />
-              <span className="hidden sm:inline">Settings</span>
-            </TabsTrigger>
-          </TabsList>
+          <ScrollArea className="w-full">
+            <TabsList className="inline-flex w-max gap-1 mb-2">
+              <TabsTrigger value="tasks" className="gap-2" data-testid="tab-tasks">
+                <ClipboardList className="h-4 w-4" />
+                <span className="hidden sm:inline">Tasks</span>
+              </TabsTrigger>
+              <TabsTrigger value="campaigns" className="gap-2" data-testid="tab-campaigns">
+                <FolderKanban className="h-4 w-4" />
+                <span className="hidden sm:inline">Campaigns</span>
+              </TabsTrigger>
+              <TabsTrigger value="templates" className="gap-2" data-testid="tab-templates">
+                <FileText className="h-4 w-4" />
+                <span className="hidden sm:inline">Templates</span>
+              </TabsTrigger>
+              <TabsTrigger value="recurring" className="gap-2" data-testid="tab-recurring">
+                <Repeat className="h-4 w-4" />
+                <span className="hidden sm:inline">Recurring</span>
+              </TabsTrigger>
+              <TabsTrigger value="directory" className="gap-2" data-testid="tab-directory">
+                <Users className="h-4 w-4" />
+                <span className="hidden sm:inline">Team</span>
+              </TabsTrigger>
+              <TabsTrigger value="deliverables" className="gap-2" data-testid="tab-deliverables">
+                <Upload className="h-4 w-4" />
+                <span className="hidden sm:inline">Deliverables</span>
+              </TabsTrigger>
+              <TabsTrigger value="assets" className="gap-2" data-testid="tab-assets">
+                <Image className="h-4 w-4" />
+                <span className="hidden sm:inline">Assets</span>
+              </TabsTrigger>
+              <TabsTrigger value="time-reports" className="gap-2" data-testid="tab-time-reports">
+                <Clock className="h-4 w-4" />
+                <span className="hidden sm:inline">Time</span>
+              </TabsTrigger>
+              <TabsTrigger value="analytics" className="gap-2" data-testid="tab-analytics">
+                <BarChart3 className="h-4 w-4" />
+                <span className="hidden sm:inline">Analytics</span>
+              </TabsTrigger>
+              <TabsTrigger value="settings" className="gap-2" data-testid="tab-settings">
+                <Settings className="h-4 w-4" />
+                <span className="hidden sm:inline">Settings</span>
+              </TabsTrigger>
+            </TabsList>
+            <ScrollBar orientation="horizontal" />
+          </ScrollArea>
 
           <TabsContent value="tasks" className="mt-6">
             {taskViewMode === "grid" && <ContentTasksView />}
@@ -116,12 +135,24 @@ export default function ContentDashboard() {
             <TemplatesView />
           </TabsContent>
 
+          <TabsContent value="recurring" className="mt-6">
+            <RecurringTasksView />
+          </TabsContent>
+
           <TabsContent value="directory" className="mt-6">
             <DirectoryTable />
           </TabsContent>
 
           <TabsContent value="deliverables" className="mt-6">
             <DeliverablesView />
+          </TabsContent>
+
+          <TabsContent value="assets" className="mt-6">
+            <AssetsLibrary />
+          </TabsContent>
+
+          <TabsContent value="time-reports" className="mt-6">
+            <TimeReportsView />
           </TabsContent>
 
           <TabsContent value="analytics" className="mt-6">

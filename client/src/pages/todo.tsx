@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Plus, Check, Clock, Circle, Trash2, Loader2, Globe, Lock } from "lucide-react";
+import { Plus, Check, Clock, Circle, Trash2, Loader2, Globe, Lock, FileText, Calendar, FolderOpen, X } from "lucide-react";
 import { SiGoogle } from "react-icons/si";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -10,6 +10,11 @@ import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
 import { isUnauthorizedError } from "@/lib/authUtils";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Slider } from "@/components/ui/slider";
 import type { Task } from "@shared/schema";
 
 const STATUS_CONFIG = {
@@ -33,8 +38,20 @@ const STATUS_CONFIG = {
   },
 };
 
+interface ParsedTask {
+  title: string;
+  projectTag?: string;
+  dueDate?: string;
+}
+
 export default function Todo() {
   const [newTaskTitle, setNewTaskTitle] = useState("");
+  const [bulkImportOpen, setBulkImportOpen] = useState(false);
+  const [bulkText, setBulkText] = useState("");
+  const [parsedTasks, setParsedTasks] = useState<(ParsedTask & { originalIndex: number })[]>([]);
+  const [excludedIndices, setExcludedIndices] = useState<number[]>([]);
+  const [tasksPerDay, setTasksPerDay] = useState(3);
+  const [isParsing, setIsParsing] = useState(false);
   const { toast } = useToast();
   const { user, isLoading: authLoading, isAuthenticated } = useAuth();
 
@@ -95,6 +112,64 @@ export default function Todo() {
       toast({ title: "Failed to delete task", variant: "destructive" });
     },
   });
+
+  const confirmBulkMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("POST", "/api/tasks/bulk-import/confirm", { 
+        rawText: bulkText, 
+        tasksPerDay,
+        excludeIndices: excludedIndices
+      });
+      return response.json();
+    },
+    onSuccess: (data: { success: boolean; createdCount: number }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/tasks"] });
+      setBulkImportOpen(false);
+      setBulkText("");
+      setParsedTasks([]);
+      setExcludedIndices([]);
+      toast({ 
+        title: "Tasks imported", 
+        description: `Successfully added ${data.createdCount} tasks` 
+      });
+    },
+    onError: (error) => {
+      if (isUnauthorizedError(error)) {
+        toast({
+          title: "Please log in",
+          description: "You need to be logged in to import tasks",
+          variant: "destructive",
+        });
+        return;
+      }
+      toast({ title: "Failed to import tasks", variant: "destructive" });
+    },
+  });
+
+  const handleParseTasks = async () => {
+    if (!bulkText.trim()) return;
+    
+    setIsParsing(true);
+    setExcludedIndices([]); // Reset excluded indices for new parse
+    try {
+      const response = await apiRequest("POST", "/api/tasks/bulk-import", { 
+        rawText: bulkText, 
+        tasksPerDay 
+      });
+      const data = await response.json() as { preview: (ParsedTask & { originalIndex: number })[]; totalTasks: number; daysSpanned: number };
+      // Preserve the server-issued originalIndex for accurate exclusion
+      setParsedTasks(data.preview);
+    } catch (error) {
+      toast({ title: "Failed to parse tasks", variant: "destructive" });
+    } finally {
+      setIsParsing(false);
+    }
+  };
+
+  const removeTaskFromPreview = (originalIndex: number) => {
+    setExcludedIndices(prev => [...prev, originalIndex]);
+    setParsedTasks(prev => prev.filter(t => t.originalIndex !== originalIndex));
+  };
 
   const handleAddTask = (e: React.FormEvent) => {
     e.preventDefault();
@@ -179,7 +254,7 @@ export default function Todo() {
             </div>
 
             <Card className="mb-8">
-              <CardContent className="pt-6">
+              <CardContent className="pt-6 space-y-4">
                 <form onSubmit={handleAddTask} className="flex gap-2">
                   <Input
                     placeholder="Add a new task..."
@@ -200,8 +275,175 @@ export default function Todo() {
                     )}
                   </Button>
                 </form>
+                <Button 
+                  variant="outline" 
+                  className="w-full" 
+                  onClick={() => setBulkImportOpen(true)}
+                  data-testid="button-bulk-import"
+                >
+                  <FileText className="w-4 h-4 mr-2" />
+                  Bulk Import Tasks
+                </Button>
               </CardContent>
             </Card>
+
+            <Dialog open={bulkImportOpen} onOpenChange={setBulkImportOpen}>
+              <DialogContent className="max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2">
+                    <FileText className="w-5 h-5" />
+                    Bulk Import Tasks
+                  </DialogTitle>
+                  <DialogDescription>
+                    Paste your task list below. Use [Project] prefix to tag tasks. Tasks will be spaced across days automatically.
+                  </DialogDescription>
+                </DialogHeader>
+
+                {parsedTasks.length === 0 ? (
+                  <div className="space-y-4">
+                    <div>
+                      <Label className="mb-2 block">Paste your tasks</Label>
+                      <Textarea
+                        placeholder={`[4444] portal upgrade / finalize
+[Fireside] Volume will tick off
+[Internal] Finish content app
+create scatter csv whitelist...`}
+                        value={bulkText}
+                        onChange={(e) => setBulkText(e.target.value)}
+                        className="min-h-[200px] font-mono text-sm"
+                        data-testid="textarea-bulk-import"
+                      />
+                    </div>
+                    
+                    <div>
+                      <Label className="mb-2 block">Tasks per day: {tasksPerDay}</Label>
+                      <Slider
+                        value={[tasksPerDay]}
+                        onValueChange={(v) => setTasksPerDay(v[0])}
+                        min={1}
+                        max={10}
+                        step={1}
+                        className="w-full"
+                        data-testid="slider-tasks-per-day"
+                      />
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Spread tasks across days to avoid overloading
+                      </p>
+                    </div>
+
+                    <div className="flex gap-2 justify-end">
+                      <Button 
+                        variant="outline" 
+                        onClick={() => setBulkImportOpen(false)}
+                        data-testid="button-cancel-import"
+                      >
+                        Cancel
+                      </Button>
+                      <Button 
+                        onClick={handleParseTasks}
+                        disabled={!bulkText.trim() || isParsing}
+                        data-testid="button-parse-tasks"
+                      >
+                        {isParsing ? (
+                          <>
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            Parsing...
+                          </>
+                        ) : (
+                          <>Preview Tasks</>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col flex-1 min-h-0">
+                    <div className="flex items-center justify-between mb-3">
+                      <p className="text-sm text-muted-foreground">
+                        {parsedTasks.length} tasks parsed
+                      </p>
+                      <Button 
+                        variant="ghost" 
+                        size="sm"
+                        onClick={() => setParsedTasks([])}
+                        data-testid="button-edit-text"
+                      >
+                        Edit Text
+                      </Button>
+                    </div>
+                    
+                    <ScrollArea className="flex-1 border rounded-md">
+                      <div className="p-3 space-y-2">
+                        {parsedTasks.map((task, index) => (
+                          <div 
+                            key={index} 
+                            className="flex items-start gap-2 p-2 rounded-md bg-muted/50"
+                            data-testid={`preview-task-${index}`}
+                          >
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                {task.projectTag && (
+                                  <Badge variant="secondary" className="shrink-0">
+                                    <FolderOpen className="w-3 h-3 mr-1" />
+                                    {task.projectTag}
+                                  </Badge>
+                                )}
+                                <span className="text-sm truncate">{task.title}</span>
+                              </div>
+                              {task.dueDate && (
+                                <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
+                                  <Calendar className="w-3 h-3" />
+                                  {new Date(task.dueDate + 'T00:00:00').toLocaleDateString('en-US', { 
+                                    weekday: 'short', 
+                                    month: 'short', 
+                                    day: 'numeric' 
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="shrink-0 h-6 w-6"
+                              onClick={() => removeTaskFromPreview(task.originalIndex)}
+                              data-testid={`button-remove-preview-${index}`}
+                            >
+                              <X className="w-3 h-3" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    </ScrollArea>
+
+                    <div className="flex gap-2 justify-end mt-4">
+                      <Button 
+                        variant="outline" 
+                        onClick={() => {
+                          setBulkImportOpen(false);
+                          setParsedTasks([]);
+                        }}
+                        data-testid="button-cancel-confirm"
+                      >
+                        Cancel
+                      </Button>
+                      <Button 
+                        onClick={() => confirmBulkMutation.mutate()}
+                        disabled={parsedTasks.length === 0 || confirmBulkMutation.isPending}
+                        data-testid="button-confirm-import"
+                      >
+                        {confirmBulkMutation.isPending ? (
+                          <>
+                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                            Importing...
+                          </>
+                        ) : (
+                          <>Import {parsedTasks.length} Tasks</>
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </DialogContent>
+            </Dialog>
 
             {isLoading ? (
               <div className="flex justify-center py-12">
@@ -343,11 +585,27 @@ function TaskItem({
           <Icon className={`w-5 h-5 ${task.status === "done" ? "text-green-600" : task.status === "in_progress" ? "text-yellow-600" : "text-muted-foreground"}`} />
         </Button>
 
-        <span
-          className={`flex-1 ${task.status === "done" ? "line-through text-muted-foreground" : ""}`}
-        >
-          {task.title}
-        </span>
+        <div className={`flex-1 min-w-0 ${task.status === "done" ? "line-through text-muted-foreground" : ""}`}>
+          <div className="flex items-center gap-2 flex-wrap">
+            {task.projectTag && (
+              <Badge variant="outline" className="shrink-0 text-xs">
+                <FolderOpen className="w-3 h-3 mr-1" />
+                {task.projectTag}
+              </Badge>
+            )}
+            <span className="truncate">{task.title}</span>
+          </div>
+          {task.dueDate && (
+            <div className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
+              <Calendar className="w-3 h-3" />
+              {new Date(task.dueDate + 'T00:00:00').toLocaleDateString('en-US', { 
+                weekday: 'short', 
+                month: 'short', 
+                day: 'numeric' 
+              })}
+            </div>
+          )}
+        </div>
 
         <Badge
           variant={config.variant}

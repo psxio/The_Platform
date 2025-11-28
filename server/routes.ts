@@ -1104,57 +1104,65 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Shared parsing function for bulk import
+  function parseBulkTasks(rawText: string, tasksPerDay: number, excludeIndices: number[] = []) {
+    const lines = rawText.split("\n");
+    const parsedTasks: Array<{ title: string; projectTag?: string; dueDate?: string; originalIndex: number }> = [];
+    
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() + 1);
+    startDate.setHours(0, 0, 0, 0);
+    
+    let currentDate = new Date(startDate);
+    let tasksOnCurrentDay = 0;
+    
+    for (let i = 0; i < lines.length; i++) {
+      const trimmed = lines[i].trim();
+      if (!trimmed) continue;
+      
+      // Skip if this index was removed by user
+      if (excludeIndices.includes(i)) continue;
+      
+      const bracketMatch = trimmed.match(/^\[([^\]]+)\]\s*(.+)$/);
+      let projectTag: string | undefined;
+      let title: string;
+      
+      if (bracketMatch) {
+        projectTag = bracketMatch[1].trim();
+        title = bracketMatch[2].trim();
+      } else {
+        title = trimmed;
+      }
+      
+      if (!title) continue;
+      
+      if (tasksOnCurrentDay >= tasksPerDay) {
+        currentDate.setDate(currentDate.getDate() + 1);
+        tasksOnCurrentDay = 0;
+      }
+      
+      const dueDate = currentDate.toISOString().split("T")[0];
+      tasksOnCurrentDay++;
+      
+      parsedTasks.push({ title, projectTag, dueDate, originalIndex: i });
+    }
+    
+    return parsedTasks;
+  }
+
   // Bulk import tasks with smart day spacing (requires auth)
   app.post("/api/tasks/bulk-import", isAuthenticated, async (req: any, res) => {
     try {
-      const userId = req.user.id;
-      const { rawText, tasksPerDay = 3 } = req.body;
+      let { rawText, tasksPerDay = 3 } = req.body;
       
       if (!rawText || typeof rawText !== "string") {
         return res.status(400).json({ error: "Raw text is required" });
       }
       
-      // Parse the raw text into tasks
-      const lines = rawText.split("\n").filter((line: string) => line.trim());
-      const parsedTasks: Array<{ title: string; projectTag?: string; dueDate?: string }> = [];
+      // Validate and clamp tasksPerDay
+      tasksPerDay = Math.max(1, Math.min(10, parseInt(tasksPerDay) || 3));
       
-      // Smart day spacing: start from tomorrow, cap tasks per day
-      const startDate = new Date();
-      startDate.setDate(startDate.getDate() + 1); // Start tomorrow
-      startDate.setHours(0, 0, 0, 0);
-      
-      let currentDate = new Date(startDate);
-      let tasksOnCurrentDay = 0;
-      
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed) continue;
-        
-        // Parse [Project] prefix if present
-        const bracketMatch = trimmed.match(/^\[([^\]]+)\]\s*(.+)$/);
-        let projectTag: string | undefined;
-        let title: string;
-        
-        if (bracketMatch) {
-          projectTag = bracketMatch[1].trim();
-          title = bracketMatch[2].trim();
-        } else {
-          title = trimmed;
-        }
-        
-        if (!title) continue;
-        
-        // Assign due date with smart spacing
-        if (tasksOnCurrentDay >= tasksPerDay) {
-          currentDate.setDate(currentDate.getDate() + 1);
-          tasksOnCurrentDay = 0;
-        }
-        
-        const dueDate = currentDate.toISOString().split("T")[0]; // YYYY-MM-DD format
-        tasksOnCurrentDay++;
-        
-        parsedTasks.push({ title, projectTag, dueDate });
-      }
+      const parsedTasks = parseBulkTasks(rawText, tasksPerDay);
       
       if (parsedTasks.length === 0) {
         return res.status(400).json({ error: "No valid tasks found in the text" });
@@ -1172,17 +1180,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Confirm and save bulk imported tasks
+  // Confirm and save bulk imported tasks - re-parses server-side for security
   app.post("/api/tasks/bulk-import/confirm", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.id;
-      const { tasks: tasksData } = req.body;
+      let { rawText, tasksPerDay = 3, excludeIndices = [] } = req.body;
       
-      if (!Array.isArray(tasksData) || tasksData.length === 0) {
-        return res.status(400).json({ error: "Tasks array is required" });
+      if (!rawText || typeof rawText !== "string") {
+        return res.status(400).json({ error: "Raw text is required for confirmation" });
       }
       
-      const createdTasks = await storage.createTasksBulk(userId, tasksData);
+      // Validate and clamp tasksPerDay
+      tasksPerDay = Math.max(1, Math.min(10, parseInt(tasksPerDay) || 3));
+      
+      // Validate excludeIndices is an array of numbers
+      if (!Array.isArray(excludeIndices)) {
+        excludeIndices = [];
+      }
+      excludeIndices = excludeIndices.filter((i: any) => typeof i === 'number' && i >= 0);
+      
+      // Re-parse the raw text server-side using the same shared function
+      const parsedTasks = parseBulkTasks(rawText, tasksPerDay, excludeIndices);
+      
+      if (parsedTasks.length === 0) {
+        return res.status(400).json({ error: "No valid tasks to import" });
+      }
+      
+      // Remove originalIndex before saving
+      const tasksToSave = parsedTasks.map(({ title, projectTag, dueDate }) => ({ title, projectTag, dueDate }));
+      
+      const createdTasks = await storage.createTasksBulk(userId, tasksToSave);
       res.json({ 
         success: true, 
         createdCount: createdTasks.length,

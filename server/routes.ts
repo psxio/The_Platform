@@ -1104,6 +1104,96 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Bulk import tasks with smart day spacing (requires auth)
+  app.post("/api/tasks/bulk-import", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const { rawText, tasksPerDay = 3 } = req.body;
+      
+      if (!rawText || typeof rawText !== "string") {
+        return res.status(400).json({ error: "Raw text is required" });
+      }
+      
+      // Parse the raw text into tasks
+      const lines = rawText.split("\n").filter((line: string) => line.trim());
+      const parsedTasks: Array<{ title: string; projectTag?: string; dueDate?: string }> = [];
+      
+      // Smart day spacing: start from tomorrow, cap tasks per day
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() + 1); // Start tomorrow
+      startDate.setHours(0, 0, 0, 0);
+      
+      let currentDate = new Date(startDate);
+      let tasksOnCurrentDay = 0;
+      
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        
+        // Parse [Project] prefix if present
+        const bracketMatch = trimmed.match(/^\[([^\]]+)\]\s*(.+)$/);
+        let projectTag: string | undefined;
+        let title: string;
+        
+        if (bracketMatch) {
+          projectTag = bracketMatch[1].trim();
+          title = bracketMatch[2].trim();
+        } else {
+          title = trimmed;
+        }
+        
+        if (!title) continue;
+        
+        // Assign due date with smart spacing
+        if (tasksOnCurrentDay >= tasksPerDay) {
+          currentDate.setDate(currentDate.getDate() + 1);
+          tasksOnCurrentDay = 0;
+        }
+        
+        const dueDate = currentDate.toISOString().split("T")[0]; // YYYY-MM-DD format
+        tasksOnCurrentDay++;
+        
+        parsedTasks.push({ title, projectTag, dueDate });
+      }
+      
+      if (parsedTasks.length === 0) {
+        return res.status(400).json({ error: "No valid tasks found in the text" });
+      }
+      
+      // Return parsed preview (don't save yet)
+      res.json({ 
+        preview: parsedTasks,
+        totalTasks: parsedTasks.length,
+        daysSpanned: Math.ceil(parsedTasks.length / tasksPerDay)
+      });
+    } catch (error) {
+      console.error("Error parsing bulk tasks:", error);
+      res.status(500).json({ error: "Failed to parse tasks" });
+    }
+  });
+
+  // Confirm and save bulk imported tasks
+  app.post("/api/tasks/bulk-import/confirm", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user.id;
+      const { tasks: tasksData } = req.body;
+      
+      if (!Array.isArray(tasksData) || tasksData.length === 0) {
+        return res.status(400).json({ error: "Tasks array is required" });
+      }
+      
+      const createdTasks = await storage.createTasksBulk(userId, tasksData);
+      res.json({ 
+        success: true, 
+        createdCount: createdTasks.length,
+        tasks: createdTasks 
+      });
+    } catch (error) {
+      console.error("Error saving bulk tasks:", error);
+      res.status(500).json({ error: "Failed to save tasks" });
+    }
+  });
+
   // ================== USER ROLE ENDPOINTS ==================
 
   // Generate random invite code

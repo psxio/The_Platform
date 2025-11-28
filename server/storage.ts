@@ -60,7 +60,8 @@ export interface IStorage {
   removeMintedAddress(collectionId: number, address: string): Promise<void>;
   
   // Task methods (user-specific to-do items)
-  createTask(userId: string, title: string): Promise<Task>;
+  createTask(userId: string, title: string, projectTag?: string, dueDate?: string): Promise<Task>;
+  createTasksBulk(userId: string, tasksData: Array<{ title: string; projectTag?: string; dueDate?: string }>): Promise<Task[]>;
   getUserTasks(userId: string): Promise<Task[]>;
   getPublicTasks(): Promise<Task[]>;
   updateTaskStatus(id: number, userId: string, status: string): Promise<Task | undefined>;
@@ -367,12 +368,28 @@ export class DbStorage implements IStorage {
   }
 
   // Task methods (user-specific to-do items)
-  async createTask(userId: string, title: string): Promise<Task> {
+  async createTask(userId: string, title: string, projectTag?: string, dueDate?: string): Promise<Task> {
     const [task] = await db
       .insert(tasks)
-      .values({ userId, title, status: "pending", isPublic: false })
+      .values({ userId, title, projectTag, dueDate, status: "pending", isPublic: false })
       .returning();
     return task;
+  }
+
+  async createTasksBulk(userId: string, tasksData: Array<{ title: string; projectTag?: string; dueDate?: string }>): Promise<Task[]> {
+    if (tasksData.length === 0) return [];
+    
+    const values = tasksData.map(t => ({
+      userId,
+      title: t.title,
+      projectTag: t.projectTag,
+      dueDate: t.dueDate,
+      status: "pending",
+      isPublic: false,
+    }));
+    
+    const created = await db.insert(tasks).values(values).returning();
+    return created;
   }
 
   async getUserTasks(userId: string): Promise<Task[]> {

@@ -143,6 +143,8 @@ export const tasks = pgTable("tasks", {
   id: serial("id").primaryKey(),
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   title: text("title").notNull(),
+  projectTag: text("project_tag"),
+  dueDate: text("due_date"),
   status: text("status").notNull().default("pending"),
   isPublic: boolean("is_public").notNull().default(false),
   createdAt: timestamp("created_at").defaultNow().notNull(),

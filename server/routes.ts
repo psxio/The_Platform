@@ -4123,6 +4123,386 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ================== WORKER MONITORING ENDPOINTS ==================
+
+  // Get user's monitoring consent status
+  app.get("/api/monitoring/consent", requireRole("content"), async (req, res) => {
+    try {
+      const userId = (req as any).user?.id;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const consent = await storage.getMonitoringConsent(userId);
+      const hasValidConsent = await storage.hasValidConsent(userId);
+      res.json({ consent, hasValidConsent });
+    } catch (error) {
+      console.error("Error fetching consent:", error);
+      res.status(500).json({ error: "Failed to fetch consent status" });
+    }
+  });
+
+  // Submit monitoring consent
+  app.post("/api/monitoring/consent", requireRole("content"), async (req, res) => {
+    try {
+      const userId = (req as any).user?.id;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const { 
+        acknowledgedScreenCapture,
+        acknowledgedActivityLogging,
+        acknowledgedHourlyReports,
+        acknowledgedDataStorage,
+      } = req.body;
+
+      // All acknowledgments must be true
+      if (!acknowledgedScreenCapture || !acknowledgedActivityLogging || 
+          !acknowledgedHourlyReports || !acknowledgedDataStorage) {
+        return res.status(400).json({ error: "All acknowledgments are required" });
+      }
+
+      const consent = await storage.createMonitoringConsent({
+        userId,
+        consentVersion: "1.0",
+        ipAddress: req.ip || null,
+        userAgent: req.headers['user-agent'] || null,
+        acknowledgedScreenCapture: true,
+        acknowledgedActivityLogging: true,
+        acknowledgedHourlyReports: true,
+        acknowledgedDataStorage: true,
+      });
+
+      res.json(consent);
+    } catch (error) {
+      console.error("Error creating consent:", error);
+      res.status(500).json({ error: "Failed to submit consent" });
+    }
+  });
+
+  // Get user's active monitoring session
+  app.get("/api/monitoring/session/active", requireRole("content"), async (req, res) => {
+    try {
+      const userId = (req as any).user?.id;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const session = await storage.getActiveMonitoringSession(userId);
+      res.json({ session });
+    } catch (error) {
+      console.error("Error fetching active session:", error);
+      res.status(500).json({ error: "Failed to fetch active session" });
+    }
+  });
+
+  // Start a monitoring session
+  app.post("/api/monitoring/session/start", requireRole("content"), async (req, res) => {
+    try {
+      const userId = (req as any).user?.id;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      // Check for valid consent
+      const hasConsent = await storage.hasValidConsent(userId);
+      if (!hasConsent) {
+        return res.status(403).json({ error: "Valid consent required before starting monitoring" });
+      }
+
+      // Check for existing active session
+      const existingSession = await storage.getActiveMonitoringSession(userId);
+      if (existingSession) {
+        return res.status(400).json({ error: "Already have an active monitoring session", session: existingSession });
+      }
+
+      const session = await storage.createMonitoringSession({
+        userId,
+        status: "active",
+      });
+
+      res.json(session);
+    } catch (error) {
+      console.error("Error starting session:", error);
+      res.status(500).json({ error: "Failed to start monitoring session" });
+    }
+  });
+
+  // End a monitoring session
+  app.post("/api/monitoring/session/:id/end", requireRole("content"), async (req, res) => {
+    try {
+      const userId = (req as any).user?.id;
+      const sessionId = parseInt(req.params.id);
+      
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const session = await storage.getMonitoringSession(sessionId);
+      if (!session) {
+        return res.status(404).json({ error: "Session not found" });
+      }
+
+      if (session.userId !== userId) {
+        return res.status(403).json({ error: "Not authorized to end this session" });
+      }
+
+      const endedSession = await storage.endMonitoringSession(sessionId);
+      res.json(endedSession);
+    } catch (error) {
+      console.error("Error ending session:", error);
+      res.status(500).json({ error: "Failed to end monitoring session" });
+    }
+  });
+
+  // Upload a screenshot
+  app.post("/api/monitoring/screenshot", requireRole("content"), async (req, res) => {
+    try {
+      const userId = (req as any).user?.id;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const { sessionId, imageData, thumbnailData, ocrText, detectedApps, activityLevel } = req.body;
+
+      if (!sessionId || !imageData) {
+        return res.status(400).json({ error: "Session ID and image data are required" });
+      }
+
+      // Verify session belongs to user
+      const session = await storage.getMonitoringSession(sessionId);
+      if (!session || session.userId !== userId) {
+        return res.status(403).json({ error: "Invalid session" });
+      }
+
+      if (session.status !== "active") {
+        return res.status(400).json({ error: "Session is not active" });
+      }
+
+      // Create hour bucket for grouping
+      const now = new Date();
+      const hourBucket = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}-${String(now.getHours()).padStart(2, '0')}`;
+
+      const screenshot = await storage.createMonitoringScreenshot({
+        sessionId,
+        userId,
+        imageData,
+        thumbnailData: thumbnailData || null,
+        ocrText: ocrText || null,
+        detectedApps: detectedApps || null,
+        activityLevel: activityLevel || "unknown",
+        hourBucket,
+      });
+
+      res.json({ id: screenshot.id, hourBucket });
+    } catch (error) {
+      console.error("Error uploading screenshot:", error);
+      res.status(500).json({ error: "Failed to upload screenshot" });
+    }
+  });
+
+  // Get user's monitoring sessions
+  app.get("/api/monitoring/sessions", requireRole("content"), async (req, res) => {
+    try {
+      const userId = (req as any).user?.id;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const sessions = await storage.getMonitoringSessions(userId);
+      res.json(sessions);
+    } catch (error) {
+      console.error("Error fetching sessions:", error);
+      res.status(500).json({ error: "Failed to fetch sessions" });
+    }
+  });
+
+  // Get user's hourly reports
+  app.get("/api/monitoring/reports", requireRole("content"), async (req, res) => {
+    try {
+      const userId = (req as any).user?.id;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const reports = await storage.getMonitoringHourlyReports(userId);
+      res.json(reports);
+    } catch (error) {
+      console.error("Error fetching reports:", error);
+      res.status(500).json({ error: "Failed to fetch reports" });
+    }
+  });
+
+  // Create hourly report (usually called by frontend after hour completion)
+  app.post("/api/monitoring/report", requireRole("content"), async (req, res) => {
+    try {
+      const userId = (req as any).user?.id;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const { 
+        sessionId, 
+        hourStart, 
+        hourEnd, 
+        randomScreenshotId,
+        activitySummary,
+        topAppsDetected,
+        activeMinutes,
+        idleMinutes,
+        screenshotsTaken,
+        keywordsDetected,
+      } = req.body;
+
+      const report = await storage.createMonitoringHourlyReport({
+        sessionId: sessionId || null,
+        userId,
+        hourStart: new Date(hourStart),
+        hourEnd: new Date(hourEnd),
+        randomScreenshotId: randomScreenshotId || null,
+        activitySummary: activitySummary || null,
+        topAppsDetected: topAppsDetected || null,
+        activeMinutes: activeMinutes || 0,
+        idleMinutes: idleMinutes || 0,
+        screenshotsTaken: screenshotsTaken || 0,
+        keywordsDetected: keywordsDetected || null,
+      });
+
+      res.json(report);
+    } catch (error) {
+      console.error("Error creating report:", error);
+      res.status(500).json({ error: "Failed to create report" });
+    }
+  });
+
+  // Admin: Get all active monitoring sessions
+  app.get("/api/admin/monitoring/sessions/active", requireRole("admin"), async (req, res) => {
+    try {
+      const sessions = await storage.getAllActiveMonitoringSessions();
+      
+      // Enrich with user info
+      const enrichedSessions = await Promise.all(sessions.map(async (session) => {
+        const user = await storage.getUser(session.userId);
+        return {
+          ...session,
+          user: user ? { 
+            id: user.id, 
+            email: user.email, 
+            firstName: user.firstName, 
+            lastName: user.lastName 
+          } : null,
+        };
+      }));
+
+      res.json(enrichedSessions);
+    } catch (error) {
+      console.error("Error fetching active sessions:", error);
+      res.status(500).json({ error: "Failed to fetch active sessions" });
+    }
+  });
+
+  // Admin: Get all monitoring sessions
+  app.get("/api/admin/monitoring/sessions", requireRole("admin"), async (req, res) => {
+    try {
+      const sessions = await storage.getMonitoringSessions();
+      
+      // Enrich with user info
+      const enrichedSessions = await Promise.all(sessions.map(async (session) => {
+        const user = await storage.getUser(session.userId);
+        return {
+          ...session,
+          user: user ? { 
+            id: user.id, 
+            email: user.email, 
+            firstName: user.firstName, 
+            lastName: user.lastName 
+          } : null,
+        };
+      }));
+
+      res.json(enrichedSessions);
+    } catch (error) {
+      console.error("Error fetching sessions:", error);
+      res.status(500).json({ error: "Failed to fetch sessions" });
+    }
+  });
+
+  // Admin: Get all hourly reports
+  app.get("/api/admin/monitoring/reports", requireRole("admin"), async (req, res) => {
+    try {
+      const reports = await storage.getMonitoringHourlyReports();
+      
+      // Enrich with user info and screenshot
+      const enrichedReports = await Promise.all(reports.map(async (report) => {
+        const user = await storage.getUser(report.userId);
+        let screenshot = null;
+        if (report.randomScreenshotId) {
+          screenshot = await storage.getMonitoringScreenshot(report.randomScreenshotId);
+        }
+        return {
+          ...report,
+          user: user ? { 
+            id: user.id, 
+            email: user.email, 
+            firstName: user.firstName, 
+            lastName: user.lastName 
+          } : null,
+          screenshot: screenshot ? {
+            id: screenshot.id,
+            thumbnailData: screenshot.thumbnailData,
+            capturedAt: screenshot.capturedAt,
+          } : null,
+        };
+      }));
+
+      res.json(enrichedReports);
+    } catch (error) {
+      console.error("Error fetching reports:", error);
+      res.status(500).json({ error: "Failed to fetch reports" });
+    }
+  });
+
+  // Admin: Get specific screenshot
+  app.get("/api/admin/monitoring/screenshot/:id", requireRole("admin"), async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const screenshot = await storage.getMonitoringScreenshot(id);
+      
+      if (!screenshot) {
+        return res.status(404).json({ error: "Screenshot not found" });
+      }
+
+      res.json(screenshot);
+    } catch (error) {
+      console.error("Error fetching screenshot:", error);
+      res.status(500).json({ error: "Failed to fetch screenshot" });
+    }
+  });
+
+  // Admin: Get session screenshots
+  app.get("/api/admin/monitoring/session/:id/screenshots", requireRole("admin"), async (req, res) => {
+    try {
+      const sessionId = parseInt(req.params.id);
+      const screenshots = await storage.getMonitoringScreenshots(sessionId);
+      
+      // Return only thumbnails and metadata for performance
+      const summaryScreenshots = screenshots.map(s => ({
+        id: s.id,
+        capturedAt: s.capturedAt,
+        thumbnailData: s.thumbnailData,
+        ocrText: s.ocrText?.substring(0, 200), // First 200 chars
+        detectedApps: s.detectedApps,
+        activityLevel: s.activityLevel,
+      }));
+
+      res.json(summaryScreenshots);
+    } catch (error) {
+      console.error("Error fetching screenshots:", error);
+      res.status(500).json({ error: "Failed to fetch screenshots" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

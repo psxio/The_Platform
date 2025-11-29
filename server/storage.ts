@@ -33,6 +33,11 @@ import {
   // Pending content approval types
   type PendingContentMember, type InsertPendingContentMember, pendingContentMembers,
   type ContentProfile, type InsertContentProfile, contentProfiles,
+  // Worker Monitoring types
+  type MonitoringConsent, type InsertMonitoringConsent, monitoringConsent,
+  type MonitoringSession, type InsertMonitoringSession, monitoringSessions,
+  type MonitoringScreenshot, type InsertMonitoringScreenshot, monitoringScreenshots,
+  type MonitoringHourlyReport, type InsertMonitoringHourlyReport, monitoringHourlyReports,
 } from "@shared/schema";
 import { db } from "./db";
 import { desc, eq, and, sql, or, isNull } from "drizzle-orm";
@@ -228,6 +233,34 @@ export interface IStorage {
   createContentProfile(profile: InsertContentProfile): Promise<ContentProfile>;
   updateContentProfile(userId: string, updates: Partial<InsertContentProfile>): Promise<ContentProfile | undefined>;
   isContentProfileComplete(userId: string): Promise<boolean>;
+  
+  // ==================== WORKER MONITORING METHODS ====================
+  
+  // Monitoring Consent methods
+  getMonitoringConsent(userId: string): Promise<MonitoringConsent | undefined>;
+  createMonitoringConsent(consent: InsertMonitoringConsent): Promise<MonitoringConsent>;
+  hasValidConsent(userId: string): Promise<boolean>;
+  
+  // Monitoring Session methods
+  getMonitoringSessions(userId?: string): Promise<MonitoringSession[]>;
+  getActiveMonitoringSession(userId: string): Promise<MonitoringSession | undefined>;
+  getAllActiveMonitoringSessions(): Promise<MonitoringSession[]>;
+  getMonitoringSession(id: number): Promise<MonitoringSession | undefined>;
+  createMonitoringSession(session: InsertMonitoringSession): Promise<MonitoringSession>;
+  updateMonitoringSession(id: number, updates: Partial<InsertMonitoringSession>): Promise<MonitoringSession | undefined>;
+  endMonitoringSession(id: number): Promise<MonitoringSession | undefined>;
+  
+  // Monitoring Screenshot methods
+  getMonitoringScreenshots(sessionId: number): Promise<MonitoringScreenshot[]>;
+  getMonitoringScreenshotsByHour(userId: string, hourBucket: string): Promise<MonitoringScreenshot[]>;
+  getMonitoringScreenshot(id: number): Promise<MonitoringScreenshot | undefined>;
+  createMonitoringScreenshot(screenshot: InsertMonitoringScreenshot): Promise<MonitoringScreenshot>;
+  
+  // Monitoring Hourly Report methods
+  getMonitoringHourlyReports(userId?: string): Promise<MonitoringHourlyReport[]>;
+  getMonitoringHourlyReport(id: number): Promise<MonitoringHourlyReport | undefined>;
+  createMonitoringHourlyReport(report: InsertMonitoringHourlyReport): Promise<MonitoringHourlyReport>;
+  getLatestHourlyReport(userId: string): Promise<MonitoringHourlyReport | undefined>;
 }
 
 export class DbStorage implements IStorage {
@@ -1355,6 +1388,192 @@ export class DbStorage implements IStorage {
   async isContentProfileComplete(userId: string): Promise<boolean> {
     const profile = await this.getContentProfile(userId);
     return profile?.isProfileComplete === true;
+  }
+
+  // ==================== WORKER MONITORING METHODS ====================
+
+  // Monitoring Consent methods
+  async getMonitoringConsent(userId: string): Promise<MonitoringConsent | undefined> {
+    const [consent] = await db
+      .select()
+      .from(monitoringConsent)
+      .where(eq(monitoringConsent.userId, userId));
+    return consent;
+  }
+
+  async createMonitoringConsent(consent: InsertMonitoringConsent): Promise<MonitoringConsent> {
+    const [created] = await db.insert(monitoringConsent).values(consent).returning();
+    return created;
+  }
+
+  async hasValidConsent(userId: string): Promise<boolean> {
+    const consent = await this.getMonitoringConsent(userId);
+    if (!consent) return false;
+    return (
+      consent.acknowledgedScreenCapture &&
+      consent.acknowledgedActivityLogging &&
+      consent.acknowledgedHourlyReports &&
+      consent.acknowledgedDataStorage
+    );
+  }
+
+  // Monitoring Session methods
+  async getMonitoringSessions(userId?: string): Promise<MonitoringSession[]> {
+    if (userId) {
+      return await db
+        .select()
+        .from(monitoringSessions)
+        .where(eq(monitoringSessions.userId, userId))
+        .orderBy(desc(monitoringSessions.startedAt));
+    }
+    return await db
+      .select()
+      .from(monitoringSessions)
+      .orderBy(desc(monitoringSessions.startedAt));
+  }
+
+  async getActiveMonitoringSession(userId: string): Promise<MonitoringSession | undefined> {
+    const [session] = await db
+      .select()
+      .from(monitoringSessions)
+      .where(
+        and(
+          eq(monitoringSessions.userId, userId),
+          eq(monitoringSessions.status, "active")
+        )
+      );
+    return session;
+  }
+
+  async getAllActiveMonitoringSessions(): Promise<MonitoringSession[]> {
+    return await db
+      .select()
+      .from(monitoringSessions)
+      .where(eq(monitoringSessions.status, "active"));
+  }
+
+  async getMonitoringSession(id: number): Promise<MonitoringSession | undefined> {
+    const [session] = await db
+      .select()
+      .from(monitoringSessions)
+      .where(eq(monitoringSessions.id, id));
+    return session;
+  }
+
+  async createMonitoringSession(session: InsertMonitoringSession): Promise<MonitoringSession> {
+    const [created] = await db.insert(monitoringSessions).values(session).returning();
+    return created;
+  }
+
+  async updateMonitoringSession(id: number, updates: Partial<InsertMonitoringSession>): Promise<MonitoringSession | undefined> {
+    const [updated] = await db
+      .update(monitoringSessions)
+      .set(updates)
+      .where(eq(monitoringSessions.id, id))
+      .returning();
+    return updated;
+  }
+
+  async endMonitoringSession(id: number): Promise<MonitoringSession | undefined> {
+    const session = await this.getMonitoringSession(id);
+    if (!session) return undefined;
+    
+    const now = new Date();
+    const durationMinutes = Math.floor((now.getTime() - session.startedAt.getTime()) / 60000);
+    
+    const [updated] = await db
+      .update(monitoringSessions)
+      .set({
+        status: "ended",
+        endedAt: now,
+        totalDurationMinutes: durationMinutes,
+      })
+      .where(eq(monitoringSessions.id, id))
+      .returning();
+    return updated;
+  }
+
+  // Monitoring Screenshot methods
+  async getMonitoringScreenshots(sessionId: number): Promise<MonitoringScreenshot[]> {
+    return await db
+      .select()
+      .from(monitoringScreenshots)
+      .where(eq(monitoringScreenshots.sessionId, sessionId))
+      .orderBy(desc(monitoringScreenshots.capturedAt));
+  }
+
+  async getMonitoringScreenshotsByHour(userId: string, hourBucket: string): Promise<MonitoringScreenshot[]> {
+    return await db
+      .select()
+      .from(monitoringScreenshots)
+      .where(
+        and(
+          eq(monitoringScreenshots.userId, userId),
+          eq(monitoringScreenshots.hourBucket, hourBucket)
+        )
+      )
+      .orderBy(desc(monitoringScreenshots.capturedAt));
+  }
+
+  async getMonitoringScreenshot(id: number): Promise<MonitoringScreenshot | undefined> {
+    const [screenshot] = await db
+      .select()
+      .from(monitoringScreenshots)
+      .where(eq(monitoringScreenshots.id, id));
+    return screenshot;
+  }
+
+  async createMonitoringScreenshot(screenshot: InsertMonitoringScreenshot): Promise<MonitoringScreenshot> {
+    const [created] = await db.insert(monitoringScreenshots).values(screenshot).returning();
+    
+    // Update session screenshot count
+    await db
+      .update(monitoringSessions)
+      .set({
+        screenshotCount: sql`${monitoringSessions.screenshotCount} + 1`,
+        lastActivityAt: new Date(),
+      })
+      .where(eq(monitoringSessions.id, screenshot.sessionId));
+    
+    return created;
+  }
+
+  // Monitoring Hourly Report methods
+  async getMonitoringHourlyReports(userId?: string): Promise<MonitoringHourlyReport[]> {
+    if (userId) {
+      return await db
+        .select()
+        .from(monitoringHourlyReports)
+        .where(eq(monitoringHourlyReports.userId, userId))
+        .orderBy(desc(monitoringHourlyReports.hourStart));
+    }
+    return await db
+      .select()
+      .from(monitoringHourlyReports)
+      .orderBy(desc(monitoringHourlyReports.hourStart));
+  }
+
+  async getMonitoringHourlyReport(id: number): Promise<MonitoringHourlyReport | undefined> {
+    const [report] = await db
+      .select()
+      .from(monitoringHourlyReports)
+      .where(eq(monitoringHourlyReports.id, id));
+    return report;
+  }
+
+  async createMonitoringHourlyReport(report: InsertMonitoringHourlyReport): Promise<MonitoringHourlyReport> {
+    const [created] = await db.insert(monitoringHourlyReports).values(report).returning();
+    return created;
+  }
+
+  async getLatestHourlyReport(userId: string): Promise<MonitoringHourlyReport | undefined> {
+    const [report] = await db
+      .select()
+      .from(monitoringHourlyReports)
+      .where(eq(monitoringHourlyReports.userId, userId))
+      .orderBy(desc(monitoringHourlyReports.hourStart))
+      .limit(1);
+    return report;
   }
 }
 

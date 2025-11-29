@@ -1,5 +1,5 @@
 import { storage } from "./storage";
-import type { ContentTask, User } from "@shared/schema";
+import type { ContentTask, User, PaymentRequest } from "@shared/schema";
 
 interface NotificationPayload {
   title: string;
@@ -298,6 +298,115 @@ export class ChannelNotificationService {
       return { success: true };
     } catch (error) {
       return { success: false, error: String(error) };
+    }
+  }
+
+  // Payment Request Notifications
+  async sendPaymentRequestNotification(
+    eventType: "created" | "approved" | "rejected" | "cancelled",
+    request: PaymentRequest,
+    requesterName: string,
+    reviewerName?: string
+  ): Promise<void> {
+    let title = "";
+    let message = "";
+    let color = 0x64748B;
+
+    switch (eventType) {
+      case "created":
+        title = "💰 New Payment Request";
+        message = `${requesterName} submitted a payment request for ${request.currency} ${request.amount}`;
+        color = 0xF59E0B; // Amber
+        break;
+      case "approved":
+        title = "✅ Payment Request Approved";
+        message = `${reviewerName || 'An admin'} approved ${requesterName}'s payment request for ${request.currency} ${request.amount}`;
+        if (request.adminNote) {
+          message += `\nNote: ${request.adminNote}`;
+        }
+        color = 0x22C55E; // Green
+        break;
+      case "rejected":
+        title = "❌ Payment Request Rejected";
+        message = `${reviewerName || 'An admin'} rejected ${requesterName}'s payment request for ${request.currency} ${request.amount}`;
+        if (request.adminNote) {
+          message += `\nReason: ${request.adminNote}`;
+        }
+        color = 0xEF4444; // Red
+        break;
+      case "cancelled":
+        title = "🚫 Payment Request Cancelled";
+        message = `${requesterName} cancelled their payment request for ${request.currency} ${request.amount}`;
+        color = 0x64748B; // Slate
+        break;
+    }
+
+    // Send to Telegram
+    await this.sendPaymentRequestToTelegram(title, message, request.reason);
+    
+    // Send to Discord
+    await this.sendPaymentRequestToDiscord(title, message, request, color);
+  }
+
+  private async sendPaymentRequestToTelegram(title: string, message: string, reason: string): Promise<boolean> {
+    const settings = await this.getSettings();
+    if (!settings?.telegramEnabled || !settings.telegramBotToken || !settings.telegramChatId) {
+      return false;
+    }
+
+    try {
+      const url = `https://api.telegram.org/bot${settings.telegramBotToken}/sendMessage`;
+      let telegramMsg = `*${this.escapeMarkdown(title)}*\n\n`;
+      telegramMsg += `${this.escapeMarkdown(message)}\n\n`;
+      telegramMsg += `📝 *Reason:* ${this.escapeMarkdown(reason)}`;
+
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: settings.telegramChatId,
+          text: telegramMsg,
+          parse_mode: 'MarkdownV2',
+        }),
+      });
+
+      return response.ok;
+    } catch (error) {
+      console.error('[Telegram] Failed to send payment notification:', error);
+      return false;
+    }
+  }
+
+  private async sendPaymentRequestToDiscord(title: string, message: string, request: PaymentRequest, color: number): Promise<boolean> {
+    const settings = await this.getSettings();
+    if (!settings?.discordEnabled || !settings.discordWebhookUrl) {
+      return false;
+    }
+
+    try {
+      const response = await fetch(settings.discordWebhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          embeds: [{
+            title: title,
+            description: message,
+            color: color,
+            fields: [
+              { name: "Amount", value: `${request.currency} ${request.amount}`, inline: true },
+              { name: "Reason", value: request.reason, inline: true },
+              { name: "Status", value: request.status.toUpperCase(), inline: true },
+            ],
+            timestamp: new Date().toISOString(),
+            footer: { text: "ContentFlowStudio Payment Requests" }
+          }]
+        }),
+      });
+
+      return response.ok;
+    } catch (error) {
+      console.error('[Discord] Failed to send payment notification:', error);
+      return false;
     }
   }
 }

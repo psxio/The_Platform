@@ -4572,6 +4572,327 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ==================== PAYMENT REQUEST ENDPOINTS ====================
+
+  // Get payment requests - content users see their own, admins see all
+  app.get("/api/payment-requests", isAuthenticated, async (req, res) => {
+    try {
+      const user = req.user!;
+      
+      if (user.role === "admin") {
+        // Admins see all requests
+        const requests = await storage.getPaymentRequests();
+        // Enrich with requester info
+        const enriched = await Promise.all(requests.map(async (request) => {
+          const requester = await storage.getUser(request.requesterId);
+          let reviewer = null;
+          if (request.adminReviewerId) {
+            reviewer = await storage.getUser(request.adminReviewerId);
+          }
+          return {
+            ...request,
+            requester: requester ? {
+              id: requester.id,
+              email: requester.email,
+              firstName: requester.firstName,
+              lastName: requester.lastName,
+            } : null,
+            reviewer: reviewer ? {
+              id: reviewer.id,
+              email: reviewer.email,
+              firstName: reviewer.firstName,
+              lastName: reviewer.lastName,
+            } : null,
+          };
+        }));
+        return res.json(enriched);
+      } else {
+        // Content users see only their own requests
+        const requests = await storage.getPaymentRequests(user.id);
+        // Enrich with reviewer info if approved/rejected
+        const enriched = await Promise.all(requests.map(async (request) => {
+          let reviewer = null;
+          if (request.adminReviewerId) {
+            reviewer = await storage.getUser(request.adminReviewerId);
+          }
+          return {
+            ...request,
+            reviewer: reviewer ? {
+              id: reviewer.id,
+              firstName: reviewer.firstName,
+              lastName: reviewer.lastName,
+            } : null,
+          };
+        }));
+        return res.json(enriched);
+      }
+    } catch (error) {
+      console.error("Error fetching payment requests:", error);
+      res.status(500).json({ error: "Failed to fetch payment requests" });
+    }
+  });
+
+  // Get single payment request with events timeline
+  app.get("/api/payment-requests/:id", isAuthenticated, async (req, res) => {
+    try {
+      const user = req.user!;
+      const id = parseInt(req.params.id);
+      
+      const request = await storage.getPaymentRequest(id);
+      if (!request) {
+        return res.status(404).json({ error: "Payment request not found" });
+      }
+      
+      // Check permission - only requester or admin can view
+      if (user.role !== "admin" && request.requesterId !== user.id) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      
+      // Get events timeline
+      const events = await storage.getPaymentRequestEvents(id);
+      
+      // Enrich with user info
+      const requester = await storage.getUser(request.requesterId);
+      let reviewer = null;
+      if (request.adminReviewerId) {
+        reviewer = await storage.getUser(request.adminReviewerId);
+      }
+      
+      // Enrich events with actor info
+      const enrichedEvents = await Promise.all(events.map(async (event) => {
+        const actor = await storage.getUser(event.actorId);
+        return {
+          ...event,
+          actor: actor ? {
+            id: actor.id,
+            firstName: actor.firstName,
+            lastName: actor.lastName,
+          } : null,
+        };
+      }));
+      
+      res.json({
+        ...request,
+        requester: requester ? {
+          id: requester.id,
+          email: requester.email,
+          firstName: requester.firstName,
+          lastName: requester.lastName,
+        } : null,
+        reviewer: reviewer ? {
+          id: reviewer.id,
+          firstName: reviewer.firstName,
+          lastName: reviewer.lastName,
+        } : null,
+        events: enrichedEvents,
+      });
+    } catch (error) {
+      console.error("Error fetching payment request:", error);
+      res.status(500).json({ error: "Failed to fetch payment request" });
+    }
+  });
+
+  // Create new payment request - content users only
+  app.post("/api/payment-requests", requireRole("content"), async (req, res) => {
+    try {
+      const user = req.user!;
+      const { amount, currency, reason, description } = req.body;
+      
+      if (!amount || !reason) {
+        return res.status(400).json({ error: "Amount and reason are required" });
+      }
+      
+      // Create the payment request
+      const request = await storage.createPaymentRequest({
+        requesterId: user.id,
+        amount: String(amount),
+        currency: currency || "USD",
+        reason,
+        description: description || null,
+      });
+      
+      // Create initial event
+      await storage.createPaymentRequestEvent({
+        paymentRequestId: request.id,
+        actorId: user.id,
+        eventType: "created",
+        previousStatus: null,
+        newStatus: "pending",
+        note: null,
+      });
+      
+      // Notify admins
+      const admins = (await storage.getAllUsers()).filter(u => u.role === "admin");
+      const requesterName = [user.firstName, user.lastName].filter(Boolean).join(" ") || user.email;
+      
+      for (const admin of admins) {
+        await storage.createNotification({
+          userId: admin.id,
+          type: "payment_request",
+          title: "New Payment Request",
+          message: `${requesterName} submitted a payment request for ${currency || "USD"} ${amount}`,
+          metadata: JSON.stringify({ paymentRequestId: request.id }),
+        });
+      }
+      
+      // Send external notifications
+      try {
+        await channelNotificationService.sendPaymentRequestNotification(
+          "created",
+          request,
+          requesterName
+        );
+      } catch (notifyError) {
+        console.error("Error sending external notifications:", notifyError);
+        // Don't fail the request if external notifications fail
+      }
+      
+      res.status(201).json(request);
+    } catch (error) {
+      console.error("Error creating payment request:", error);
+      res.status(500).json({ error: "Failed to create payment request" });
+    }
+  });
+
+  // Update payment request status - admin approve/reject
+  app.patch("/api/payment-requests/:id/status", requireRole("admin"), async (req, res) => {
+    try {
+      const user = req.user!;
+      const id = parseInt(req.params.id);
+      const { status, note } = req.body;
+      
+      if (!status || !["approved", "rejected"].includes(status)) {
+        return res.status(400).json({ error: "Status must be 'approved' or 'rejected'" });
+      }
+      
+      const existingRequest = await storage.getPaymentRequest(id);
+      if (!existingRequest) {
+        return res.status(404).json({ error: "Payment request not found" });
+      }
+      
+      if (existingRequest.status !== "pending") {
+        return res.status(400).json({ error: "Can only update pending requests" });
+      }
+      
+      // Update the status
+      const updated = await storage.updatePaymentRequestStatus(id, status, user.id, note);
+      
+      if (!updated) {
+        return res.status(500).json({ error: "Failed to update request" });
+      }
+      
+      // Create event
+      await storage.createPaymentRequestEvent({
+        paymentRequestId: id,
+        actorId: user.id,
+        eventType: status,
+        previousStatus: "pending",
+        newStatus: status,
+        note: note || null,
+      });
+      
+      // Notify the requester
+      const requester = await storage.getUser(existingRequest.requesterId);
+      const adminName = [user.firstName, user.lastName].filter(Boolean).join(" ") || user.email;
+      
+      if (requester) {
+        await storage.createNotification({
+          userId: requester.id,
+          type: "payment_request",
+          title: `Payment Request ${status === "approved" ? "Approved" : "Rejected"}`,
+          message: `Your payment request for ${existingRequest.currency} ${existingRequest.amount} has been ${status} by ${adminName}${note ? `: ${note}` : ""}`,
+          metadata: JSON.stringify({ paymentRequestId: id }),
+        });
+      }
+      
+      // Send external notifications
+      try {
+        const requesterName = requester ? [requester.firstName, requester.lastName].filter(Boolean).join(" ") || requester.email : "Unknown";
+        await channelNotificationService.sendPaymentRequestNotification(
+          status,
+          updated,
+          requesterName,
+          adminName
+        );
+      } catch (notifyError) {
+        console.error("Error sending external notifications:", notifyError);
+      }
+      
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating payment request:", error);
+      res.status(500).json({ error: "Failed to update payment request" });
+    }
+  });
+
+  // Cancel payment request - requester can cancel their own pending request
+  app.delete("/api/payment-requests/:id", isAuthenticated, async (req, res) => {
+    try {
+      const user = req.user!;
+      const id = parseInt(req.params.id);
+      
+      const existingRequest = await storage.getPaymentRequest(id);
+      if (!existingRequest) {
+        return res.status(404).json({ error: "Payment request not found" });
+      }
+      
+      // Only requester can cancel their own pending request
+      if (existingRequest.requesterId !== user.id) {
+        return res.status(403).json({ error: "Can only cancel your own requests" });
+      }
+      
+      if (existingRequest.status !== "pending") {
+        return res.status(400).json({ error: "Can only cancel pending requests" });
+      }
+      
+      const cancelled = await storage.cancelPaymentRequest(id, user.id);
+      
+      if (!cancelled) {
+        return res.status(500).json({ error: "Failed to cancel request" });
+      }
+      
+      // Create event
+      await storage.createPaymentRequestEvent({
+        paymentRequestId: id,
+        actorId: user.id,
+        eventType: "cancelled",
+        previousStatus: "pending",
+        newStatus: "cancelled",
+        note: null,
+      });
+      
+      // Notify admins
+      const admins = (await storage.getAllUsers()).filter(u => u.role === "admin");
+      const requesterName = [user.firstName, user.lastName].filter(Boolean).join(" ") || user.email;
+      
+      for (const admin of admins) {
+        await storage.createNotification({
+          userId: admin.id,
+          type: "payment_request",
+          title: "Payment Request Cancelled",
+          message: `${requesterName} cancelled their payment request for ${existingRequest.currency} ${existingRequest.amount}`,
+          metadata: JSON.stringify({ paymentRequestId: id }),
+        });
+      }
+      
+      res.json({ success: true, message: "Payment request cancelled" });
+    } catch (error) {
+      console.error("Error cancelling payment request:", error);
+      res.status(500).json({ error: "Failed to cancel payment request" });
+    }
+  });
+
+  // Get pending payment request count - for admin badge
+  app.get("/api/payment-requests/pending/count", requireRole("admin"), async (req, res) => {
+    try {
+      const count = await storage.getPendingPaymentRequestCount();
+      res.json({ count });
+    } catch (error) {
+      console.error("Error fetching pending count:", error);
+      res.status(500).json({ error: "Failed to fetch pending count" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

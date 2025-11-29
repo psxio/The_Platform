@@ -11,6 +11,7 @@ import { TemplatesView } from "@/components/templates-view";
 import { AssetsLibrary } from "@/components/assets-library";
 import { RecurringTasksView } from "@/components/recurring-tasks-view";
 import { TimeReportsView } from "@/components/time-reports-view";
+import { PaymentRequestsView } from "@/components/payment-requests-view";
 import { AddContentTaskDialog } from "@/components/add-content-task-dialog";
 import { AddCampaignDialog } from "@/components/add-campaign-dialog";
 import { WelcomeModal } from "@/components/welcome-modal";
@@ -23,7 +24,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Plus, ClipboardList, Users, Upload, Settings, FolderKanban, BarChart3, LayoutGrid, Columns3, Calendar, FileText, Image, Repeat, Clock, Download, Camera } from "lucide-react";
+import { Plus, ClipboardList, Users, Upload, Settings, FolderKanban, BarChart3, LayoutGrid, Columns3, Calendar, FileText, Image, Repeat, Clock, Download, Camera, DollarSign } from "lucide-react";
 import { Link } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
@@ -150,6 +151,10 @@ export default function ContentDashboard() {
                 <Clock className="h-4 w-4" />
                 <span className="hidden sm:inline">Time</span>
               </TabsTrigger>
+              <TabsTrigger value="payments" className="gap-2" data-testid="tab-payments">
+                <DollarSign className="h-4 w-4" />
+                <span className="hidden sm:inline">Payments</span>
+              </TabsTrigger>
               <TabsTrigger value="analytics" className="gap-2" data-testid="tab-analytics">
                 <BarChart3 className="h-4 w-4" />
                 <span className="hidden sm:inline">Analytics</span>
@@ -194,6 +199,10 @@ export default function ContentDashboard() {
 
           <TabsContent value="time-reports" className="mt-6">
             <TimeReportsView />
+          </TabsContent>
+
+          <TabsContent value="payments" className="mt-6">
+            <PaymentRequestsView />
           </TabsContent>
 
           <TabsContent value="analytics" className="mt-6">

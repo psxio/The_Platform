@@ -1,13 +1,14 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import type { ContentTask, User } from "@shared/schema";
+import type { ContentTask, User, DirectoryMember } from "@shared/schema";
 import { ContentTaskCard } from "@/components/content-task-card";
 import { AdvancedTaskFilters } from "@/components/advanced-task-filters";
 import { BulkTaskActions } from "@/components/bulk-task-actions";
 import { AddContentTaskDialog } from "@/components/add-content-task-dialog";
 import { TaskDetailsDialog } from "@/components/task-details-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AlertCircle, Inbox } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { AlertCircle, Inbox, User as UserIcon, Users } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import type { DateRange } from "react-day-picker";
 
@@ -22,6 +23,7 @@ export function ContentTasksView() {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [viewingTask, setViewingTask] = useState<ContentTask | null>(null);
   const [isDetailsDialogOpen, setIsDetailsDialogOpen] = useState(false);
+  const [showMyTasksOnly, setShowMyTasksOnly] = useState(true);
 
   const { data: tasks, isLoading, error } = useQuery<ContentTask[]>({
     queryKey: ["/api/content-tasks"],
@@ -30,6 +32,23 @@ export function ContentTasksView() {
   const { data: currentUser } = useQuery<User>({
     queryKey: ["/api/auth/user"],
   });
+
+  const { data: directoryMembers } = useQuery<DirectoryMember[]>({
+    queryKey: ["/api/directory-members"],
+  });
+
+  const currentUserDisplayName = (() => {
+    if (!currentUser) return null;
+    const directoryMember = directoryMembers?.find(
+      (m) => m.email?.toLowerCase() === currentUser.email?.toLowerCase()
+    );
+    if (directoryMember) return directoryMember.person;
+    const fullName = [currentUser.firstName, currentUser.lastName]
+      .filter(Boolean)
+      .join(" ")
+      .trim();
+    return fullName || currentUser.email;
+  })();
 
   if (error) {
     return (
@@ -43,6 +62,12 @@ export function ContentTasksView() {
   }
 
   const filteredTasks = tasks?.filter((task) => {
+    if (showMyTasksOnly && currentUserDisplayName) {
+      if (task.assignedTo?.toLowerCase() !== currentUserDisplayName.toLowerCase()) {
+        return false;
+      }
+    }
+
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
       const matchesSearch =
@@ -143,8 +168,36 @@ export function ContentTasksView() {
     setViewingTask(null);
   };
 
+  const myTaskCount = tasks?.filter(
+    (t) => t.assignedTo?.toLowerCase() === currentUserDisplayName?.toLowerCase()
+  ).length || 0;
+
+  const allTaskCount = tasks?.length || 0;
+
   return (
     <div className="space-y-6">
+      {/* My Tasks / All Tasks Toggle */}
+      <div className="flex items-center gap-2" data-testid="task-visibility-toggle">
+        <Button
+          variant={showMyTasksOnly ? "default" : "outline"}
+          size="sm"
+          onClick={() => setShowMyTasksOnly(true)}
+          data-testid="button-my-tasks"
+        >
+          <UserIcon className="h-4 w-4 mr-2" />
+          My Tasks ({myTaskCount})
+        </Button>
+        <Button
+          variant={!showMyTasksOnly ? "default" : "outline"}
+          size="sm"
+          onClick={() => setShowMyTasksOnly(false)}
+          data-testid="button-all-tasks"
+        >
+          <Users className="h-4 w-4 mr-2" />
+          All Tasks ({allTaskCount})
+        </Button>
+      </div>
+
       <AdvancedTaskFilters
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}

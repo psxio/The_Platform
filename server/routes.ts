@@ -1474,15 +1474,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Check pending content member status
       const pendingMember = await storage.getPendingContentMember(req.user.id);
       
+      // Check if user is in the directory (required for full access)
+      const directoryMember = user.email ? await storage.getDirectoryMemberByEmail(user.email) : null;
+      
       if (!pendingMember) {
-        // No pending record means they're an approved legacy user OR admin approved them
-        // Check if they have a content profile - if so they're fully approved
+        // No pending record - check if they're in the directory or have a completed profile (legacy users)
         const profile = await storage.getContentProfile(req.user.id);
+        
+        // Legacy path: users with completed profiles from before approval workflow are grandfathered in
         if (profile?.isProfileComplete) {
-          return res.json({ status: "approved", profileComplete: true });
+          return res.json({ status: "approved", profileComplete: true, inDirectory: !!directoryMember });
         }
-        // They need to complete profile but are approved
-        return res.json({ status: "approved", profileComplete: false, needsProfile: true });
+        
+        // They're in the directory - approve but need profile setup
+        if (directoryMember) {
+          return res.json({ status: "approved", profileComplete: false, needsProfile: true, inDirectory: true });
+        }
+        
+        // User bypassed the approval system entirely - they have content role but no pending record, no directory entry, and no completed profile
+        // Treat them as needing to be added to the pending queue by an admin
+        return res.json({ status: "no_record", message: "Contact an administrator to complete your onboarding." });
       }
       
       // Check profile completion status if approved
@@ -1623,6 +1634,178 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error rejecting content member:", error);
       res.status(500).json({ error: "Failed to reject member" });
+    }
+  });
+
+  // Get ALL content users with their complete status (admin only)
+  // This shows everyone with content role, including those who bypassed the pending system
+  app.get("/api/admin/content-users", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await storage.getUser(req.user.id);
+      if (!user || user.role !== "admin") {
+        return res.status(403).json({ error: "Only admins can view content users" });
+      }
+      
+      // Get all users with content role
+      const allUsers = await storage.getAllUsers();
+      const contentUsers = allUsers.filter(u => u.role === "content");
+      
+      // Get all pending members, directory members, and profiles
+      const pendingMembers = await storage.getPendingContentMembers();
+      const directoryMembers = await storage.getDirectoryMembers();
+      const profiles = await Promise.all(
+        contentUsers.map(u => storage.getContentProfile(u.id))
+      );
+      
+      // Build complete status for each content user
+      const contentUsersWithStatus = contentUsers.map((contentUser, index) => {
+        const pendingRecord = pendingMembers.find(p => p.userId === contentUser.id);
+        const directoryRecord = directoryMembers.find(
+          d => d.email?.toLowerCase() === contentUser.email?.toLowerCase()
+        );
+        const profile = profiles[index];
+        
+        let accessStatus: "pending" | "approved" | "rejected" | "bypassed" = "bypassed";
+        if (pendingRecord) {
+          accessStatus = pendingRecord.status as "pending" | "approved" | "rejected";
+        } else {
+          // No pending record - check for legacy approval (completed profile or directory)
+          if (profile?.isProfileComplete || directoryRecord) {
+            accessStatus = "approved";
+          }
+        }
+        
+        return {
+          id: contentUser.id,
+          email: contentUser.email,
+          firstName: contentUser.firstName,
+          lastName: contentUser.lastName,
+          createdAt: contentUser.createdAt,
+          accessStatus,
+          pendingRecord: pendingRecord || null,
+          isInDirectory: !!directoryRecord,
+          directoryId: directoryRecord?.id || null,
+          hasProfile: !!profile,
+          isProfileComplete: profile?.isProfileComplete || false,
+        };
+      });
+      
+      res.json(contentUsersWithStatus);
+    } catch (error) {
+      console.error("Error fetching content users:", error);
+      res.status(500).json({ error: "Failed to fetch content users" });
+    }
+  });
+
+  // Backfill pending records for content users who bypassed the system (admin only)
+  app.post("/api/admin/content-users/backfill-pending", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await storage.getUser(req.user.id);
+      if (!user || user.role !== "admin") {
+        return res.status(403).json({ error: "Only admins can backfill pending records" });
+      }
+      
+      // Get all content users without pending records
+      const allUsers = await storage.getAllUsers();
+      const contentUsers = allUsers.filter(u => u.role === "content");
+      const pendingMembers = await storage.getPendingContentMembers();
+      
+      const usersWithoutPending = contentUsers.filter(
+        u => !pendingMembers.find(p => p.userId === u.id)
+      );
+      
+      // Create pending records for users who bypassed
+      const created = [];
+      for (const contentUser of usersWithoutPending) {
+        try {
+          await storage.createPendingContentMember({
+            userId: contentUser.id,
+            inviteCodeId: null,
+            status: "pending",
+          });
+          created.push(contentUser.id);
+        } catch (err) {
+          console.error(`Failed to create pending record for ${contentUser.id}:`, err);
+        }
+      }
+      
+      res.json({ 
+        success: true, 
+        backfilledCount: created.length,
+        totalContentUsers: contentUsers.length,
+        message: `Created ${created.length} pending records for users who bypassed the system.`
+      });
+    } catch (error) {
+      console.error("Error backfilling pending records:", error);
+      res.status(500).json({ error: "Failed to backfill pending records" });
+    }
+  });
+
+  // Add content user directly to directory (admin only) - for users who bypassed system
+  app.post("/api/admin/content-users/:userId/add-to-directory", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await storage.getUser(req.user.id);
+      if (!user || user.role !== "admin") {
+        return res.status(403).json({ error: "Only admins can add users to directory" });
+      }
+      
+      const { userId } = req.params;
+      const { skill } = req.body;
+      
+      const targetUser = await storage.getUser(userId);
+      if (!targetUser) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      
+      // Check if already in directory
+      const directoryMembers = await storage.getDirectoryMembers();
+      const existingEntry = directoryMembers.find(
+        d => d.email?.toLowerCase() === targetUser.email?.toLowerCase()
+      );
+      
+      if (existingEntry) {
+        return res.status(400).json({ error: "User is already in the team directory" });
+      }
+      
+      const fullName = [targetUser.firstName, targetUser.lastName].filter(Boolean).join(" ") || targetUser.email;
+      const directoryMember = await storage.createDirectoryMember({
+        person: fullName,
+        email: targetUser.email,
+        skill: skill || undefined,
+      });
+      
+      // Also create/update their pending record to "approved" if they have one
+      const pendingRecord = await storage.getPendingContentMember(userId);
+      if (pendingRecord && pendingRecord.status === "pending") {
+        await storage.approvePendingContentMember(userId, req.user.id, "Manually added to directory by admin");
+      } else if (!pendingRecord) {
+        // Create an approved pending record
+        await storage.createPendingContentMember({
+          userId,
+          inviteCodeId: null,
+          status: "pending",
+        });
+        await storage.approvePendingContentMember(userId, req.user.id, "Manually added to directory by admin");
+      }
+      
+      // Create content profile if doesn't exist
+      const profile = await storage.getContentProfile(userId);
+      if (!profile) {
+        await storage.createContentProfile({
+          userId,
+          specialty: skill || null,
+          isProfileComplete: false,
+        });
+      }
+      
+      res.json({ 
+        success: true, 
+        directoryMember,
+        message: `${fullName} has been added to the team directory.`
+      });
+    } catch (error) {
+      console.error("Error adding user to directory:", error);
+      res.status(500).json({ error: "Failed to add user to directory" });
     }
   });
 

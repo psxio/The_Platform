@@ -495,6 +495,13 @@ export class DbStorage implements IStorage {
     return member;
   }
 
+  async getDirectoryMemberByEmail(email: string): Promise<DirectoryMember | undefined> {
+    const [member] = await db.select().from(directoryMembers).where(
+      sql`lower(${directoryMembers.email}) = lower(${email})`
+    );
+    return member;
+  }
+
   async createDirectoryMember(insertMember: InsertDirectoryMember): Promise<DirectoryMember> {
     const [member] = await db.insert(directoryMembers).values(insertMember).returning();
     return member;

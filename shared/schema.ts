@@ -706,3 +706,94 @@ export const insertUserOnboardingSchema = createInsertSchema(userOnboarding).omi
 
 export type InsertUserOnboarding = z.infer<typeof insertUserOnboardingSchema>;
 export type UserOnboarding = typeof userOnboarding.$inferSelect;
+
+// ==================== WORKER MONITORING TABLES ====================
+
+// Monitoring Consent - records user acknowledgment of monitoring terms
+export const monitoringConsent = pgTable("monitoring_consent", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }).unique(),
+  consentGivenAt: timestamp("consent_given_at").defaultNow().notNull(),
+  consentVersion: varchar("consent_version", { length: 20 }).notNull().default("1.0"),
+  ipAddress: varchar("ip_address", { length: 50 }),
+  userAgent: text("user_agent"),
+  acknowledgedScreenCapture: boolean("acknowledged_screen_capture").notNull().default(false),
+  acknowledgedActivityLogging: boolean("acknowledged_activity_logging").notNull().default(false),
+  acknowledgedHourlyReports: boolean("acknowledged_hourly_reports").notNull().default(false),
+  acknowledgedDataStorage: boolean("acknowledged_data_storage").notNull().default(false),
+});
+
+export const insertMonitoringConsentSchema = createInsertSchema(monitoringConsent).omit({
+  id: true,
+  consentGivenAt: true,
+});
+
+export type InsertMonitoringConsent = z.infer<typeof insertMonitoringConsentSchema>;
+export type MonitoringConsent = typeof monitoringConsent.$inferSelect;
+
+// Monitoring Sessions - tracks active/completed monitoring periods
+export const monitoringSessions = pgTable("monitoring_sessions", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  startedAt: timestamp("started_at").defaultNow().notNull(),
+  endedAt: timestamp("ended_at"),
+  status: varchar("status", { length: 20 }).notNull().default("active"), // active, paused, ended
+  totalDurationMinutes: integer("total_duration_minutes").default(0),
+  screenshotCount: integer("screenshot_count").default(0),
+  lastActivityAt: timestamp("last_activity_at"),
+});
+
+export const insertMonitoringSessionSchema = createInsertSchema(monitoringSessions).omit({
+  id: true,
+  startedAt: true,
+});
+
+export type InsertMonitoringSession = z.infer<typeof insertMonitoringSessionSchema>;
+export type MonitoringSession = typeof monitoringSessions.$inferSelect;
+
+// Monitoring Screenshots - stores captured screenshots
+export const monitoringScreenshots = pgTable("monitoring_screenshots", {
+  id: serial("id").primaryKey(),
+  sessionId: integer("session_id").notNull().references(() => monitoringSessions.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  capturedAt: timestamp("captured_at").defaultNow().notNull(),
+  imageData: text("image_data").notNull(), // base64 encoded screenshot
+  thumbnailData: text("thumbnail_data"), // smaller version for quick loading
+  ocrText: text("ocr_text"), // extracted text from screenshot via Tesseract
+  detectedApps: text("detected_apps"), // comma-separated list of detected applications
+  activityLevel: varchar("activity_level", { length: 20 }).default("unknown"), // active, idle, unknown
+  hourBucket: varchar("hour_bucket", { length: 20 }), // for grouping by hour (YYYY-MM-DD-HH)
+});
+
+export const insertMonitoringScreenshotSchema = createInsertSchema(monitoringScreenshots).omit({
+  id: true,
+  capturedAt: true,
+});
+
+export type InsertMonitoringScreenshot = z.infer<typeof insertMonitoringScreenshotSchema>;
+export type MonitoringScreenshot = typeof monitoringScreenshots.$inferSelect;
+
+// Monitoring Hourly Reports - summarized activity per hour
+export const monitoringHourlyReports = pgTable("monitoring_hourly_reports", {
+  id: serial("id").primaryKey(),
+  sessionId: integer("session_id").references(() => monitoringSessions.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  hourStart: timestamp("hour_start").notNull(),
+  hourEnd: timestamp("hour_end").notNull(),
+  randomScreenshotId: integer("random_screenshot_id").references(() => monitoringScreenshots.id, { onDelete: "set null" }),
+  activitySummary: text("activity_summary"), // generated summary of detected activities
+  topAppsDetected: text("top_apps_detected"), // most frequently detected apps
+  activeMinutes: integer("active_minutes").default(0),
+  idleMinutes: integer("idle_minutes").default(0),
+  screenshotsTaken: integer("screenshots_taken").default(0),
+  keywordsDetected: text("keywords_detected"), // notable keywords from OCR
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertMonitoringHourlyReportSchema = createInsertSchema(monitoringHourlyReports).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertMonitoringHourlyReport = z.infer<typeof insertMonitoringHourlyReportSchema>;
+export type MonitoringHourlyReport = typeof monitoringHourlyReports.$inferSelect;

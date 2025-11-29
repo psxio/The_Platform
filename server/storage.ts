@@ -38,6 +38,10 @@ import {
   type MonitoringSession, type InsertMonitoringSession, monitoringSessions,
   type MonitoringScreenshot, type InsertMonitoringScreenshot, monitoringScreenshots,
   type MonitoringHourlyReport, type InsertMonitoringHourlyReport, monitoringHourlyReports,
+  // Payment Request types
+  type PaymentRequest, type InsertPaymentRequest, paymentRequests,
+  type PaymentRequestEvent, type InsertPaymentRequestEvent, paymentRequestEvents,
+  type PaymentRequestStatus,
 } from "@shared/schema";
 import { db } from "./db";
 import { desc, eq, and, sql, or, isNull } from "drizzle-orm";
@@ -261,6 +265,20 @@ export interface IStorage {
   getMonitoringHourlyReport(id: number): Promise<MonitoringHourlyReport | undefined>;
   createMonitoringHourlyReport(report: InsertMonitoringHourlyReport): Promise<MonitoringHourlyReport>;
   getLatestHourlyReport(userId: string): Promise<MonitoringHourlyReport | undefined>;
+  
+  // ==================== PAYMENT REQUEST METHODS ====================
+  
+  // Payment Request methods
+  getPaymentRequests(userId?: string): Promise<PaymentRequest[]>;
+  getPaymentRequest(id: number): Promise<PaymentRequest | undefined>;
+  createPaymentRequest(request: InsertPaymentRequest): Promise<PaymentRequest>;
+  updatePaymentRequestStatus(id: number, status: PaymentRequestStatus, reviewerId: string, note?: string): Promise<PaymentRequest | undefined>;
+  cancelPaymentRequest(id: number, requesterId: string): Promise<PaymentRequest | undefined>;
+  getPendingPaymentRequestCount(): Promise<number>;
+  
+  // Payment Request Event methods
+  getPaymentRequestEvents(paymentRequestId: number): Promise<PaymentRequestEvent[]>;
+  createPaymentRequestEvent(event: InsertPaymentRequestEvent): Promise<PaymentRequestEvent>;
 }
 
 export class DbStorage implements IStorage {
@@ -1574,6 +1592,95 @@ export class DbStorage implements IStorage {
       .orderBy(desc(monitoringHourlyReports.hourStart))
       .limit(1);
     return report;
+  }
+  
+  // ==================== PAYMENT REQUEST METHODS ====================
+  
+  async getPaymentRequests(userId?: string): Promise<PaymentRequest[]> {
+    if (userId) {
+      return await db
+        .select()
+        .from(paymentRequests)
+        .where(eq(paymentRequests.requesterId, userId))
+        .orderBy(desc(paymentRequests.requestedAt));
+    }
+    return await db
+      .select()
+      .from(paymentRequests)
+      .orderBy(desc(paymentRequests.requestedAt));
+  }
+  
+  async getPaymentRequest(id: number): Promise<PaymentRequest | undefined> {
+    const [request] = await db
+      .select()
+      .from(paymentRequests)
+      .where(eq(paymentRequests.id, id));
+    return request;
+  }
+  
+  async createPaymentRequest(request: InsertPaymentRequest): Promise<PaymentRequest> {
+    const [created] = await db.insert(paymentRequests).values(request).returning();
+    return created;
+  }
+  
+  async updatePaymentRequestStatus(
+    id: number, 
+    status: PaymentRequestStatus, 
+    reviewerId: string, 
+    note?: string
+  ): Promise<PaymentRequest | undefined> {
+    const [updated] = await db
+      .update(paymentRequests)
+      .set({
+        status,
+        adminReviewerId: reviewerId,
+        adminNote: note || null,
+        reviewedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(eq(paymentRequests.id, id))
+      .returning();
+    return updated;
+  }
+  
+  async cancelPaymentRequest(id: number, requesterId: string): Promise<PaymentRequest | undefined> {
+    const [updated] = await db
+      .update(paymentRequests)
+      .set({
+        status: "cancelled",
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(paymentRequests.id, id),
+          eq(paymentRequests.requesterId, requesterId),
+          eq(paymentRequests.status, "pending")
+        )
+      )
+      .returning();
+    return updated;
+  }
+  
+  async getPendingPaymentRequestCount(): Promise<number> {
+    const result = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(paymentRequests)
+      .where(eq(paymentRequests.status, "pending"));
+    return Number(result[0]?.count || 0);
+  }
+  
+  // Payment Request Event methods
+  async getPaymentRequestEvents(paymentRequestId: number): Promise<PaymentRequestEvent[]> {
+    return await db
+      .select()
+      .from(paymentRequestEvents)
+      .where(eq(paymentRequestEvents.paymentRequestId, paymentRequestId))
+      .orderBy(desc(paymentRequestEvents.createdAt));
+  }
+  
+  async createPaymentRequestEvent(event: InsertPaymentRequestEvent): Promise<PaymentRequestEvent> {
+    const [created] = await db.insert(paymentRequestEvents).values(event).returning();
+    return created;
   }
 }
 

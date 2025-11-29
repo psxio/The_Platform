@@ -13,7 +13,7 @@ import {
   DropdownMenuSeparator, 
   DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu";
-import { FileText, History as HistoryIcon, FileSearch, Database, CheckSquare, ClipboardList, LogOut, Settings, Loader2, Key, Combine, UserPlus, Users } from "lucide-react";
+import { FileText, History as HistoryIcon, FileSearch, Database, CheckSquare, ClipboardList, LogOut, Settings, Loader2, Key, Combine, UserPlus, Users, Monitor } from "lucide-react";
 import { NotificationBell } from "@/components/notification-bell";
 import { useAuth } from "@/hooks/useAuth";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -28,7 +28,9 @@ import ContentDashboard from "@/pages/content-dashboard";
 import AdminCodes from "@/pages/admin-codes";
 import AdminPendingMembers from "@/pages/admin-pending-members";
 import AdminContentUsers from "@/pages/admin-content-users";
+import AdminMonitoring from "@/pages/admin-monitoring";
 import ContentProfileSetup from "@/pages/content-profile-setup";
+import WorkerMonitoring from "@/pages/worker-monitoring";
 import RoleSelect from "@/pages/role-select";
 import AuthPage from "@/pages/auth";
 import InvitePage from "@/pages/invite";
@@ -95,6 +97,12 @@ function UserMenu() {
               <Link href="/admin/pending-members">
                 <UserPlus className="mr-2 h-4 w-4" />
                 Pending Members
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link href="/admin/monitoring">
+                <Monitor className="mr-2 h-4 w-4" />
+                Worker Monitoring
               </Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
@@ -266,6 +274,7 @@ function AuthenticatedRouter() {
         <>
           <Route path="/content" component={ContentDashboard} />
           <Route path="/content/profile-setup" component={ContentProfileSetup} />
+          <Route path="/content/monitoring" component={WorkerMonitoring} />
         </>
       )}
       
@@ -274,6 +283,7 @@ function AuthenticatedRouter() {
           <Route path="/admin/codes" component={AdminCodes} />
           <Route path="/admin/pending-members" component={AdminPendingMembers} />
           <Route path="/admin/content-users" component={AdminContentUsers} />
+          <Route path="/admin/monitoring" component={AdminMonitoring} />
         </>
       )}
       

@@ -23,7 +23,8 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Plus, ClipboardList, Users, Upload, Settings, FolderKanban, BarChart3, LayoutGrid, Columns3, Calendar, FileText, Image, Repeat, Clock, Download } from "lucide-react";
+import { Plus, ClipboardList, Users, Upload, Settings, FolderKanban, BarChart3, LayoutGrid, Columns3, Calendar, FileText, Image, Repeat, Clock, Download, Camera } from "lucide-react";
+import { Link } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 
@@ -74,6 +75,12 @@ export default function ContentDashboard() {
               </p>
             </div>
             <div className="flex items-center gap-2">
+            <Link href="/content/monitoring">
+              <Button variant="outline" size="sm" data-testid="button-monitoring">
+                <Camera className="h-4 w-4 mr-2" />
+                Monitoring
+              </Button>
+            </Link>
             {activeTab === "tasks" && (
               <>
                 <ToggleGroup 

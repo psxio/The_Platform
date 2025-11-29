@@ -37,6 +37,10 @@ The system utilizes a **PostgreSQL** database managed with **Drizzle ORM**. Key 
 -   `team_integration_settings`: Stores Telegram bot tokens and Discord webhook URLs for external notifications.
 -   `user_invites`: Manages team invitation tokens with role assignments and expiration.
 -   `user_onboarding`: Tracks first-time user onboarding completion status.
+-   `monitoring_consent`: Stores worker consent for monitoring activities (acknowledgments for screen capture, activity logging, hourly reports, data storage).
+-   `monitoring_sessions`: Tracks active and completed monitoring sessions per worker.
+-   `monitoring_screenshots`: Stores captured screenshots with OCR text, detected apps, and activity level.
+-   `monitoring_hourly_reports`: Hourly activity summaries with random screenshot selection for each hour.
 
 ### UI/UX Decisions
 -   **Color Schemes**: Leverages Shadcn UI's New York style for a modern and clean aesthetic.
@@ -65,6 +69,15 @@ The system utilizes a **PostgreSQL** database managed with **Drizzle ORM**. Key 
     -   External Integrations: Telegram Bot API and Discord webhooks for sending task notifications to external channels.
     -   Data Export: Full task data export in CSV and JSON formats for backup and analysis.
     -   Welcome Onboarding: First-time user welcome modal highlighting key features.
+    -   **Worker Monitoring**: Screen capture-based activity monitoring for content team workers:
+        -   Multi-step consent flow requiring acknowledgment of all monitoring activities before starting.
+        -   Browser-based screen capture using the Screen Capture API (workers must grant permission).
+        -   Random screenshot capture at 1-10 minute intervals during active sessions.
+        -   Local OCR using Tesseract.js to detect applications and activity (no AI API costs).
+        -   Hourly reports with random screenshot selection and activity summaries.
+        -   Persistent "Monitoring Active" banner when session is running.
+        -   Admin dashboard to view all worker sessions, screenshots, and hourly reports.
+        -   Routes: `/content/monitoring` (worker page), `/admin/monitoring` (admin dashboard).
 -   **Admin Features**: Invite code generation and management with detailed usage tracking (shows who used each code, when, and what role was granted), team invitation system via email, integration settings for Telegram/Discord.
 -   **Security**: Role-based access control, bcrypt hashing, server-side middleware for route protection.
 
@@ -76,3 +89,4 @@ The system utilizes a **PostgreSQL** database managed with **Drizzle ORM**. Key 
 -   **Database**: `Drizzle ORM`, `PostgreSQL` (`@neondatabase/serverless`)
 -   **Email**: `Nodemailer`
 -   **Google Integration**: Google APIs for Sheets (`google-auth-library`, `googleapis`) and Drive
+-   **OCR**: `tesseract.js` for local text recognition from screenshots (no AI API costs)

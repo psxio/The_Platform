@@ -41,6 +41,8 @@ The system utilizes a **PostgreSQL** database managed with **Drizzle ORM**. Key 
 -   `monitoring_sessions`: Tracks active and completed monitoring sessions per worker.
 -   `monitoring_screenshots`: Stores captured screenshots with OCR text, detected apps, and activity level.
 -   `monitoring_hourly_reports`: Hourly activity summaries with random screenshot selection for each hour.
+-   `payment_requests`: Payment requests submitted by content team members (amount, currency, reason, status, admin review details).
+-   `payment_request_events`: Audit trail for payment request status changes (created, approved, rejected, cancelled).
 
 ### UI/UX Decisions
 -   **Color Schemes**: Leverages Shadcn UI's New York style for a modern and clean aesthetic.
@@ -85,7 +87,15 @@ The system utilizes a **PostgreSQL** database managed with **Drizzle ORM**. Key 
         -   Persistent "Monitoring Active" banner when session is running.
         -   Admin dashboard to view all worker sessions, screenshots, and hourly reports.
         -   Routes: `/content/monitoring` (worker page), `/admin/monitoring` (admin dashboard).
--   **Admin Features**: Invite code generation and management with detailed usage tracking (shows who used each code, when, and what role was granted), team invitation system via email, integration settings for Telegram/Discord.
+    -   **Payment Requests**: Content team members can submit payment requests for missed or pending payments:
+        -   Submit requests with amount, currency (supports fiat and crypto), and reason.
+        -   Track request status (pending, approved, rejected, cancelled).
+        -   Cancel pending requests before admin review.
+        -   View history of all submitted requests with admin notes.
+        -   Admin approval workflow with notes and rejection reasons.
+        -   Notifications via in-app, Telegram, and Discord on status changes.
+        -   Routes: `/content` (Payments tab), `/admin/payments` (admin review dashboard).
+-   **Admin Features**: Invite code generation and management with detailed usage tracking (shows who used each code, when, and what role was granted), team invitation system via email, integration settings for Telegram/Discord, payment request management.
 -   **Security**: Role-based access control, bcrypt hashing, server-side middleware for route protection.
 
 ## External Dependencies

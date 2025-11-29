@@ -9,7 +9,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Users, UserPlus, RefreshCw, CheckCircle, XCircle, Clock, AlertTriangle, Loader2, UserCheck } from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Separator } from "@/components/ui/separator";
+import { Users, UserPlus, RefreshCw, CheckCircle, XCircle, Clock, AlertTriangle, Loader2, UserCheck, Eye, Mail, Globe, MessageSquare, Briefcase } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { format } from "date-fns";
@@ -32,14 +34,58 @@ interface ContentUserStatus {
   isProfileComplete: boolean;
 }
 
+interface UserProfileDetails {
+  user: {
+    id: string;
+    email: string;
+    firstName: string | null;
+    lastName: string | null;
+    profileImageUrl: string | null;
+    createdAt: string;
+  };
+  profile: {
+    id: number;
+    specialty: string | null;
+    contactHandle: string | null;
+    contactType: string | null;
+    portfolioUrl: string | null;
+    timezone: string | null;
+    availability: string | null;
+    bio: string | null;
+    isProfileComplete: boolean;
+  } | null;
+  directoryMember: {
+    id: number;
+    person: string;
+    email: string | null;
+    skill: string | null;
+    telegram: string | null;
+  } | null;
+  pendingRecord: {
+    id: number;
+    status: string;
+    specialty: string | null;
+    contactHandle: string | null;
+    timezone: string | null;
+    availability: string | null;
+  } | null;
+}
+
 export default function AdminContentUsers() {
   const { toast } = useToast();
   const [selectedUser, setSelectedUser] = useState<ContentUserStatus | null>(null);
   const [showAddDialog, setShowAddDialog] = useState(false);
+  const [showProfileDialog, setShowProfileDialog] = useState(false);
+  const [profileUserId, setProfileUserId] = useState<string | null>(null);
   const [skill, setSkill] = useState("");
 
   const { data: contentUsers, isLoading, error, refetch } = useQuery<ContentUserStatus[]>({
     queryKey: ["/api/admin/content-users"],
+  });
+
+  const { data: profileDetails, isLoading: isProfileLoading } = useQuery<UserProfileDetails>({
+    queryKey: ["/api/admin/content-users", profileUserId, "profile"],
+    enabled: !!profileUserId && showProfileDialog,
   });
 
   const backfillMutation = useMutation({
@@ -257,22 +303,36 @@ export default function AdminContentUsers() {
                       {format(new Date(user.createdAt), "MMM d, yyyy")}
                     </TableCell>
                     <TableCell className="text-right">
-                      {!user.isInDirectory && (
+                      <div className="flex items-center justify-end gap-2">
                         <Button
                           size="sm"
+                          variant="outline"
                           onClick={() => {
-                            setSelectedUser(user);
-                            setShowAddDialog(true);
+                            setProfileUserId(user.id);
+                            setShowProfileDialog(true);
                           }}
-                          data-testid={`button-add-to-team-${user.id}`}
+                          data-testid={`button-view-profile-${user.id}`}
                         >
-                          <UserPlus className="h-4 w-4 mr-2" />
-                          Add to Team
+                          <Eye className="h-4 w-4 mr-2" />
+                          View Profile
                         </Button>
-                      )}
-                      {user.isInDirectory && (
-                        <span className="text-sm text-muted-foreground">Already in team</span>
-                      )}
+                        {!user.isInDirectory && (
+                          <Button
+                            size="sm"
+                            onClick={() => {
+                              setSelectedUser(user);
+                              setShowAddDialog(true);
+                            }}
+                            data-testid={`button-add-to-team-${user.id}`}
+                          >
+                            <UserPlus className="h-4 w-4 mr-2" />
+                            Add to Team
+                          </Button>
+                        )}
+                        {user.isInDirectory && (
+                          <span className="text-sm text-muted-foreground">Already in team</span>
+                        )}
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -329,6 +389,181 @@ export default function AdminContentUsers() {
                 <UserPlus className="h-4 w-4 mr-2" />
               )}
               Add to Team
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showProfileDialog} onOpenChange={(open) => {
+        setShowProfileDialog(open);
+        if (!open) setProfileUserId(null);
+      }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Eye className="h-5 w-5" />
+              User Profile
+            </DialogTitle>
+          </DialogHeader>
+          
+          {isProfileLoading ? (
+            <div className="space-y-4 py-4">
+              <Skeleton className="h-16 w-full" />
+              <Skeleton className="h-24 w-full" />
+              <Skeleton className="h-16 w-full" />
+            </div>
+          ) : profileDetails ? (
+            <div className="space-y-6 py-4">
+              <div className="flex items-center gap-4">
+                <Avatar className="h-16 w-16">
+                  <AvatarImage src={profileDetails.user.profileImageUrl || undefined} />
+                  <AvatarFallback className="text-lg">
+                    {profileDetails.user.firstName?.[0] || profileDetails.user.email[0].toUpperCase()}
+                    {profileDetails.user.lastName?.[0] || ""}
+                  </AvatarFallback>
+                </Avatar>
+                <div>
+                  <h3 className="font-semibold text-lg">
+                    {[profileDetails.user.firstName, profileDetails.user.lastName].filter(Boolean).join(" ") || "No name set"}
+                  </h3>
+                  <p className="text-sm text-muted-foreground flex items-center gap-1">
+                    <Mail className="h-3 w-3" />
+                    {profileDetails.user.email}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Joined {format(new Date(profileDetails.user.createdAt), "MMMM d, yyyy")}
+                  </p>
+                </div>
+              </div>
+
+              <Separator />
+
+              {profileDetails.profile ? (
+                <div className="space-y-4">
+                  <h4 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">Profile Details</h4>
+                  
+                  {profileDetails.profile.bio && (
+                    <div>
+                      <Label className="text-xs text-muted-foreground">Bio</Label>
+                      <p className="text-sm">{profileDetails.profile.bio}</p>
+                    </div>
+                  )}
+                  
+                  <div className="grid grid-cols-2 gap-4">
+                    {profileDetails.profile.specialty && (
+                      <div>
+                        <Label className="text-xs text-muted-foreground flex items-center gap-1">
+                          <Briefcase className="h-3 w-3" /> Specialty
+                        </Label>
+                        <p className="text-sm">{profileDetails.profile.specialty}</p>
+                      </div>
+                    )}
+                    
+                    {profileDetails.profile.timezone && (
+                      <div>
+                        <Label className="text-xs text-muted-foreground flex items-center gap-1">
+                          <Globe className="h-3 w-3" /> Timezone
+                        </Label>
+                        <p className="text-sm">{profileDetails.profile.timezone}</p>
+                      </div>
+                    )}
+                    
+                    {profileDetails.profile.availability && (
+                      <div>
+                        <Label className="text-xs text-muted-foreground flex items-center gap-1">
+                          <Clock className="h-3 w-3" /> Availability
+                        </Label>
+                        <p className="text-sm">{profileDetails.profile.availability}</p>
+                      </div>
+                    )}
+                    
+                    {profileDetails.profile.contactHandle && (
+                      <div>
+                        <Label className="text-xs text-muted-foreground flex items-center gap-1">
+                          <MessageSquare className="h-3 w-3" /> Contact ({profileDetails.profile.contactType || "N/A"})
+                        </Label>
+                        <p className="text-sm">{profileDetails.profile.contactHandle}</p>
+                      </div>
+                    )}
+                  </div>
+                  
+                  {profileDetails.profile.portfolioUrl && (
+                    <div>
+                      <Label className="text-xs text-muted-foreground flex items-center gap-1">
+                        <Globe className="h-3 w-3" /> Portfolio
+                      </Label>
+                      <a 
+                        href={profileDetails.profile.portfolioUrl} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="text-sm text-primary hover:underline"
+                      >
+                        {profileDetails.profile.portfolioUrl}
+                      </a>
+                    </div>
+                  )}
+                  
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">Profile Status:</span>
+                    {profileDetails.profile.isProfileComplete ? (
+                      <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                        <CheckCircle className="h-3 w-3 mr-1" />
+                        Complete
+                      </Badge>
+                    ) : (
+                      <Badge variant="outline" className="border-amber-500 text-amber-600">
+                        <AlertTriangle className="h-3 w-3 mr-1" />
+                        Incomplete
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-6">
+                  <AlertTriangle className="h-10 w-10 text-amber-500 mx-auto mb-2" />
+                  <p className="text-muted-foreground">This user hasn't created a profile yet.</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    They need to log in and complete their profile to be assigned tasks.
+                  </p>
+                </div>
+              )}
+
+              {profileDetails.directoryMember && (
+                <>
+                  <Separator />
+                  <div className="space-y-2">
+                    <h4 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">Team Directory Entry</h4>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label className="text-xs text-muted-foreground">Display Name</Label>
+                        <p className="text-sm">{profileDetails.directoryMember.person}</p>
+                      </div>
+                      {profileDetails.directoryMember.skill && (
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Skill/Role</Label>
+                          <p className="text-sm">{profileDetails.directoryMember.skill}</p>
+                        </div>
+                      )}
+                      {profileDetails.directoryMember.telegram && (
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Telegram</Label>
+                          <p className="text-sm">{profileDetails.directoryMember.telegram}</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          ) : (
+            <div className="py-8 text-center">
+              <p className="text-muted-foreground">Failed to load profile details.</p>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowProfileDialog(false)}>
+              Close
             </Button>
           </DialogFooter>
         </DialogContent>

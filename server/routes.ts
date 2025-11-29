@@ -1809,6 +1809,51 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get specific user's profile details (admin only)
+  app.get("/api/admin/content-users/:userId/profile", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await storage.getUser(req.user.id);
+      if (!user || user.role !== "admin") {
+        return res.status(403).json({ error: "Only admins can view user profiles" });
+      }
+      
+      const { userId } = req.params;
+      const targetUser = await storage.getUser(userId);
+      if (!targetUser) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      
+      // Get content profile
+      const profile = await storage.getContentProfile(userId);
+      
+      // Get directory member info if exists
+      const directoryMembers = await storage.getDirectoryMembers();
+      const directoryMember = directoryMembers.find(
+        d => d.email?.toLowerCase() === targetUser.email?.toLowerCase()
+      );
+      
+      // Get pending content member info if exists
+      const pendingRecord = await storage.getPendingContentMember(userId);
+      
+      res.json({
+        user: {
+          id: targetUser.id,
+          email: targetUser.email,
+          firstName: targetUser.firstName,
+          lastName: targetUser.lastName,
+          profileImageUrl: targetUser.profileImageUrl,
+          createdAt: targetUser.createdAt,
+        },
+        profile: profile || null,
+        directoryMember: directoryMember || null,
+        pendingRecord: pendingRecord || null,
+      });
+    } catch (error) {
+      console.error("Error fetching user profile:", error);
+      res.status(500).json({ error: "Failed to fetch user profile" });
+    }
+  });
+
   // ================== CONTENT PROFILE ENDPOINTS ==================
   
   // Get current user's content profile

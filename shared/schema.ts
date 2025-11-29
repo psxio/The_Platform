@@ -356,6 +356,26 @@ export const insertAdminInviteCodeSchema = createInsertSchema(adminInviteCodes).
 export type InsertAdminInviteCode = z.infer<typeof insertAdminInviteCodeSchema>;
 export type AdminInviteCode = typeof adminInviteCodes.$inferSelect;
 
+// Invite code usage tracking - detailed record of each code use
+export const adminInviteCodeUses = pgTable("admin_invite_code_uses", {
+  id: serial("id").primaryKey(),
+  codeId: integer("code_id").notNull().references(() => adminInviteCodes.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  userEmail: varchar("user_email", { length: 255 }).notNull(),
+  userFirstName: varchar("user_first_name", { length: 255 }),
+  userLastName: varchar("user_last_name", { length: 255 }),
+  roleGranted: varchar("role_granted", { length: 20 }).notNull(),
+  usedAt: timestamp("used_at").defaultNow().notNull(),
+});
+
+export const insertAdminInviteCodeUseSchema = createInsertSchema(adminInviteCodeUses).omit({
+  id: true,
+  usedAt: true,
+});
+
+export type InsertAdminInviteCodeUse = z.infer<typeof insertAdminInviteCodeUseSchema>;
+export type AdminInviteCodeUse = typeof adminInviteCodeUses.$inferSelect;
+
 // ==================== ENHANCED CONTENTFLOWSTUDIO TABLES ====================
 
 // Task Templates - reusable task structures

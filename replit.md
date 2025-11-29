@@ -46,6 +46,13 @@ The system utilizes a **PostgreSQL** database managed with **Drizzle ORM**. Key 
 -   **Color Schemes**: Leverages Shadcn UI's New York style for a modern and clean aesthetic.
 -   **Templates**: Utilizes task templates for ContentFlowStudio to streamline task creation.
 -   **Design Approaches**: Implements multiple task views (Grid, Kanban, Calendar), visual indicators for task status (overdue, due soon), and an analytics dashboard for data visualization. Enhanced dialogs for task details integrate watchers, approvals, time tracking, subtasks, comments, and activity seamlessly.
+-   **Task Details Dialog**: Features inline editing with role-based permissions:
+    -   **Admin**: Full control over all fields (status, priority, assignee, due date, client, campaign, notes, description)
+    -   **Task Owner (assignedTo)**: Can edit status, notes, add/toggle subtasks, log time entries
+    -   **Task Assigner (assignedBy)**: Can reassign, change priority, due date, client, description, campaign
+    -   **Others**: View-only with ability to comment and watch
+    -   Visual permission badges indicate available actions for the current user
+    -   Quick status workflow buttons for common transitions (Start Work, Mark Complete)
 
 ### Feature Specifications
 -   **Web3 Wallet Tools**: Address comparison, EVM address extraction from various file types (CSV, TXT, JSON, Excel, PDF, ZIP archives), NFT collection management, comparison history, and CSV merge with deduplication.

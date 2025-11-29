@@ -797,3 +797,58 @@ export const insertMonitoringHourlyReportSchema = createInsertSchema(monitoringH
 
 export type InsertMonitoringHourlyReport = z.infer<typeof insertMonitoringHourlyReportSchema>;
 export type MonitoringHourlyReport = typeof monitoringHourlyReports.$inferSelect;
+
+// ==================== PAYMENT REQUEST TABLES ====================
+
+// Payment request statuses
+export const paymentRequestStatuses = ["pending", "approved", "rejected", "cancelled"] as const;
+export type PaymentRequestStatus = typeof paymentRequestStatuses[number];
+
+// Payment Requests - content team members can request payments for missed items
+export const paymentRequests = pgTable("payment_requests", {
+  id: serial("id").primaryKey(),
+  requesterId: varchar("requester_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  amount: text("amount").notNull(), // stored as text to support decimal formatting
+  currency: varchar("currency", { length: 10 }).notNull().default("USD"),
+  reason: text("reason").notNull(),
+  description: text("description"), // additional details
+  status: varchar("status", { length: 20 }).$type<PaymentRequestStatus>().notNull().default("pending"),
+  adminReviewerId: varchar("admin_reviewer_id").references(() => users.id, { onDelete: "set null" }),
+  adminNote: text("admin_note"), // note from admin when approving/rejecting
+  requestedAt: timestamp("requested_at").defaultNow().notNull(),
+  reviewedAt: timestamp("reviewed_at"),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertPaymentRequestSchema = createInsertSchema(paymentRequests).omit({
+  id: true,
+  requestedAt: true,
+  reviewedAt: true,
+  updatedAt: true,
+  status: true,
+  adminReviewerId: true,
+  adminNote: true,
+});
+
+export type InsertPaymentRequest = z.infer<typeof insertPaymentRequestSchema>;
+export type PaymentRequest = typeof paymentRequests.$inferSelect;
+
+// Payment Request Events - audit trail for status changes
+export const paymentRequestEvents = pgTable("payment_request_events", {
+  id: serial("id").primaryKey(),
+  paymentRequestId: integer("payment_request_id").notNull().references(() => paymentRequests.id, { onDelete: "cascade" }),
+  actorId: varchar("actor_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  eventType: varchar("event_type", { length: 30 }).notNull(), // created, approved, rejected, cancelled, updated
+  previousStatus: varchar("previous_status", { length: 20 }),
+  newStatus: varchar("new_status", { length: 20 }),
+  note: text("note"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertPaymentRequestEventSchema = createInsertSchema(paymentRequestEvents).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertPaymentRequestEvent = z.infer<typeof insertPaymentRequestEventSchema>;
+export type PaymentRequestEvent = typeof paymentRequestEvents.$inferSelect;

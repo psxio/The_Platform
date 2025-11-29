@@ -4572,6 +4572,89 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Admin: Get real-time activity feed (recent screenshots from all active workers)
+  app.get("/api/admin/monitoring/activity-feed", requireRole("admin"), async (req, res) => {
+    try {
+      const limit = parseInt(req.query.limit as string) || 20;
+      const activeSessions = await storage.getAllActiveMonitoringSessions();
+      
+      // Get recent screenshots from all active sessions
+      const allScreenshots: any[] = [];
+      
+      for (const session of activeSessions) {
+        const screenshots = await storage.getMonitoringScreenshots(session.id);
+        const user = await storage.getUser(session.userId);
+        
+        // Get the last few screenshots from each session
+        const recentScreenshots = screenshots.slice(-5).map(s => ({
+          id: s.id,
+          sessionId: session.id,
+          capturedAt: s.capturedAt,
+          thumbnailData: s.thumbnailData,
+          detectedApps: s.detectedApps,
+          activityLevel: s.activityLevel,
+          user: user ? {
+            id: user.id,
+            email: user.email,
+            firstName: user.firstName,
+            lastName: user.lastName,
+          } : null,
+        }));
+        
+        allScreenshots.push(...recentScreenshots);
+      }
+      
+      // Sort by capture time, most recent first
+      allScreenshots.sort((a, b) => 
+        new Date(b.capturedAt).getTime() - new Date(a.capturedAt).getTime()
+      );
+      
+      // Return limited results
+      res.json(allScreenshots.slice(0, limit));
+    } catch (error) {
+      console.error("Error fetching activity feed:", error);
+      res.status(500).json({ error: "Failed to fetch activity feed" });
+    }
+  });
+
+  // Admin: Get app usage summary across all monitoring
+  app.get("/api/admin/monitoring/app-summary", requireRole("admin"), async (req, res) => {
+    try {
+      const reports = await storage.getMonitoringHourlyReports();
+      
+      // Aggregate app usage across all reports
+      const appCounts: Record<string, number> = {};
+      let totalActiveMinutes = 0;
+      let totalIdleMinutes = 0;
+      
+      for (const report of reports) {
+        totalActiveMinutes += report.activeMinutes || 0;
+        totalIdleMinutes += report.idleMinutes || 0;
+        
+        if (report.topAppsDetected) {
+          for (const app of report.topAppsDetected) {
+            appCounts[app] = (appCounts[app] || 0) + 1;
+          }
+        }
+      }
+      
+      // Sort apps by usage count
+      const sortedApps = Object.entries(appCounts)
+        .sort(([, a], [, b]) => b - a)
+        .slice(0, 20);
+      
+      res.json({
+        topApps: sortedApps.map(([name, count]) => ({ name, count })),
+        totalActiveMinutes,
+        totalIdleMinutes,
+        totalReports: reports.length,
+      });
+    } catch (error) {
+      console.error("Error fetching app summary:", error);
+      res.status(500).json({ error: "Failed to fetch app summary" });
+    }
+  });
+
   // ==================== PAYMENT REQUEST ENDPOINTS ====================
 
   // Get payment requests - content users see their own, admins see all

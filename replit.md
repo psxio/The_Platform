@@ -80,12 +80,20 @@ The system utilizes a **PostgreSQL** database managed with **Drizzle ORM**. Key 
     -   Welcome Onboarding: First-time user welcome modal highlighting key features.
     -   **Worker Monitoring**: Screen capture-based activity monitoring for content team workers:
         -   Multi-step consent flow requiring acknowledgment of all monitoring activities before starting.
-        -   Browser-based screen capture using the Screen Capture API (workers must grant permission).
+        -   Browser-based screen capture using the Screen Capture API (workers must grant permission for full screen).
         -   Random screenshot capture at 1-10 minute intervals during active sessions.
         -   Local OCR using Tesseract.js to detect applications and activity (no AI API costs).
+        -   Enhanced app categorization system (Productivity, Communication, Development, Entertainment, Social, Other).
         -   Hourly reports with random screenshot selection and activity summaries.
         -   Persistent "Monitoring Active" banner when session is running.
-        -   Admin dashboard to view all worker sessions, screenshots, and hourly reports.
+        -   Monitoring button accessible from main navigation bar for content users.
+        -   Active session indicator (green pulse) when monitoring is running.
+        -   Admin dashboard with enhanced features:
+            -   Real-time activity feed with auto-refresh (10-second intervals).
+            -   App usage analytics with category breakdown and visual progress bars.
+            -   Idle worker alerts when workers show low activity.
+            -   Overall activity rate progress indicator.
+            -   App category visualization with color-coded badges.
         -   Routes: `/content/monitoring` (worker page), `/admin/monitoring` (admin dashboard).
     -   **Payment Requests**: Content team members can submit payment requests for missed or pending payments:
         -   Submit requests with amount, currency (supports fiat and crypto), and reason.

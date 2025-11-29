@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -8,6 +8,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Progress } from "@/components/ui/progress";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { 
   Monitor, 
   Camera, 
@@ -18,9 +20,19 @@ import {
   Image,
   Calendar,
   Activity,
-  ChevronRight
+  ChevronRight,
+  Zap,
+  AlertTriangle,
+  TrendingUp,
+  Coffee,
+  Code,
+  MessageSquare,
+  Tv,
+  Share2,
+  RefreshCw
 } from "lucide-react";
-import { formatDistanceToNow, format } from "date-fns";
+import { formatDistanceToNow, format, differenceInMinutes } from "date-fns";
+import { getCategoryColor, getCategoryLabel, type AppCategory } from "@/lib/screen-capture";
 
 interface UserInfo {
   id: string;
@@ -77,6 +89,82 @@ interface HourlyReport {
   } | null;
 }
 
+interface ActivityFeedItem {
+  id: number;
+  sessionId: number;
+  capturedAt: string;
+  thumbnailData: string | null;
+  detectedApps: string[] | null;
+  activityLevel: string;
+  user: UserInfo | null;
+}
+
+interface AppSummary {
+  topApps: { name: string; count: number }[];
+  totalActiveMinutes: number;
+  totalIdleMinutes: number;
+  totalReports: number;
+}
+
+const appCategories: Record<string, AppCategory> = {
+  'Visual Studio Code': 'development',
+  'Chrome': 'productivity',
+  'Firefox': 'productivity',
+  'Safari': 'productivity',
+  'Slack': 'communication',
+  'Discord': 'communication',
+  'Microsoft Teams': 'communication',
+  'Zoom': 'communication',
+  'Terminal': 'development',
+  'Figma': 'productivity',
+  'Notion': 'productivity',
+  'Microsoft Word': 'productivity',
+  'Microsoft Excel': 'productivity',
+  'Google Docs': 'productivity',
+  'Google Sheets': 'productivity',
+  'Gmail': 'communication',
+  'Outlook': 'communication',
+  'YouTube': 'entertainment',
+  'Netflix': 'entertainment',
+  'Spotify': 'entertainment',
+  'Twitch': 'entertainment',
+  'Twitter': 'social',
+  'LinkedIn': 'social',
+  'Facebook': 'social',
+  'Instagram': 'social',
+  'Reddit': 'social',
+  'GitHub': 'development',
+  'GitLab': 'development',
+  'Jira': 'productivity',
+  'Trello': 'productivity',
+  'Asana': 'productivity',
+  'Replit': 'development',
+  'AWS Console': 'development',
+  'Google Cloud': 'development',
+  'Azure': 'development',
+  'Postman': 'development',
+  'Sublime Text': 'development',
+  'IntelliJ': 'development',
+  'WebStorm': 'development',
+  'PyCharm': 'development',
+  'Cursor': 'development',
+};
+
+function getAppCategory(appName: string): AppCategory {
+  return appCategories[appName] || 'other';
+}
+
+function getCategoryIcon(category: AppCategory) {
+  switch (category) {
+    case 'productivity': return TrendingUp;
+    case 'communication': return MessageSquare;
+    case 'entertainment': return Tv;
+    case 'development': return Code;
+    case 'social': return Share2;
+    default: return Activity;
+  }
+}
+
 function getInitials(user: UserInfo | null): string {
   if (!user) return "?";
   return [user.firstName, user.lastName]
@@ -97,9 +185,9 @@ export default function AdminMonitoring() {
   const [showScreenshotDialog, setShowScreenshotDialog] = useState(false);
   const [showSessionDialog, setShowSessionDialog] = useState(false);
 
-  const { data: activeSessions, isLoading: isLoadingActive } = useQuery<MonitoringSession[]>({
+  const { data: activeSessions, isLoading: isLoadingActive, refetch: refetchActive } = useQuery<MonitoringSession[]>({
     queryKey: ["/api/admin/monitoring/sessions/active"],
-    refetchInterval: 30000,
+    refetchInterval: 15000,
   });
 
   const { data: allSessions, isLoading: isLoadingSessions } = useQuery<MonitoringSession[]>({
@@ -109,6 +197,26 @@ export default function AdminMonitoring() {
   const { data: reports, isLoading: isLoadingReports } = useQuery<HourlyReport[]>({
     queryKey: ["/api/admin/monitoring/reports"],
   });
+
+  const { data: activityFeed, isLoading: isLoadingFeed, refetch: refetchFeed } = useQuery<ActivityFeedItem[]>({
+    queryKey: ["/api/admin/monitoring/activity-feed"],
+    refetchInterval: 10000,
+  });
+
+  const { data: appSummary, isLoading: isLoadingSummary } = useQuery<AppSummary>({
+    queryKey: ["/api/admin/monitoring/app-summary"],
+    refetchInterval: 60000,
+  });
+
+  // Check for idle workers - workers with sessions longer than 30 min but very few screenshots
+  // This is a rough heuristic; proper idle detection would need last screenshot timestamp
+  const idleWorkers = activeSessions?.filter(session => {
+    const sessionDurationMinutes = differenceInMinutes(new Date(), new Date(session.startedAt));
+    // Expected: roughly 1 screenshot per 5-10 minutes on average
+    // Alert if session is > 30 min and has fewer than expected screenshots
+    const expectedMinScreenshots = Math.floor(sessionDurationMinutes / 10);
+    return sessionDurationMinutes > 30 && session.screenshotCount < expectedMinScreenshots;
+  }) || [];
 
   const { data: sessionScreenshots, isLoading: isLoadingScreenshots } = useQuery<ScreenshotSummary[]>({
     queryKey: ["/api/admin/monitoring/session", selectedSession?.id, "screenshots"],
@@ -144,15 +252,26 @@ export default function AdminMonitoring() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      {idleWorkers.length > 0 && (
+        <Alert variant="destructive">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Idle Worker Alert</AlertTitle>
+          <AlertDescription>
+            {idleWorkers.length} worker{idleWorkers.length > 1 ? 's are' : ' is'} showing low activity. 
+            Consider checking on: {idleWorkers.map(w => getUserName(w.user)).join(', ')}
+          </AlertDescription>
+        </Alert>
+      )}
+
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <Card>
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-muted-foreground">Active Sessions</p>
-                <p className="text-3xl font-bold">{activeSessions?.length || 0}</p>
+                <p className="text-3xl font-bold text-green-600">{activeSessions?.length || 0}</p>
               </div>
-              <Activity className="h-8 w-8 text-primary" />
+              <Activity className="h-8 w-8 text-green-500" />
             </div>
           </CardContent>
         </Card>
@@ -160,10 +279,21 @@ export default function AdminMonitoring() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Total Sessions</p>
-                <p className="text-3xl font-bold">{allSessions?.length || 0}</p>
+                <p className="text-sm text-muted-foreground">Total Active Time</p>
+                <p className="text-3xl font-bold">{Math.round((appSummary?.totalActiveMinutes || 0) / 60)}h</p>
               </div>
-              <Clock className="h-8 w-8 text-muted-foreground" />
+              <TrendingUp className="h-8 w-8 text-blue-500" />
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted-foreground">Total Idle Time</p>
+                <p className="text-3xl font-bold text-yellow-600">{Math.round((appSummary?.totalIdleMinutes || 0) / 60)}h</p>
+              </div>
+              <Coffee className="h-8 w-8 text-yellow-500" />
             </div>
           </CardContent>
         </Card>
@@ -180,21 +310,257 @@ export default function AdminMonitoring() {
         </Card>
       </div>
 
-      <Tabs defaultValue="active" className="space-y-4">
-        <TabsList>
+      {appSummary && appSummary.totalActiveMinutes + appSummary.totalIdleMinutes > 0 && (
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-medium">Overall Activity Rate</span>
+              <span className="text-sm text-muted-foreground">
+                {Math.round((appSummary.totalActiveMinutes / (appSummary.totalActiveMinutes + appSummary.totalIdleMinutes)) * 100)}% active
+              </span>
+            </div>
+            <Progress 
+              value={(appSummary.totalActiveMinutes / (appSummary.totalActiveMinutes + appSummary.totalIdleMinutes)) * 100} 
+              className="h-2"
+            />
+          </CardContent>
+        </Card>
+      )}
+
+      <Tabs defaultValue="feed" className="space-y-4">
+        <TabsList className="flex flex-wrap gap-1">
+          <TabsTrigger value="feed" className="flex items-center gap-2">
+            <Zap className="h-4 w-4" />
+            Live Feed
+          </TabsTrigger>
           <TabsTrigger value="active" className="flex items-center gap-2">
             <Activity className="h-4 w-4" />
-            Active Now ({activeSessions?.length || 0})
+            Active ({activeSessions?.length || 0})
+          </TabsTrigger>
+          <TabsTrigger value="apps" className="flex items-center gap-2">
+            <TrendingUp className="h-4 w-4" />
+            App Usage
           </TabsTrigger>
           <TabsTrigger value="sessions" className="flex items-center gap-2">
             <Clock className="h-4 w-4" />
-            All Sessions
+            Sessions
           </TabsTrigger>
           <TabsTrigger value="reports" className="flex items-center gap-2">
             <BarChart3 className="h-4 w-4" />
-            Hourly Reports
+            Reports
           </TabsTrigger>
         </TabsList>
+
+        <TabsContent value="feed" className="space-y-4">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 gap-2">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <Zap className="h-5 w-5 text-primary" />
+                  Real-Time Activity Feed
+                </CardTitle>
+                <CardDescription>
+                  Live updates from all active monitoring sessions
+                </CardDescription>
+              </div>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={() => refetchFeed()}
+                data-testid="button-refresh-feed"
+              >
+                <RefreshCw className="h-4 w-4 mr-1" />
+                Refresh
+              </Button>
+            </CardHeader>
+            <CardContent>
+              {isLoadingFeed ? (
+                <div className="space-y-4">
+                  {[1, 2, 3].map(i => (
+                    <Skeleton key={i} className="h-24 w-full" />
+                  ))}
+                </div>
+              ) : activityFeed?.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Camera className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p>No recent activity. Start monitoring to see live updates.</p>
+                </div>
+              ) : (
+                <ScrollArea className="h-[500px]">
+                  <div className="space-y-3">
+                    {activityFeed?.map((item) => (
+                      <div 
+                        key={item.id}
+                        className="flex gap-4 p-3 rounded-lg bg-muted/50 hover-elevate cursor-pointer"
+                        onClick={() => handleViewScreenshot(item.id)}
+                      >
+                        {item.thumbnailData ? (
+                          <div className="w-32 h-20 rounded-md overflow-hidden bg-muted flex-shrink-0">
+                            <img 
+                              src={item.thumbnailData}
+                              alt="Screenshot"
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+                        ) : (
+                          <div className="w-32 h-20 rounded-md bg-muted flex items-center justify-center flex-shrink-0">
+                            <Image className="h-6 w-6 text-muted-foreground" />
+                          </div>
+                        )}
+                        
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between gap-2 mb-2">
+                            <div className="flex items-center gap-2">
+                              <Avatar className="h-6 w-6">
+                                <AvatarFallback className="text-xs">
+                                  {getInitials(item.user)}
+                                </AvatarFallback>
+                              </Avatar>
+                              <span className="text-sm font-medium truncate">
+                                {getUserName(item.user)}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2 flex-shrink-0">
+                              <Badge 
+                                variant={item.activityLevel === 'active' ? 'default' : 'secondary'}
+                                className={
+                                  item.activityLevel === 'active' 
+                                    ? 'bg-green-500 text-white' 
+                                    : item.activityLevel === 'idle'
+                                    ? 'bg-yellow-500 text-white'
+                                    : ''
+                                }
+                              >
+                                {item.activityLevel}
+                              </Badge>
+                              <span className="text-xs text-muted-foreground">
+                                {formatDistanceToNow(new Date(item.capturedAt), { addSuffix: true })}
+                              </span>
+                            </div>
+                          </div>
+                          
+                          {item.detectedApps && item.detectedApps.length > 0 && (
+                            <div className="flex flex-wrap gap-1">
+                              {item.detectedApps.slice(0, 4).map(app => {
+                                const category = getAppCategory(app);
+                                return (
+                                  <Badge 
+                                    key={app} 
+                                    variant="outline" 
+                                    className={`text-xs ${getCategoryColor(category)} text-white border-0`}
+                                  >
+                                    {app}
+                                  </Badge>
+                                );
+                              })}
+                              {item.detectedApps.length > 4 && (
+                                <Badge variant="outline" className="text-xs">
+                                  +{item.detectedApps.length - 4} more
+                                </Badge>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="apps" className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Top Applications</CardTitle>
+                <CardDescription>Most frequently detected applications across all sessions</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {isLoadingSummary ? (
+                  <Skeleton className="h-64 w-full" />
+                ) : appSummary?.topApps.length === 0 ? (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <Code className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <p>No app usage data yet</p>
+                  </div>
+                ) : (
+                  <ScrollArea className="h-[300px]">
+                    <div className="space-y-3">
+                      {appSummary?.topApps.map((app, index) => {
+                        const category = getAppCategory(app.name);
+                        const CategoryIcon = getCategoryIcon(category);
+                        const maxCount = appSummary.topApps[0]?.count || 1;
+                        
+                        return (
+                          <div key={app.name} className="space-y-1">
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <div className={`p-1 rounded ${getCategoryColor(category)}`}>
+                                  <CategoryIcon className="h-3 w-3 text-white" />
+                                </div>
+                                <span className="text-sm font-medium">{app.name}</span>
+                                <Badge variant="secondary" className="text-xs">
+                                  {getCategoryLabel(category)}
+                                </Badge>
+                              </div>
+                              <span className="text-sm text-muted-foreground">{app.count}x</span>
+                            </div>
+                            <Progress value={(app.count / maxCount) * 100} className="h-1.5" />
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </ScrollArea>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Activity by Category</CardTitle>
+                <CardDescription>Application usage grouped by category</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {isLoadingSummary ? (
+                  <Skeleton className="h-64 w-full" />
+                ) : (
+                  <div className="space-y-4">
+                    {(['productivity', 'development', 'communication', 'entertainment', 'social'] as AppCategory[]).map(category => {
+                      const appsInCategory = appSummary?.topApps.filter(app => getAppCategory(app.name) === category) || [];
+                      const totalCount = appsInCategory.reduce((sum, app) => sum + app.count, 0);
+                      const CategoryIcon = getCategoryIcon(category);
+                      
+                      if (totalCount === 0) return null;
+                      
+                      return (
+                        <div key={category} className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <div className={`p-1.5 rounded ${getCategoryColor(category)}`}>
+                                <CategoryIcon className="h-4 w-4 text-white" />
+                              </div>
+                              <span className="font-medium">{getCategoryLabel(category)}</span>
+                            </div>
+                            <span className="text-sm text-muted-foreground">{totalCount} detections</span>
+                          </div>
+                          <div className="flex flex-wrap gap-1 pl-8">
+                            {appsInCategory.slice(0, 5).map(app => (
+                              <Badge key={app.name} variant="outline" className="text-xs">
+                                {app.name} ({app.count})
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
 
         <TabsContent value="active" className="space-y-4">
           {isLoadingActive ? (

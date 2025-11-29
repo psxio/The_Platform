@@ -13,7 +13,8 @@ import {
   DropdownMenuSeparator, 
   DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu";
-import { FileText, History as HistoryIcon, FileSearch, Database, CheckSquare, ClipboardList, LogOut, Settings, Loader2, Key, Combine, UserPlus, Users, Monitor, DollarSign } from "lucide-react";
+import { FileText, History as HistoryIcon, FileSearch, Database, CheckSquare, ClipboardList, LogOut, Settings, Loader2, Key, Combine, UserPlus, Users, Monitor, DollarSign, Camera } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
 import { NotificationBell } from "@/components/notification-bell";
 import { useAuth } from "@/hooks/useAuth";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -143,6 +144,14 @@ function Nav() {
   const showWeb3 = userRole === "web3" || userRole === "admin";
   const showContent = userRole === "content" || userRole === "admin";
   
+  const { data: sessionData } = useQuery<{ session: { id: number; status: string } | null }>({
+    queryKey: ["/api/monitoring/session/active"],
+    enabled: showContent,
+    refetchInterval: 30000,
+  });
+  
+  const hasActiveSession = sessionData?.session?.status === "active";
+  
   return (
     <nav className="border-b">
       <div className="max-w-6xl mx-auto px-4 md:px-6 py-4">
@@ -214,16 +223,32 @@ function Nav() {
             )}
             
             {showContent && (
-              <Link href="/content">
-                <Button 
-                  variant={location === "/content" ? "default" : "ghost"}
-                  size="sm"
-                  data-testid="nav-content"
-                >
-                  <ClipboardList className="w-4 h-4 mr-2" />
-                  Content
-                </Button>
-              </Link>
+              <>
+                <Link href="/content">
+                  <Button 
+                    variant={location === "/content" ? "default" : "ghost"}
+                    size="sm"
+                    data-testid="nav-content"
+                  >
+                    <ClipboardList className="w-4 h-4 mr-2" />
+                    Content
+                  </Button>
+                </Link>
+                <Link href="/content/monitoring">
+                  <Button 
+                    variant={location === "/content/monitoring" ? "default" : "ghost"}
+                    size="sm"
+                    className={hasActiveSession ? "relative" : ""}
+                    data-testid="nav-monitoring"
+                  >
+                    <Camera className={`w-4 h-4 mr-2 ${hasActiveSession ? "text-green-500 animate-pulse" : ""}`} />
+                    Monitoring
+                    {hasActiveSession && (
+                      <span className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-green-500 border-2 border-background" />
+                    )}
+                  </Button>
+                </Link>
+              </>
             )}
           </div>
           

@@ -142,40 +142,64 @@ export async function captureScreenshot(): Promise<CaptureResult | null> {
   }
 }
 
+export type AppCategory = 'productivity' | 'communication' | 'entertainment' | 'development' | 'social' | 'other';
+
+export interface DetectedApp {
+  name: string;
+  category: AppCategory;
+}
+
+const appPatterns: Record<string, { patterns: RegExp[]; category: AppCategory }> = {
+  'Visual Studio Code': { patterns: [/VS Code|VSCode|Visual Studio Code/i], category: 'development' },
+  'Chrome': { patterns: [/Google Chrome|Chrome/i], category: 'productivity' },
+  'Firefox': { patterns: [/Mozilla Firefox|Firefox/i], category: 'productivity' },
+  'Safari': { patterns: [/Safari/i], category: 'productivity' },
+  'Slack': { patterns: [/Slack/i], category: 'communication' },
+  'Discord': { patterns: [/Discord/i], category: 'communication' },
+  'Microsoft Teams': { patterns: [/Microsoft Teams|Teams/i], category: 'communication' },
+  'Zoom': { patterns: [/Zoom Meeting|Zoom/i], category: 'communication' },
+  'Terminal': { patterns: [/Terminal|bash|zsh|cmd|PowerShell/i], category: 'development' },
+  'Figma': { patterns: [/Figma/i], category: 'productivity' },
+  'Notion': { patterns: [/Notion/i], category: 'productivity' },
+  'Microsoft Word': { patterns: [/Microsoft Word|Word/i], category: 'productivity' },
+  'Microsoft Excel': { patterns: [/Microsoft Excel|Excel/i], category: 'productivity' },
+  'Google Docs': { patterns: [/Google Docs/i], category: 'productivity' },
+  'Google Sheets': { patterns: [/Google Sheets/i], category: 'productivity' },
+  'Gmail': { patterns: [/Gmail/i], category: 'communication' },
+  'Outlook': { patterns: [/Outlook/i], category: 'communication' },
+  'YouTube': { patterns: [/YouTube/i], category: 'entertainment' },
+  'Netflix': { patterns: [/Netflix/i], category: 'entertainment' },
+  'Spotify': { patterns: [/Spotify/i], category: 'entertainment' },
+  'Twitch': { patterns: [/Twitch/i], category: 'entertainment' },
+  'Twitter': { patterns: [/Twitter|X\.com/i], category: 'social' },
+  'LinkedIn': { patterns: [/LinkedIn/i], category: 'social' },
+  'Facebook': { patterns: [/Facebook/i], category: 'social' },
+  'Instagram': { patterns: [/Instagram/i], category: 'social' },
+  'Reddit': { patterns: [/Reddit/i], category: 'social' },
+  'GitHub': { patterns: [/GitHub/i], category: 'development' },
+  'GitLab': { patterns: [/GitLab/i], category: 'development' },
+  'Jira': { patterns: [/Jira/i], category: 'productivity' },
+  'Trello': { patterns: [/Trello/i], category: 'productivity' },
+  'Asana': { patterns: [/Asana/i], category: 'productivity' },
+  'Replit': { patterns: [/Replit/i], category: 'development' },
+  'AWS Console': { patterns: [/AWS|Amazon Web Services/i], category: 'development' },
+  'Google Cloud': { patterns: [/Google Cloud|GCP/i], category: 'development' },
+  'Azure': { patterns: [/Azure/i], category: 'development' },
+  'Postman': { patterns: [/Postman/i], category: 'development' },
+  'Sublime Text': { patterns: [/Sublime Text/i], category: 'development' },
+  'IntelliJ': { patterns: [/IntelliJ|JetBrains/i], category: 'development' },
+  'WebStorm': { patterns: [/WebStorm/i], category: 'development' },
+  'PyCharm': { patterns: [/PyCharm/i], category: 'development' },
+  'Cursor': { patterns: [/Cursor/i], category: 'development' },
+};
+
 function detectApplicationsFromText(text: string | null): string[] {
   if (!text) return [];
 
-  const appPatterns: Record<string, RegExp[]> = {
-    'Visual Studio Code': [/VS Code|VSCode|Visual Studio Code/i],
-    'Chrome': [/Google Chrome|Chrome/i],
-    'Firefox': [/Mozilla Firefox|Firefox/i],
-    'Safari': [/Safari/i],
-    'Slack': [/Slack/i],
-    'Discord': [/Discord/i],
-    'Microsoft Teams': [/Microsoft Teams|Teams/i],
-    'Zoom': [/Zoom Meeting|Zoom/i],
-    'Terminal': [/Terminal|bash|zsh|cmd|PowerShell/i],
-    'Figma': [/Figma/i],
-    'Notion': [/Notion/i],
-    'Microsoft Word': [/Microsoft Word|Word/i],
-    'Microsoft Excel': [/Microsoft Excel|Excel/i],
-    'Google Docs': [/Google Docs/i],
-    'Google Sheets': [/Google Sheets/i],
-    'Gmail': [/Gmail/i],
-    'Outlook': [/Outlook/i],
-    'YouTube': [/YouTube/i],
-    'Twitter': [/Twitter|X\.com/i],
-    'LinkedIn': [/LinkedIn/i],
-    'GitHub': [/GitHub/i],
-    'Jira': [/Jira/i],
-    'Trello': [/Trello/i],
-    'Asana': [/Asana/i],
-  };
-
   const detected: string[] = [];
   
-  for (const [app, patterns] of Object.entries(appPatterns)) {
-    for (const pattern of patterns) {
+  for (const [app, config] of Object.entries(appPatterns)) {
+    for (const pattern of config.patterns) {
       if (pattern.test(text)) {
         detected.push(app);
         break;
@@ -184,6 +208,45 @@ function detectApplicationsFromText(text: string | null): string[] {
   }
 
   return Array.from(new Set(detected));
+}
+
+export function detectApplicationsWithCategories(text: string | null): DetectedApp[] {
+  if (!text) return [];
+
+  const detected: DetectedApp[] = [];
+  
+  for (const [app, config] of Object.entries(appPatterns)) {
+    for (const pattern of config.patterns) {
+      if (pattern.test(text)) {
+        detected.push({ name: app, category: config.category });
+        break;
+      }
+    }
+  }
+
+  return detected;
+}
+
+export function getCategoryColor(category: AppCategory): string {
+  switch (category) {
+    case 'productivity': return 'bg-blue-500';
+    case 'communication': return 'bg-green-500';
+    case 'entertainment': return 'bg-yellow-500';
+    case 'development': return 'bg-purple-500';
+    case 'social': return 'bg-pink-500';
+    default: return 'bg-gray-500';
+  }
+}
+
+export function getCategoryLabel(category: AppCategory): string {
+  switch (category) {
+    case 'productivity': return 'Productivity';
+    case 'communication': return 'Communication';
+    case 'entertainment': return 'Entertainment';
+    case 'development': return 'Development';
+    case 'social': return 'Social Media';
+    default: return 'Other';
+  }
 }
 
 function detectActivityLevel(text: string | null): 'active' | 'idle' | 'unknown' {

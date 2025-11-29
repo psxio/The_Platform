@@ -1499,6 +1499,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Check profile completion status if approved
       if (pendingMember.status === "approved") {
         const profile = await storage.getContentProfile(req.user.id);
+        
+        // Create a notification for users with incomplete profiles (once per day max)
+        if (!profile?.isProfileComplete) {
+          try {
+            // Check if we already sent a reminder today
+            const existingNotifications = await storage.getNotifications(req.user.id);
+            const todayStart = new Date();
+            todayStart.setHours(0, 0, 0, 0);
+            
+            const alreadyNotifiedToday = existingNotifications.some(n => {
+              if (n.type !== "profile_incomplete" || !n.createdAt) return false;
+              const notifDate = new Date(n.createdAt);
+              return notifDate.getTime() >= todayStart.getTime();
+            });
+            
+            if (!alreadyNotifiedToday) {
+              await storage.createNotification({
+                userId: req.user.id,
+                type: "profile_incomplete",
+                title: "Complete Your Profile",
+                message: "Please complete your profile with your specialty, timezone, and availability so you can be assigned tasks.",
+                link: "/content/profile",
+              });
+            }
+          } catch (notifError) {
+            console.error("Error creating profile incomplete notification:", notifError);
+          }
+        }
+        
         return res.json({
           status: "approved",
           profileComplete: profile?.isProfileComplete || false,
@@ -1810,13 +1839,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get specific user's profile details (admin only)
-  app.get("/api/admin/content-users/:userId/profile", isAuthenticated, async (req: any, res) => {
+  app.get("/api/admin/content-users/:userId/profile", requireRole("admin"), async (req: any, res) => {
     try {
-      const user = await storage.getUser(req.user.id);
-      if (!user || user.role !== "admin") {
-        return res.status(403).json({ error: "Only admins can view user profiles" });
-      }
-      
       const { userId } = req.params;
       const targetUser = await storage.getUser(userId);
       if (!targetUser) {

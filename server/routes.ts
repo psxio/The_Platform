@@ -1243,25 +1243,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Valid role is required (web3, content, or admin)" });
       }
       
-      // All roles require a valid invite code
-      if (!inviteCode) {
-        return res.status(400).json({ error: `Invite code is required for ${role} access` });
+      // Get the current user to check for bootstrap admin
+      const currentUser = await storage.getUser(userId);
+      if (!currentUser) {
+        return res.status(404).json({ error: "User not found" });
       }
       
-      // Check for initial admin code from environment variable (admin only)
-      const initialAdminCode = process.env.INITIAL_ADMIN_CODE;
-      if (role === "admin" && initialAdminCode && inviteCode === initialAdminCode) {
-        // Use the initial code - it can only be used once
-        // After first use, they should generate codes for others
+      // Check for bootstrap admin email (super admin bypass for initial setup)
+      const bootstrapAdminEmail = process.env.BOOTSTRAP_ADMIN_EMAIL;
+      const isBootstrapAdmin = role === "admin" && 
+                               bootstrapAdminEmail && 
+                               currentUser.email.toLowerCase() === bootstrapAdminEmail.toLowerCase();
+      
+      if (isBootstrapAdmin) {
+        // Bootstrap admin can set their role without a code
+        console.log(`Bootstrap admin access granted to ${currentUser.email}`);
       } else {
-        // Check database for valid invite code for the requested role
-        const validCode = await storage.getValidInviteCode(inviteCode, role);
-        if (!validCode) {
-          return res.status(400).json({ error: `Invalid or expired invite code for ${role} access` });
+        // All other users require a valid invite code
+        if (!inviteCode) {
+          return res.status(400).json({ error: `Invite code is required for ${role} access` });
         }
         
-        // Mark the code as used
-        await storage.useInviteCode(inviteCode, userId);
+        // Check for initial admin code from environment variable (admin only)
+        const initialAdminCode = process.env.INITIAL_ADMIN_CODE;
+        if (role === "admin" && initialAdminCode && inviteCode === initialAdminCode) {
+          // Use the initial code - it can only be used once
+          // After first use, they should generate codes for others
+        } else {
+          // Check database for valid invite code for the requested role
+          const validCode = await storage.getValidInviteCode(inviteCode, role);
+          if (!validCode) {
+            return res.status(400).json({ error: `Invalid or expired invite code for ${role} access` });
+          }
+          
+          // Mark the code as used
+          await storage.useInviteCode(inviteCode, userId);
+        }
       }
       
       const user = await storage.updateUserRole(userId, role);
@@ -1354,6 +1371,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error deactivating invite code:", error);
       res.status(500).json({ error: "Failed to deactivate invite code" });
+    }
+  });
+
+  // Check if current user is a bootstrap admin (no invite code required)
+  app.get("/api/auth/bootstrap-check", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await storage.getUser(req.user.id);
+      if (!user) {
+        return res.json({ isBootstrapAdmin: false });
+      }
+      
+      const bootstrapAdminEmail = process.env.BOOTSTRAP_ADMIN_EMAIL;
+      const isBootstrapAdmin = bootstrapAdminEmail && 
+                               user.email.toLowerCase() === bootstrapAdminEmail.toLowerCase();
+      
+      res.json({ isBootstrapAdmin });
+    } catch (error) {
+      console.error("Error checking bootstrap admin:", error);
+      res.json({ isBootstrapAdmin: false });
     }
   });
 

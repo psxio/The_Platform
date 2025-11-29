@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useState, useEffect } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Wallet, FileText, Shield, Loader2, Key, Lock } from "lucide-react";
+import { Wallet, FileText, Shield, Loader2, Key, Lock, Star } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { UserRole } from "@shared/schema";
@@ -49,6 +49,12 @@ export default function RoleSelect() {
   const [showCodeDialog, setShowCodeDialog] = useState(false);
   const [inviteCode, setInviteCode] = useState("");
 
+  // Check if the current user is a bootstrap admin
+  const { data: bootstrapCheck } = useQuery<{ isBootstrapAdmin: boolean }>({
+    queryKey: ["/api/auth/bootstrap-check"],
+  });
+  const isBootstrapAdmin = bootstrapCheck?.isBootstrapAdmin ?? false;
+
   const updateRoleMutation = useMutation({
     mutationFn: async ({ role, inviteCode }: { role: UserRole; inviteCode: string }) => {
       return await apiRequest("PATCH", "/api/auth/role", { role, inviteCode });
@@ -80,6 +86,11 @@ export default function RoleSelect() {
   });
 
   const handleRoleSelect = (role: UserRole) => {
+    // Bootstrap admin can directly become admin without invite code
+    if (role === "admin" && isBootstrapAdmin) {
+      updateRoleMutation.mutate({ role: "admin", inviteCode: "BOOTSTRAP_ADMIN" });
+      return;
+    }
     setSelectedRole(role);
     setShowCodeDialog(true);
   };
@@ -130,13 +141,14 @@ export default function RoleSelect() {
             const Icon = role.icon;
             const isSelected = selectedRole === role.id;
             const isPending = updateRoleMutation.isPending && selectedRole === role.id;
+            const isBootstrapAdminRole = role.id === "admin" && isBootstrapAdmin;
 
             return (
               <Card
                 key={role.id}
                 className={`cursor-pointer transition-all hover-elevate ${
                   isSelected ? "ring-2 ring-primary" : ""
-                }`}
+                } ${isBootstrapAdminRole ? "ring-2 ring-yellow-500" : ""}`}
                 onClick={() => !updateRoleMutation.isPending && handleRoleSelect(role.id)}
                 data-testid={`card-role-${role.id}`}
               >
@@ -146,6 +158,12 @@ export default function RoleSelect() {
                       <Icon className="h-5 w-5 text-primary" />
                     </div>
                     <CardTitle className="text-lg">{role.title}</CardTitle>
+                    {isBootstrapAdminRole && (
+                      <Badge className="bg-yellow-500 text-white">
+                        <Star className="h-3 w-3 mr-1" />
+                        Auto-Access
+                      </Badge>
+                    )}
                   </div>
                   <CardDescription className="text-sm">
                     {role.description}
@@ -169,6 +187,11 @@ export default function RoleSelect() {
                         <>
                           <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                           Setting up...
+                        </>
+                      ) : isBootstrapAdminRole ? (
+                        <>
+                          <Star className="mr-2 h-4 w-4" />
+                          Activate Admin
                         </>
                       ) : (
                         <>

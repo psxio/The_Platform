@@ -24,6 +24,10 @@ localPort = 33891
 externalPort = 3001
 
 [[ports]]
+localPort = 34825
+externalPort = 8000
+
+[[ports]]
 localPort = 34955
 externalPort = 5173
 
@@ -83,3 +87,6 @@ integrations = ["javascript_log_in_with_replit:1.0.0"]
 [userenv.shared]
 INITIAL_ADMIN_CODE = "ADMIN2025FIRST"
 GOOGLE_SHEET_ID = "14l5LOsTo1xO4s7fh-bG_fFaRG09xueuVefEJ_bCBY4s"
+
+[userenv.production]
+BOOTSTRAP_ADMIN_EMAIL = "psxonbase@gmail.com"

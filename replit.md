@@ -7,6 +7,8 @@ This project is a unified application combining two distinct systems:
 
 The platform uses internal email/password authentication with strict role-based access control. There are three main user roles: `web3` (access to wallet tools), `content` (access to content management), and `admin` (full access to both systems and administrative features like invite code generation). **All roles require a valid single-use invite code** - the platform is fully locked down, preventing unauthorized access to any features.
 
+**Bootstrap Admin**: For initial production setup, set the `BOOTSTRAP_ADMIN_EMAIL` environment variable to an email address. That user can become admin without an invite code (shows "Auto-Access" badge on role selection). Currently set to `psxonbase@gmail.com` for production.
+
 ## User Preferences
 Preferred communication style: Simple, everyday language.
 

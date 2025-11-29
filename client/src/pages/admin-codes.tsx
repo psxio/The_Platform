@@ -9,11 +9,14 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { Key, Plus, Copy, Check, Trash2, Loader2, AlertCircle, Shield, Wallet, FileText, Users, Clock, Infinity } from "lucide-react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Key, Plus, Copy, Check, Trash2, Loader2, AlertCircle, Shield, Wallet, FileText, Users, Clock, Infinity, ChevronDown, ChevronRight, Mail, User } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { AdminInviteCode, UserRole } from "@shared/schema";
+import type { AdminInviteCode, AdminInviteCodeUse, UserRole } from "@shared/schema";
 import { format, addDays, addWeeks, addMonths } from "date-fns";
+
+type InviteCodeWithUses = AdminInviteCode & { uses: AdminInviteCodeUse[] };
 
 const roleConfig: Record<UserRole, { label: string; icon: typeof Shield; color: string }> = {
   web3: { label: "Web3", icon: Wallet, color: "text-blue-500" },
@@ -28,6 +31,7 @@ export default function AdminCodes() {
   const [showGenerateDialog, setShowGenerateDialog] = useState(false);
   const [selectedRole, setSelectedRole] = useState<UserRole>("content");
   const [newCode, setNewCode] = useState<AdminInviteCode | null>(null);
+  const [expandedCodes, setExpandedCodes] = useState<Set<number>>(new Set());
   
   // New settings state
   const [usageType, setUsageType] = useState<"single" | "multi" | "unlimited">("single");
@@ -36,9 +40,21 @@ export default function AdminCodes() {
   const [expirationPreset, setExpirationPreset] = useState<string>("7days");
   const [customExpirationDate, setCustomExpirationDate] = useState<string>("");
 
-  const { data: codes, isLoading, error } = useQuery<AdminInviteCode[]>({
+  const { data: codes, isLoading, error } = useQuery<InviteCodeWithUses[]>({
     queryKey: ["/api/admin/invite-codes"],
   });
+
+  const toggleExpanded = (codeId: number) => {
+    setExpandedCodes(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(codeId)) {
+        newSet.delete(codeId);
+      } else {
+        newSet.add(codeId);
+      }
+      return newSet;
+    });
+  };
 
   const generateMutation = useMutation({
     mutationFn: async (params: { forRole: UserRole; maxUses: number | null; expiresAt: string | null }): Promise<AdminInviteCode> => {
@@ -250,70 +266,147 @@ export default function AdminCodes() {
                 {codes.map((code) => {
                   const status = getCodeStatus(code);
                   const isUsable = status.label === "Active";
+                  const isExpanded = expandedCodes.has(code.id);
+                  const hasUses = code.uses && code.uses.length > 0;
                   return (
-                    <TableRow key={code.id} data-testid={`row-code-${code.id}`}>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <Key className="h-4 w-4 text-muted-foreground" />
-                          <code className="font-mono text-sm bg-muted px-2 py-1 rounded" data-testid={`text-code-${code.id}`}>
-                            {code.code}
-                          </code>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        {getRoleBadge(code.forRole || "admin")}
-                      </TableCell>
-                      <TableCell>
-                        {getUsageDisplay(code)}
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant={status.variant} data-testid={`badge-status-${code.id}`}>
-                          {status.label}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-muted-foreground text-sm">
-                        {code.expiresAt ? (
-                          <div className="flex items-center gap-1">
-                            <Clock className="h-3 w-3" />
-                            {format(new Date(code.expiresAt), "MMM d, yyyy")}
-                          </div>
-                        ) : (
-                          <span className="text-muted-foreground/60">Never</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground text-sm">
-                        {format(new Date(code.createdAt), "MMM d, yyyy")}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          {isUsable && (
-                            <>
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                onClick={() => copyToClipboard(code.code)}
-                                data-testid={`button-copy-${code.id}`}
-                              >
-                                {copiedCode === code.code ? (
-                                  <Check className="h-4 w-4 text-green-500" />
+                    <Collapsible key={code.id} open={isExpanded} onOpenChange={() => hasUses && toggleExpanded(code.id)} asChild>
+                      <>
+                        <CollapsibleTrigger asChild>
+                          <TableRow 
+                            className={hasUses ? "cursor-pointer hover-elevate" : ""} 
+                            data-testid={`row-code-${code.id}`}
+                          >
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                {hasUses ? (
+                                  isExpanded ? (
+                                    <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                                  ) : (
+                                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                                  )
                                 ) : (
-                                  <Copy className="h-4 w-4" />
+                                  <Key className="h-4 w-4 text-muted-foreground" />
                                 )}
-                              </Button>
-                              <Button
-                                size="icon"
-                                variant="ghost"
-                                onClick={() => deactivateMutation.mutate(code.id)}
-                                disabled={deactivateMutation.isPending}
-                                data-testid={`button-deactivate-${code.id}`}
-                              >
-                                <Trash2 className="h-4 w-4 text-destructive" />
-                              </Button>
-                            </>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
+                                <code className="font-mono text-sm bg-muted px-2 py-1 rounded" data-testid={`text-code-${code.id}`}>
+                                  {code.code}
+                                </code>
+                              </div>
+                            </TableCell>
+                            <TableCell>
+                              {getRoleBadge(code.forRole || "admin")}
+                            </TableCell>
+                            <TableCell>
+                              {getUsageDisplay(code)}
+                            </TableCell>
+                            <TableCell>
+                              <Badge variant={status.variant} data-testid={`badge-status-${code.id}`}>
+                                {status.label}
+                              </Badge>
+                            </TableCell>
+                            <TableCell className="text-muted-foreground text-sm">
+                              {code.expiresAt ? (
+                                <div className="flex items-center gap-1">
+                                  <Clock className="h-3 w-3" />
+                                  {format(new Date(code.expiresAt), "MMM d, yyyy")}
+                                </div>
+                              ) : (
+                                <span className="text-muted-foreground/60">Never</span>
+                              )}
+                            </TableCell>
+                            <TableCell className="text-muted-foreground text-sm">
+                              {format(new Date(code.createdAt), "MMM d, yyyy")}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex items-center justify-end gap-2">
+                                {isUsable && (
+                                  <>
+                                    <Button
+                                      size="icon"
+                                      variant="ghost"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        copyToClipboard(code.code);
+                                      }}
+                                      data-testid={`button-copy-${code.id}`}
+                                    >
+                                      {copiedCode === code.code ? (
+                                        <Check className="h-4 w-4 text-green-500" />
+                                      ) : (
+                                        <Copy className="h-4 w-4" />
+                                      )}
+                                    </Button>
+                                    <Button
+                                      size="icon"
+                                      variant="ghost"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        deactivateMutation.mutate(code.id);
+                                      }}
+                                      disabled={deactivateMutation.isPending}
+                                      data-testid={`button-deactivate-${code.id}`}
+                                    >
+                                      <Trash2 className="h-4 w-4 text-destructive" />
+                                    </Button>
+                                  </>
+                                )}
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent asChild>
+                          <TableRow className="bg-muted/30" data-testid={`row-uses-${code.id}`}>
+                            <TableCell colSpan={7} className="p-0">
+                              <div className="px-6 py-4 space-y-3">
+                                <div className="flex items-center gap-2 text-sm font-medium">
+                                  <Users className="h-4 w-4" />
+                                  Usage History ({code.uses?.length || 0} uses)
+                                </div>
+                                <div className="bg-background rounded-lg border overflow-hidden">
+                                  <Table>
+                                    <TableHeader>
+                                      <TableRow>
+                                        <TableHead className="w-[200px]">User</TableHead>
+                                        <TableHead className="w-[250px]">Email</TableHead>
+                                        <TableHead>Role Granted</TableHead>
+                                        <TableHead>Used At</TableHead>
+                                      </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                      {code.uses?.map((use) => (
+                                        <TableRow key={use.id}>
+                                          <TableCell>
+                                            <div className="flex items-center gap-2">
+                                              <User className="h-4 w-4 text-muted-foreground" />
+                                              <span>
+                                                {use.userFirstName || use.userLastName 
+                                                  ? `${use.userFirstName || ""} ${use.userLastName || ""}`.trim()
+                                                  : "Unknown"}
+                                              </span>
+                                            </div>
+                                          </TableCell>
+                                          <TableCell>
+                                            <div className="flex items-center gap-2 text-muted-foreground">
+                                              <Mail className="h-3 w-3" />
+                                              <span className="text-sm">{use.userEmail}</span>
+                                            </div>
+                                          </TableCell>
+                                          <TableCell>
+                                            {getRoleBadge(use.roleGranted)}
+                                          </TableCell>
+                                          <TableCell className="text-sm text-muted-foreground">
+                                            {format(new Date(use.usedAt), "MMM d, yyyy 'at' h:mm a")}
+                                          </TableCell>
+                                        </TableRow>
+                                      ))}
+                                    </TableBody>
+                                  </Table>
+                                </div>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        </CollapsibleContent>
+                      </>
+                    </Collapsible>
                   );
                 })}
               </TableBody>

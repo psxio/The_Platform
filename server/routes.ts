@@ -4976,6 +4976,258 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ================== BRAND PACKS ENDPOINTS ==================
+
+  // Get all brand packs (content users see active only, admin sees all)
+  app.get("/api/brand-packs", requireRole("content"), async (req, res) => {
+    try {
+      const user = (req as any).user;
+      const activeOnly = user?.role !== "admin";
+      const brandPacks = await storage.getClientBrandPacks(activeOnly);
+      
+      // Include file count for each brand pack
+      const brandPacksWithCounts = await Promise.all(
+        brandPacks.map(async (bp) => {
+          const files = await storage.getBrandPackFiles(bp.id);
+          return { ...bp, fileCount: files.length };
+        })
+      );
+      
+      res.json(brandPacksWithCounts);
+    } catch (error) {
+      console.error("Error fetching brand packs:", error);
+      res.status(500).json({ error: "Failed to fetch brand packs" });
+    }
+  });
+
+  // Get single brand pack with files
+  app.get("/api/brand-packs/:id", requireRole("content"), async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const brandPack = await storage.getClientBrandPack(id);
+      
+      if (!brandPack) {
+        return res.status(404).json({ error: "Brand pack not found" });
+      }
+      
+      const files = await storage.getBrandPackFiles(id);
+      res.json({ ...brandPack, files });
+    } catch (error) {
+      console.error("Error fetching brand pack:", error);
+      res.status(500).json({ error: "Failed to fetch brand pack" });
+    }
+  });
+
+  // Get brand pack by client name (for task integration)
+  app.get("/api/brand-packs/by-client/:clientName", requireRole("content"), async (req, res) => {
+    try {
+      const clientName = decodeURIComponent(req.params.clientName);
+      const brandPack = await storage.getClientBrandPackByName(clientName);
+      
+      if (!brandPack) {
+        return res.status(404).json({ error: "Brand pack not found for this client" });
+      }
+      
+      const files = await storage.getBrandPackFiles(brandPack.id);
+      res.json({ ...brandPack, files });
+    } catch (error) {
+      console.error("Error fetching brand pack by client:", error);
+      res.status(500).json({ error: "Failed to fetch brand pack" });
+    }
+  });
+
+  // Create new brand pack (admin only)
+  app.post("/api/brand-packs", requireRole("admin"), async (req, res) => {
+    try {
+      const user = (req as any).user;
+      const { clientName, description, website, primaryColor, secondaryColor, notes } = req.body;
+      
+      if (!clientName || !clientName.trim()) {
+        return res.status(400).json({ error: "Client name is required" });
+      }
+      
+      // Check if client already exists
+      const existing = await storage.getClientBrandPackByName(clientName.trim());
+      if (existing) {
+        return res.status(400).json({ error: "A brand pack for this client already exists" });
+      }
+      
+      const brandPack = await storage.createClientBrandPack({
+        clientName: clientName.trim(),
+        description: description || null,
+        website: website || null,
+        primaryColor: primaryColor || null,
+        secondaryColor: secondaryColor || null,
+        notes: notes || null,
+        isActive: true,
+        createdBy: user?.id,
+      });
+      
+      res.status(201).json(brandPack);
+    } catch (error) {
+      console.error("Error creating brand pack:", error);
+      res.status(500).json({ error: "Failed to create brand pack" });
+    }
+  });
+
+  // Update brand pack (admin only)
+  app.patch("/api/brand-packs/:id", requireRole("admin"), async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const updates = req.body;
+      
+      const updated = await storage.updateClientBrandPack(id, updates);
+      
+      if (!updated) {
+        return res.status(404).json({ error: "Brand pack not found" });
+      }
+      
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating brand pack:", error);
+      res.status(500).json({ error: "Failed to update brand pack" });
+    }
+  });
+
+  // Delete brand pack (admin only)
+  app.delete("/api/brand-packs/:id", requireRole("admin"), async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const deleted = await storage.deleteClientBrandPack(id);
+      
+      if (!deleted) {
+        return res.status(404).json({ error: "Brand pack not found" });
+      }
+      
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting brand pack:", error);
+      res.status(500).json({ error: "Failed to delete brand pack" });
+    }
+  });
+
+  // Get files for a brand pack
+  app.get("/api/brand-packs/:id/files", requireRole("content"), async (req, res) => {
+    try {
+      const brandPackId = parseInt(req.params.id);
+      const files = await storage.getBrandPackFiles(brandPackId);
+      res.json(files);
+    } catch (error) {
+      console.error("Error fetching brand pack files:", error);
+      res.status(500).json({ error: "Failed to fetch files" });
+    }
+  });
+
+  // Upload file to brand pack (admin only)
+  app.post("/api/brand-packs/:id/files", requireRole("admin"), upload.single("file"), async (req, res) => {
+    try {
+      const brandPackId = parseInt(req.params.id);
+      const user = (req as any).user;
+      
+      if (!req.file) {
+        return res.status(400).json({ error: "No file provided" });
+      }
+      
+      // Verify brand pack exists
+      const brandPack = await storage.getClientBrandPack(brandPackId);
+      if (!brandPack) {
+        return res.status(404).json({ error: "Brand pack not found" });
+      }
+      
+      const file = req.file;
+      const { category, description } = req.body;
+      
+      // Upload to Google Drive
+      const { uploadToGoogleDrive } = await import("./google-drive");
+      const driveResult = await uploadToGoogleDrive(file.buffer, file.originalname, file.mimetype);
+      
+      // Generate a unique filename
+      const timestamp = Date.now();
+      const fileName = `${timestamp}_${file.originalname}`;
+      
+      const brandPackFile = await storage.createBrandPackFile({
+        brandPackId,
+        fileName,
+        originalName: file.originalname,
+        filePath: driveResult?.webViewLink || `/uploads/brand-packs/${fileName}`,
+        fileSize: file.size > 1024 * 1024 
+          ? `${(file.size / (1024 * 1024)).toFixed(1)} MB`
+          : `${(file.size / 1024).toFixed(1)} KB`,
+        fileType: file.mimetype,
+        category: category || "other",
+        description: description || null,
+        uploadedBy: user?.id,
+      });
+      
+      res.status(201).json(brandPackFile);
+    } catch (error) {
+      console.error("Error uploading brand pack file:", error);
+      res.status(500).json({ error: "Failed to upload file" });
+    }
+  });
+
+  // Update brand pack file metadata (admin only)
+  app.patch("/api/brand-packs/files/:fileId", requireRole("admin"), async (req, res) => {
+    try {
+      const fileId = parseInt(req.params.fileId);
+      const { category, description } = req.body;
+      
+      const updated = await storage.updateBrandPackFile(fileId, {
+        category,
+        description,
+      });
+      
+      if (!updated) {
+        return res.status(404).json({ error: "File not found" });
+      }
+      
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating brand pack file:", error);
+      res.status(500).json({ error: "Failed to update file" });
+    }
+  });
+
+  // Delete brand pack file (admin only)
+  app.delete("/api/brand-packs/files/:fileId", requireRole("admin"), async (req, res) => {
+    try {
+      const fileId = parseInt(req.params.fileId);
+      const deleted = await storage.deleteBrandPackFile(fileId);
+      
+      if (!deleted) {
+        return res.status(404).json({ error: "File not found" });
+      }
+      
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting brand pack file:", error);
+      res.status(500).json({ error: "Failed to delete file" });
+    }
+  });
+
+  // Download single file (content users)
+  app.get("/api/brand-packs/files/:fileId/download", requireRole("content"), async (req, res) => {
+    try {
+      const fileId = parseInt(req.params.fileId);
+      const file = await storage.getBrandPackFile(fileId);
+      
+      if (!file) {
+        return res.status(404).json({ error: "File not found" });
+      }
+      
+      // Return the file info with download link
+      res.json({
+        fileName: file.originalName,
+        filePath: file.filePath,
+        fileType: file.fileType,
+        fileSize: file.fileSize,
+      });
+    } catch (error) {
+      console.error("Error fetching file for download:", error);
+      res.status(500).json({ error: "Failed to fetch file" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

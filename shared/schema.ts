@@ -852,3 +852,56 @@ export const insertPaymentRequestEventSchema = createInsertSchema(paymentRequest
 
 export type InsertPaymentRequestEvent = z.infer<typeof insertPaymentRequestEventSchema>;
 export type PaymentRequestEvent = typeof paymentRequestEvents.$inferSelect;
+
+// ==================== BRAND PACKS TABLES ====================
+
+// Brand pack file categories
+export const brandPackFileCategories = ["logo", "font", "guideline", "color", "template", "other"] as const;
+export type BrandPackFileCategory = typeof brandPackFileCategories[number];
+
+// Client Brand Packs - client information with brand assets
+export const clientBrandPacks = pgTable("client_brand_packs", {
+  id: serial("id").primaryKey(),
+  clientName: varchar("client_name", { length: 255 }).notNull().unique(),
+  description: text("description"),
+  website: varchar("website", { length: 500 }),
+  primaryColor: varchar("primary_color", { length: 20 }),
+  secondaryColor: varchar("secondary_color", { length: 20 }),
+  notes: text("notes"),
+  isActive: boolean("is_active").notNull().default(true),
+  createdBy: varchar("created_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertClientBrandPackSchema = createInsertSchema(clientBrandPacks).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertClientBrandPack = z.infer<typeof insertClientBrandPackSchema>;
+export type ClientBrandPack = typeof clientBrandPacks.$inferSelect;
+
+// Brand Pack Files - individual files within a brand pack
+export const brandPackFiles = pgTable("brand_pack_files", {
+  id: serial("id").primaryKey(),
+  brandPackId: integer("brand_pack_id").notNull().references(() => clientBrandPacks.id, { onDelete: "cascade" }),
+  fileName: varchar("file_name", { length: 255 }).notNull(),
+  originalName: varchar("original_name", { length: 255 }).notNull(),
+  filePath: text("file_path").notNull(),
+  fileSize: varchar("file_size", { length: 50 }),
+  fileType: varchar("file_type", { length: 100 }),
+  category: varchar("category", { length: 50 }).$type<BrandPackFileCategory>().default("other"),
+  description: text("description"),
+  uploadedBy: varchar("uploaded_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertBrandPackFileSchema = createInsertSchema(brandPackFiles).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertBrandPackFile = z.infer<typeof insertBrandPackFileSchema>;
+export type BrandPackFile = typeof brandPackFiles.$inferSelect;

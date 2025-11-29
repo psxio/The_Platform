@@ -42,6 +42,9 @@ import {
   type PaymentRequest, type InsertPaymentRequest, paymentRequests,
   type PaymentRequestEvent, type InsertPaymentRequestEvent, paymentRequestEvents,
   type PaymentRequestStatus,
+  // Brand Pack types
+  type ClientBrandPack, type InsertClientBrandPack, clientBrandPacks,
+  type BrandPackFile, type InsertBrandPackFile, brandPackFiles,
 } from "@shared/schema";
 import { db } from "./db";
 import { desc, eq, and, sql, or, isNull } from "drizzle-orm";
@@ -279,6 +282,23 @@ export interface IStorage {
   // Payment Request Event methods
   getPaymentRequestEvents(paymentRequestId: number): Promise<PaymentRequestEvent[]>;
   createPaymentRequestEvent(event: InsertPaymentRequestEvent): Promise<PaymentRequestEvent>;
+  
+  // ==================== BRAND PACK METHODS ====================
+  
+  // Client Brand Pack methods
+  getClientBrandPacks(activeOnly?: boolean): Promise<ClientBrandPack[]>;
+  getClientBrandPack(id: number): Promise<ClientBrandPack | undefined>;
+  getClientBrandPackByName(clientName: string): Promise<ClientBrandPack | undefined>;
+  createClientBrandPack(brandPack: InsertClientBrandPack): Promise<ClientBrandPack>;
+  updateClientBrandPack(id: number, updates: Partial<InsertClientBrandPack>): Promise<ClientBrandPack | undefined>;
+  deleteClientBrandPack(id: number): Promise<boolean>;
+  
+  // Brand Pack File methods
+  getBrandPackFiles(brandPackId: number): Promise<BrandPackFile[]>;
+  getBrandPackFile(id: number): Promise<BrandPackFile | undefined>;
+  createBrandPackFile(file: InsertBrandPackFile): Promise<BrandPackFile>;
+  updateBrandPackFile(id: number, updates: Partial<InsertBrandPackFile>): Promise<BrandPackFile | undefined>;
+  deleteBrandPackFile(id: number): Promise<boolean>;
 }
 
 export class DbStorage implements IStorage {
@@ -1681,6 +1701,94 @@ export class DbStorage implements IStorage {
   async createPaymentRequestEvent(event: InsertPaymentRequestEvent): Promise<PaymentRequestEvent> {
     const [created] = await db.insert(paymentRequestEvents).values(event).returning();
     return created;
+  }
+  
+  // ==================== BRAND PACK METHODS ====================
+  
+  // Client Brand Pack methods
+  async getClientBrandPacks(activeOnly: boolean = false): Promise<ClientBrandPack[]> {
+    if (activeOnly) {
+      return await db
+        .select()
+        .from(clientBrandPacks)
+        .where(eq(clientBrandPacks.isActive, true))
+        .orderBy(clientBrandPacks.clientName);
+    }
+    return await db
+      .select()
+      .from(clientBrandPacks)
+      .orderBy(clientBrandPacks.clientName);
+  }
+  
+  async getClientBrandPack(id: number): Promise<ClientBrandPack | undefined> {
+    const [brandPack] = await db
+      .select()
+      .from(clientBrandPacks)
+      .where(eq(clientBrandPacks.id, id));
+    return brandPack;
+  }
+  
+  async getClientBrandPackByName(clientName: string): Promise<ClientBrandPack | undefined> {
+    const [brandPack] = await db
+      .select()
+      .from(clientBrandPacks)
+      .where(eq(clientBrandPacks.clientName, clientName));
+    return brandPack;
+  }
+  
+  async createClientBrandPack(brandPack: InsertClientBrandPack): Promise<ClientBrandPack> {
+    const [created] = await db.insert(clientBrandPacks).values(brandPack).returning();
+    return created;
+  }
+  
+  async updateClientBrandPack(id: number, updates: Partial<InsertClientBrandPack>): Promise<ClientBrandPack | undefined> {
+    const [updated] = await db
+      .update(clientBrandPacks)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(clientBrandPacks.id, id))
+      .returning();
+    return updated;
+  }
+  
+  async deleteClientBrandPack(id: number): Promise<boolean> {
+    const result = await db.delete(clientBrandPacks).where(eq(clientBrandPacks.id, id)).returning();
+    return result.length > 0;
+  }
+  
+  // Brand Pack File methods
+  async getBrandPackFiles(brandPackId: number): Promise<BrandPackFile[]> {
+    return await db
+      .select()
+      .from(brandPackFiles)
+      .where(eq(brandPackFiles.brandPackId, brandPackId))
+      .orderBy(brandPackFiles.category, brandPackFiles.originalName);
+  }
+  
+  async getBrandPackFile(id: number): Promise<BrandPackFile | undefined> {
+    const [file] = await db
+      .select()
+      .from(brandPackFiles)
+      .where(eq(brandPackFiles.id, id));
+    return file;
+  }
+  
+  async createBrandPackFile(file: InsertBrandPackFile): Promise<BrandPackFile> {
+    const [created] = await db.insert(brandPackFiles).values(file).returning();
+    return created;
+  }
+  
+  async updateBrandPackFile(id: number, updates: Partial<InsertBrandPackFile>): Promise<BrandPackFile | undefined> {
+    const [updated] = await db
+      .update(brandPackFiles)
+      .set(updates)
+      .where(eq(brandPackFiles.id, id))
+      .returning();
+    return updated;
+  }
+  
+  async deleteBrandPackFile(id: number): Promise<boolean> {
+    const result = await db.delete(brandPackFiles).where(eq(brandPackFiles.id, id)).returning();
+    return result.length > 0;
   }
 }
 

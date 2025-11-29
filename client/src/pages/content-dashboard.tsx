@@ -12,6 +12,7 @@ import { AssetsLibrary } from "@/components/assets-library";
 import { RecurringTasksView } from "@/components/recurring-tasks-view";
 import { TimeReportsView } from "@/components/time-reports-view";
 import { PaymentRequestsView } from "@/components/payment-requests-view";
+import { BrandPacksView } from "@/components/brand-packs-view";
 import { AddContentTaskDialog } from "@/components/add-content-task-dialog";
 import { AddCampaignDialog } from "@/components/add-campaign-dialog";
 import { WelcomeModal } from "@/components/welcome-modal";
@@ -24,7 +25,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Plus, ClipboardList, Users, Upload, Settings, FolderKanban, BarChart3, LayoutGrid, Columns3, Calendar, FileText, Image, Repeat, Clock, Download, Camera, DollarSign } from "lucide-react";
+import { Plus, ClipboardList, Users, Upload, Settings, FolderKanban, BarChart3, LayoutGrid, Columns3, Calendar, FileText, Image, Repeat, Clock, Download, Camera, DollarSign, Package } from "lucide-react";
 import { Link } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
@@ -147,6 +148,10 @@ export default function ContentDashboard() {
                 <Image className="h-4 w-4" />
                 <span className="hidden sm:inline">Assets</span>
               </TabsTrigger>
+              <TabsTrigger value="brand-packs" className="gap-2" data-testid="tab-brand-packs">
+                <Package className="h-4 w-4" />
+                <span className="hidden sm:inline">Brands</span>
+              </TabsTrigger>
               <TabsTrigger value="time-reports" className="gap-2" data-testid="tab-time-reports">
                 <Clock className="h-4 w-4" />
                 <span className="hidden sm:inline">Time</span>
@@ -195,6 +200,10 @@ export default function ContentDashboard() {
 
           <TabsContent value="assets" className="mt-6">
             <AssetsLibrary />
+          </TabsContent>
+
+          <TabsContent value="brand-packs" className="mt-6">
+            <BrandPacksView />
           </TabsContent>
 
           <TabsContent value="time-reports" className="mt-6">

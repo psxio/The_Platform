@@ -43,6 +43,8 @@ The system utilizes a **PostgreSQL** database managed with **Drizzle ORM**. Key 
 -   `monitoring_hourly_reports`: Hourly activity summaries with random screenshot selection for each hour.
 -   `payment_requests`: Payment requests submitted by content team members (amount, currency, reason, status, admin review details).
 -   `payment_request_events`: Audit trail for payment request status changes (created, approved, rejected, cancelled).
+-   `client_brand_packs`: Client brand packs with metadata (name, description, website, colors, notes).
+-   `brand_pack_files`: Files attached to brand packs with category and metadata.
 
 ### UI/UX Decisions
 -   **Color Schemes**: Leverages Shadcn UI's New York style for a modern and clean aesthetic.
@@ -103,7 +105,14 @@ The system utilizes a **PostgreSQL** database managed with **Drizzle ORM**. Key 
         -   Admin approval workflow with notes and rejection reasons.
         -   Notifications via in-app, Telegram, and Discord on status changes.
         -   Routes: `/content` (Payments tab), `/admin/payments` (admin review dashboard).
--   **Admin Features**: Invite code generation and management with detailed usage tracking (shows who used each code, when, and what role was granted), team invitation system via email, integration settings for Telegram/Discord, payment request management.
+    -   **Brand Packs**: Centralized client brand asset management:
+        -   Admins can create brand packs for each client with description, website, primary/secondary colors, and notes.
+        -   File uploads organized by category (Logo, Brand Guidelines, Font, Color Palette, Template, Other).
+        -   Content team members can browse and download brand assets from the "Brands" tab.
+        -   Quick access to brand pack from task details when client is assigned (shows file count badge).
+        -   Files stored via Google Drive integration for reliable hosting.
+        -   Routes: `/content` (Brands tab), `/admin/brand-packs` (admin management).
+-   **Admin Features**: Invite code generation and management with detailed usage tracking (shows who used each code, when, and what role was granted), team invitation system via email, integration settings for Telegram/Discord, payment request management, brand pack management.
 -   **Security**: Role-based access control, bcrypt hashing, server-side middleware for route protection.
 
 ## External Dependencies

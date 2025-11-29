@@ -13,7 +13,7 @@ import {
   DropdownMenuSeparator, 
   DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu";
-import { FileText, History as HistoryIcon, FileSearch, Database, CheckSquare, ClipboardList, LogOut, Settings, Loader2, Key, Combine, UserPlus, Users, Monitor, DollarSign, Camera } from "lucide-react";
+import { FileText, History as HistoryIcon, FileSearch, Database, CheckSquare, ClipboardList, LogOut, Settings, Loader2, Key, Combine, UserPlus, Users, Monitor, DollarSign, Camera, Package } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { NotificationBell } from "@/components/notification-bell";
 import { useAuth } from "@/hooks/useAuth";
@@ -31,6 +31,7 @@ import AdminPendingMembers from "@/pages/admin-pending-members";
 import AdminContentUsers from "@/pages/admin-content-users";
 import AdminMonitoring from "@/pages/admin-monitoring";
 import AdminPayments from "@/pages/admin-payments";
+import AdminBrandPacks from "@/pages/admin-brand-packs";
 import ContentProfileSetup from "@/pages/content-profile-setup";
 import WorkerMonitoring from "@/pages/worker-monitoring";
 import RoleSelect from "@/pages/role-select";
@@ -111,6 +112,12 @@ function UserMenu() {
               <Link href="/admin/payments">
                 <DollarSign className="mr-2 h-4 w-4" />
                 Payment Requests
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link href="/admin/brand-packs">
+                <Package className="mr-2 h-4 w-4" />
+                Brand Packs
               </Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
@@ -317,6 +324,7 @@ function AuthenticatedRouter() {
           <Route path="/admin/content-users" component={AdminContentUsers} />
           <Route path="/admin/monitoring" component={AdminMonitoring} />
           <Route path="/admin/payments" component={AdminPayments} />
+          <Route path="/admin/brand-packs" component={AdminBrandPacks} />
         </>
       )}
       

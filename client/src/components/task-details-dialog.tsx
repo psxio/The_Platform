@@ -61,7 +61,9 @@ import {
   FileText,
   Eye,
   MessageSquare,
-  Timer
+  Timer,
+  Package,
+  ExternalLink
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { TaskComments } from "./task-comments";
@@ -168,6 +170,28 @@ export function TaskDetailsDialog({ open, onOpenChange, task, onEdit, currentUse
   const { data: campaigns } = useQuery<Campaign[]>({
     queryKey: ["/api/campaigns"],
     enabled: open,
+  });
+
+  // Fetch brand pack for the client (if client is set)
+  const { data: clientBrandPack } = useQuery<{
+    id: number;
+    clientName: string;
+    fileCount?: number;
+    files?: { id: number; originalName: string; filePath: string }[];
+  }>({
+    queryKey: ["/api/brand-packs/by-client", task?.client],
+    queryFn: async () => {
+      if (!task?.client) return null;
+      const response = await fetch(`/api/brand-packs/by-client/${encodeURIComponent(task.client)}`, {
+        credentials: "include",
+      });
+      if (!response.ok) {
+        if (response.status === 404) return null;
+        throw new Error("Failed to fetch brand pack");
+      }
+      return response.json();
+    },
+    enabled: !!task?.client && open,
   });
 
   const campaign = campaigns?.find(c => c.id === task?.campaignId);
@@ -735,11 +759,59 @@ export function TaskDetailsDialog({ open, onOpenChange, task, onEdit, currentUse
 
               {/* Client */}
               <div className="space-y-1">
-                <label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
-                  <Building2 className="w-3 h-3" />
-                  Client
-                  {!permissions.canEditClient && <Lock className="w-3 h-3" />}
-                </label>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-medium text-muted-foreground flex items-center gap-1">
+                    <Building2 className="w-3 h-3" />
+                    Client
+                    {!permissions.canEditClient && <Lock className="w-3 h-3" />}
+                  </label>
+                  {clientBrandPack && (
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <button
+                          className="flex items-center gap-1 text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+                          data-testid="button-brand-pack"
+                        >
+                          <Package className="w-3 h-3" />
+                          Brand Pack
+                          {clientBrandPack.files && clientBrandPack.files.length > 0 && (
+                            <span className="ml-0.5 text-[10px] opacity-70">
+                              ({clientBrandPack.files.length})
+                            </span>
+                          )}
+                        </button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-72 p-0" align="end">
+                        <div className="p-3 border-b">
+                          <h4 className="font-medium text-sm">{clientBrandPack.clientName} Brand Assets</h4>
+                        </div>
+                        <div className="max-h-60 overflow-y-auto">
+                          {clientBrandPack.files && clientBrandPack.files.length > 0 ? (
+                            <div className="p-2 space-y-1">
+                              {clientBrandPack.files.map((file) => (
+                                <a
+                                  key={file.id}
+                                  href={file.filePath}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex items-center gap-2 px-2 py-1.5 rounded hover-elevate text-sm"
+                                  data-testid={`brand-file-${file.id}`}
+                                >
+                                  <ExternalLink className="w-3 h-3 text-muted-foreground shrink-0" />
+                                  <span className="truncate">{file.originalName}</span>
+                                </a>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="p-4 text-center text-sm text-muted-foreground">
+                              No files uploaded yet
+                            </div>
+                          )}
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                  )}
+                </div>
                 {permissions.canEditClient ? (
                   <Input
                     value={editedClient}

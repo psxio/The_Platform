@@ -10,7 +10,9 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Key, Plus, Copy, Check, Trash2, Loader2, AlertCircle, Shield, Wallet, FileText, Users, Clock, Infinity, ChevronDown, ChevronRight, Mail, User } from "lucide-react";
+import { Key, Plus, Copy, Check, Trash2, Loader2, AlertCircle, Shield, Wallet, FileText, Users, Clock, Infinity, ChevronDown, ChevronRight, Mail, User, UserCheck, ArrowRight } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Link } from "wouter";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { AdminInviteCode, AdminInviteCodeUse, UserRole } from "@shared/schema";
@@ -43,6 +45,12 @@ export default function AdminCodes() {
   const { data: codes, isLoading, error } = useQuery<InviteCodeWithUses[]>({
     queryKey: ["/api/admin/invite-codes"],
   });
+
+  const { data: pendingMembers } = useQuery<{ id: number; status: string }[]>({
+    queryKey: ["/api/admin/pending-content-members"],
+  });
+
+  const pendingCount = pendingMembers?.filter(m => m.status === "pending").length || 0;
 
   const toggleExpanded = (codeId: number) => {
     setExpandedCodes(prev => {
@@ -224,6 +232,38 @@ export default function AdminCodes() {
 
   return (
     <div className="max-w-5xl mx-auto p-4 md:p-6 space-y-6">
+      {/* Pending Members Alert */}
+      {pendingCount > 0 && (
+        <Alert className="border-amber-500/50 bg-amber-500/10">
+          <UserCheck className="h-4 w-4 text-amber-500" />
+          <AlertTitle className="text-amber-600 dark:text-amber-400">
+            {pendingCount} member{pendingCount !== 1 ? 's' : ''} waiting for approval
+          </AlertTitle>
+          <AlertDescription className="flex items-center justify-between gap-4 flex-wrap">
+            <span className="text-muted-foreground">
+              People have used invite codes and are waiting for your approval to access content features.
+            </span>
+            <Button asChild size="sm" variant="outline">
+              <Link href="/admin/pending-members">
+                Review Pending Members
+                <ArrowRight className="ml-2 h-4 w-4" />
+              </Link>
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {/* Quick link to pending members even when none pending */}
+      {pendingCount === 0 && (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <UserCheck className="h-4 w-4" />
+          <span>No pending approvals.</span>
+          <Link href="/admin/pending-members" className="text-primary hover:underline">
+            View all members
+          </Link>
+        </div>
+      )}
+
       <Card>
         <CardHeader className="flex flex-row items-center justify-between gap-4 space-y-0 flex-wrap">
           <div>

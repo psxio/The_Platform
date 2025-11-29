@@ -86,3 +86,6 @@ GOOGLE_SHEET_ID = "14l5LOsTo1xO4s7fh-bG_fFaRG09xueuVefEJ_bCBY4s"
 
 [userenv.production]
 BOOTSTRAP_ADMIN_EMAIL = "psxonbase@gmail.com"
+
+[userenv.development]
+BOOTSTRAP_ADMIN_EMAIL = "psxonbase@gmail.com"

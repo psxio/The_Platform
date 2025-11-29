@@ -31,6 +31,7 @@ The system utilizes a **PostgreSQL** database managed with **Drizzle ORM**. Key 
 -   `tasks`: For personal to-do lists.
 -   `content_tasks`, `directory_members`, `deliverables`: For ContentFlowStudio core.
 -   `admin_invite_codes`: For secure role-based access (stores forRole to indicate which role a code grants: web3, content, or admin).
+-   `admin_invite_code_uses`: Tracks detailed usage history for each invite code (user email, name, role granted, timestamp).
 -   `task_templates`, `template_subtasks`, `task_watchers`, `approvals`, `time_entries`: For advanced ContentFlowStudio features.
 -   `assets`, `recurring_tasks`, `saved_filters`, `deliverable_versions`, `campaigns`: For enhanced ContentFlowStudio features.
 -   `team_integration_settings`: Stores Telegram bot tokens and Discord webhook URLs for external notifications.
@@ -64,7 +65,7 @@ The system utilizes a **PostgreSQL** database managed with **Drizzle ORM**. Key 
     -   External Integrations: Telegram Bot API and Discord webhooks for sending task notifications to external channels.
     -   Data Export: Full task data export in CSV and JSON formats for backup and analysis.
     -   Welcome Onboarding: First-time user welcome modal highlighting key features.
--   **Admin Features**: Invite code generation and management, team invitation system via email, integration settings for Telegram/Discord.
+-   **Admin Features**: Invite code generation and management with detailed usage tracking (shows who used each code, when, and what role was granted), team invitation system via email, integration settings for Telegram/Discord.
 -   **Security**: Role-based access control, bcrypt hashing, server-side middleware for route protection.
 
 ## External Dependencies

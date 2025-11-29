@@ -8,6 +8,7 @@ import {
   type DirectoryMember, type InsertDirectoryMember, directoryMembers,
   type Deliverable, type InsertDeliverable, deliverables,
   type AdminInviteCode, adminInviteCodes,
+  type AdminInviteCodeUse, type InsertAdminInviteCodeUse, adminInviteCodeUses,
   type Campaign, type InsertCampaign, campaigns,
   type Subtask, type InsertSubtask, subtasks,
   type Comment, type InsertComment, comments,
@@ -94,8 +95,10 @@ export interface IStorage {
   createInviteCode(code: string, forRole: string, createdById: string | null, maxUses?: number | null, expiresAt?: Date | null): Promise<AdminInviteCode>;
   getValidInviteCode(code: string, forRole: string): Promise<AdminInviteCode | undefined>;
   getValidInviteCodeAnyRole(code: string): Promise<AdminInviteCode | undefined>;
-  useInviteCode(code: string, usedById: string): Promise<AdminInviteCode | undefined>;
+  useInviteCode(code: string, usedById: string, roleGranted: string): Promise<AdminInviteCode | undefined>;
   getInviteCodes(createdById?: string): Promise<AdminInviteCode[]>;
+  getInviteCodeUses(codeId: number): Promise<AdminInviteCodeUse[]>;
+  getInviteCodesWithUses(createdById?: string): Promise<(AdminInviteCode & { uses: AdminInviteCodeUse[] })[]>;
   deactivateInviteCode(id: number): Promise<boolean>;
   
   // Campaign methods
@@ -588,10 +591,13 @@ export class DbStorage implements IStorage {
     return inviteCode;
   }
 
-  async useInviteCode(code: string, usedById: string): Promise<AdminInviteCode | undefined> {
+  async useInviteCode(code: string, usedById: string, roleGranted: string): Promise<AdminInviteCode | undefined> {
     // First get the code to check its current state
     const existingCode = await this.getValidInviteCodeAnyRole(code);
     if (!existingCode) return undefined;
+    
+    // Get user details for tracking
+    const user = await this.getUser(usedById);
     
     // Increment usage count and update last used info
     const newUsedCount = existingCode.usedCount + 1;
@@ -607,6 +613,19 @@ export class DbStorage implements IStorage {
       })
       .where(eq(adminInviteCodes.id, existingCode.id))
       .returning();
+    
+    // Record the usage details in the new tracking table
+    if (inviteCode && user) {
+      await db.insert(adminInviteCodeUses).values({
+        codeId: existingCode.id,
+        userId: usedById,
+        userEmail: user.email,
+        userFirstName: user.firstName || null,
+        userLastName: user.lastName || null,
+        roleGranted: roleGranted,
+      });
+    }
+    
     return inviteCode;
   }
 
@@ -622,6 +641,29 @@ export class DbStorage implements IStorage {
       .select()
       .from(adminInviteCodes)
       .orderBy(desc(adminInviteCodes.createdAt));
+  }
+
+  async getInviteCodeUses(codeId: number): Promise<AdminInviteCodeUse[]> {
+    return db
+      .select()
+      .from(adminInviteCodeUses)
+      .where(eq(adminInviteCodeUses.codeId, codeId))
+      .orderBy(desc(adminInviteCodeUses.usedAt));
+  }
+
+  async getInviteCodesWithUses(createdById?: string): Promise<(AdminInviteCode & { uses: AdminInviteCodeUse[] })[]> {
+    // Get all invite codes
+    const codes = await this.getInviteCodes(createdById);
+    
+    // For each code, get its usage details
+    const codesWithUses = await Promise.all(
+      codes.map(async (code) => {
+        const uses = await this.getInviteCodeUses(code.id);
+        return { ...code, uses };
+      })
+    );
+    
+    return codesWithUses;
   }
 
   async deactivateInviteCode(id: number): Promise<boolean> {

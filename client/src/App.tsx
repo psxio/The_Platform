@@ -13,7 +13,7 @@ import {
   DropdownMenuSeparator, 
   DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu";
-import { FileText, History as HistoryIcon, FileSearch, Database, CheckSquare, ClipboardList, LogOut, Settings, Loader2, Key, Combine } from "lucide-react";
+import { FileText, History as HistoryIcon, FileSearch, Database, CheckSquare, ClipboardList, LogOut, Settings, Loader2, Key, Combine, UserPlus } from "lucide-react";
 import { NotificationBell } from "@/components/notification-bell";
 import { useAuth } from "@/hooks/useAuth";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -26,6 +26,8 @@ import Todo from "@/pages/todo";
 import Merge from "@/pages/merge";
 import ContentDashboard from "@/pages/content-dashboard";
 import AdminCodes from "@/pages/admin-codes";
+import AdminPendingMembers from "@/pages/admin-pending-members";
+import ContentProfileSetup from "@/pages/content-profile-setup";
 import RoleSelect from "@/pages/role-select";
 import AuthPage from "@/pages/auth";
 import InvitePage from "@/pages/invite";
@@ -81,12 +83,20 @@ function UserMenu() {
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         {user.role === "admin" && (
-          <DropdownMenuItem asChild>
-            <Link href="/admin/codes">
-              <Key className="mr-2 h-4 w-4" />
-              Invite Codes
-            </Link>
-          </DropdownMenuItem>
+          <>
+            <DropdownMenuItem asChild>
+              <Link href="/admin/pending-members">
+                <UserPlus className="mr-2 h-4 w-4" />
+                Pending Members
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link href="/admin/codes">
+                <Key className="mr-2 h-4 w-4" />
+                Invite Codes
+              </Link>
+            </DropdownMenuItem>
+          </>
         )}
         <DropdownMenuItem asChild>
           <Link href="/role-select">
@@ -246,11 +256,17 @@ function AuthenticatedRouter() {
       )}
       
       {showContent && (
-        <Route path="/content" component={ContentDashboard} />
+        <>
+          <Route path="/content" component={ContentDashboard} />
+          <Route path="/content/profile-setup" component={ContentProfileSetup} />
+        </>
       )}
       
       {user.role === "admin" && (
-        <Route path="/admin/codes" component={AdminCodes} />
+        <>
+          <Route path="/admin/codes" component={AdminCodes} />
+          <Route path="/admin/pending-members" component={AdminPendingMembers} />
+        </>
       )}
       
       <Route>

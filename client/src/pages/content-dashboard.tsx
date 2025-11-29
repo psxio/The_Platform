@@ -16,6 +16,7 @@ import { AddCampaignDialog } from "@/components/add-campaign-dialog";
 import { WelcomeModal } from "@/components/welcome-modal";
 import { IntegrationSettings } from "@/components/integration-settings";
 import { UserInvites } from "@/components/user-invites";
+import { ContentAccessGuard } from "@/components/content-access-guard";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
@@ -60,18 +61,19 @@ export default function ContentDashboard() {
   };
 
   return (
-    <div className="container mx-auto py-6 px-4 max-w-7xl">
-      <div className="flex flex-col gap-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold tracking-tight" data-testid="heading-content-dashboard">
-              ContentFlowStudio
-            </h1>
-            <p className="text-muted-foreground">
-              Manage tasks, track assignments, and collaborate with your team
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
+    <ContentAccessGuard>
+      <div className="container mx-auto py-6 px-4 max-w-7xl">
+        <div className="flex flex-col gap-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight" data-testid="heading-content-dashboard">
+                ContentFlowStudio
+              </h1>
+              <p className="text-muted-foreground">
+                Manage tasks, track assignments, and collaborate with your team
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
             {activeTab === "tasks" && (
               <>
                 <ToggleGroup 
@@ -242,17 +244,18 @@ export default function ContentDashboard() {
         </Tabs>
       </div>
 
-      <AddContentTaskDialog
-        open={isAddTaskDialogOpen}
-        onOpenChange={setIsAddTaskDialogOpen}
-      />
-      
-      <AddCampaignDialog
-        open={isAddCampaignDialogOpen}
-        onOpenChange={setIsAddCampaignDialogOpen}
-      />
-      
-      <WelcomeModal />
-    </div>
+        <AddContentTaskDialog
+          open={isAddTaskDialogOpen}
+          onOpenChange={setIsAddTaskDialogOpen}
+        />
+        
+        <AddCampaignDialog
+          open={isAddCampaignDialogOpen}
+          onOpenChange={setIsAddCampaignDialogOpen}
+        />
+        
+        <WelcomeModal />
+      </div>
+    </ContentAccessGuard>
   );
 }

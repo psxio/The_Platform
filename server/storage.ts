@@ -30,6 +30,9 @@ import {
   type TeamIntegrationSettings, type InsertTeamIntegrationSettings, teamIntegrationSettings,
   type UserInvite, type InsertUserInvite, userInvites,
   type UserOnboarding, type InsertUserOnboarding, userOnboarding,
+  // Pending content approval types
+  type PendingContentMember, type InsertPendingContentMember, pendingContentMembers,
+  type ContentProfile, type InsertContentProfile, contentProfiles,
 } from "@shared/schema";
 import { db } from "./db";
 import { desc, eq, and, sql, or, isNull } from "drizzle-orm";
@@ -210,6 +213,21 @@ export interface IStorage {
   getUserOnboarding(userId: string): Promise<UserOnboarding | undefined>;
   upsertUserOnboarding(onboarding: InsertUserOnboarding): Promise<UserOnboarding>;
   updateOnboardingStep(userId: string, step: string): Promise<UserOnboarding | undefined>;
+  
+  // Pending Content Member methods
+  getPendingContentMembers(): Promise<PendingContentMember[]>;
+  getPendingContentMember(userId: string): Promise<PendingContentMember | undefined>;
+  createPendingContentMember(member: InsertPendingContentMember): Promise<PendingContentMember>;
+  updatePendingContentMember(userId: string, updates: Partial<InsertPendingContentMember>): Promise<PendingContentMember | undefined>;
+  approvePendingContentMember(userId: string, reviewerId: string, reviewNotes?: string): Promise<PendingContentMember | undefined>;
+  rejectPendingContentMember(userId: string, reviewerId: string, reviewNotes?: string): Promise<PendingContentMember | undefined>;
+  deletePendingContentMember(userId: string): Promise<boolean>;
+  
+  // Content Profile methods
+  getContentProfile(userId: string): Promise<ContentProfile | undefined>;
+  createContentProfile(profile: InsertContentProfile): Promise<ContentProfile>;
+  updateContentProfile(userId: string, updates: Partial<InsertContentProfile>): Promise<ContentProfile | undefined>;
+  isContentProfileComplete(userId: string): Promise<boolean>;
 }
 
 export class DbStorage implements IStorage {
@@ -1236,6 +1254,100 @@ export class DbStorage implements IStorage {
         .returning();
       return created;
     }
+  }
+
+  // Pending Content Member methods
+  async getPendingContentMembers(): Promise<PendingContentMember[]> {
+    return await db
+      .select()
+      .from(pendingContentMembers)
+      .orderBy(desc(pendingContentMembers.createdAt));
+  }
+
+  async getPendingContentMember(userId: string): Promise<PendingContentMember | undefined> {
+    const [member] = await db
+      .select()
+      .from(pendingContentMembers)
+      .where(eq(pendingContentMembers.userId, userId));
+    return member;
+  }
+
+  async createPendingContentMember(member: InsertPendingContentMember): Promise<PendingContentMember> {
+    const [created] = await db.insert(pendingContentMembers).values(member).returning();
+    return created;
+  }
+
+  async updatePendingContentMember(userId: string, updates: Partial<InsertPendingContentMember>): Promise<PendingContentMember | undefined> {
+    const [updated] = await db
+      .update(pendingContentMembers)
+      .set(updates)
+      .where(eq(pendingContentMembers.userId, userId))
+      .returning();
+    return updated;
+  }
+
+  async approvePendingContentMember(userId: string, reviewerId: string, reviewNotes?: string): Promise<PendingContentMember | undefined> {
+    const [updated] = await db
+      .update(pendingContentMembers)
+      .set({
+        status: "approved",
+        reviewedBy: reviewerId,
+        reviewedAt: new Date(),
+        reviewNotes: reviewNotes || null,
+      })
+      .where(eq(pendingContentMembers.userId, userId))
+      .returning();
+    return updated;
+  }
+
+  async rejectPendingContentMember(userId: string, reviewerId: string, reviewNotes?: string): Promise<PendingContentMember | undefined> {
+    const [updated] = await db
+      .update(pendingContentMembers)
+      .set({
+        status: "rejected",
+        reviewedBy: reviewerId,
+        reviewedAt: new Date(),
+        reviewNotes: reviewNotes || null,
+      })
+      .where(eq(pendingContentMembers.userId, userId))
+      .returning();
+    return updated;
+  }
+
+  async deletePendingContentMember(userId: string): Promise<boolean> {
+    const result = await db
+      .delete(pendingContentMembers)
+      .where(eq(pendingContentMembers.userId, userId))
+      .returning();
+    return result.length > 0;
+  }
+
+  // Content Profile methods
+  async getContentProfile(userId: string): Promise<ContentProfile | undefined> {
+    const [profile] = await db
+      .select()
+      .from(contentProfiles)
+      .where(eq(contentProfiles.userId, userId));
+    return profile;
+  }
+
+  async createContentProfile(profile: InsertContentProfile): Promise<ContentProfile> {
+    const [created] = await db.insert(contentProfiles).values(profile).returning();
+    return created;
+  }
+
+  async updateContentProfile(userId: string, updates: Partial<InsertContentProfile>): Promise<ContentProfile | undefined> {
+    const [updated] = await db
+      .update(contentProfiles)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(contentProfiles.userId, userId))
+      .returning();
+    return updated;
+  }
+
+  async isContentProfileComplete(userId: string): Promise<boolean> {
+    const profile = await this.getContentProfile(userId);
+    return profile?.isProfileComplete === true;
   }
 }
 

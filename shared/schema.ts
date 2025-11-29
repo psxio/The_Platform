@@ -633,6 +633,59 @@ export const insertUserInviteSchema = createInsertSchema(userInvites).omit({
 export type InsertUserInvite = z.infer<typeof insertUserInviteSchema>;
 export type UserInvite = typeof userInvites.$inferSelect;
 
+// Pending Content Members - users awaiting admin approval for content access
+export const pendingContentMembers = pgTable("pending_content_members", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }).unique(),
+  inviteCodeId: integer("invite_code_id").references(() => adminInviteCodes.id, { onDelete: "set null" }),
+  status: varchar("status", { length: 20 }).notNull().default("pending"), // pending, approved, rejected
+  specialty: varchar("specialty", { length: 255 }),
+  contactHandle: varchar("contact_handle", { length: 255 }), // Telegram, Discord, etc.
+  portfolioUrl: varchar("portfolio_url", { length: 500 }),
+  timezone: varchar("timezone", { length: 100 }),
+  availability: varchar("availability", { length: 255 }),
+  notes: text("notes"),
+  reviewedBy: varchar("reviewed_by").references(() => users.id, { onDelete: "set null" }),
+  reviewedAt: timestamp("reviewed_at"),
+  reviewNotes: text("review_notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertPendingContentMemberSchema = createInsertSchema(pendingContentMembers).omit({
+  id: true,
+  createdAt: true,
+  reviewedAt: true,
+});
+
+export type InsertPendingContentMember = z.infer<typeof insertPendingContentMemberSchema>;
+export type PendingContentMember = typeof pendingContentMembers.$inferSelect;
+
+// Content Profile - extended profile for approved content team members
+export const contentProfiles = pgTable("content_profiles", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }).unique(),
+  directoryMemberId: integer("directory_member_id").references(() => directoryMembers.id, { onDelete: "set null" }),
+  specialty: varchar("specialty", { length: 255 }),
+  contactHandle: varchar("contact_handle", { length: 255 }),
+  contactType: varchar("contact_type", { length: 50 }), // telegram, discord, twitter, etc.
+  portfolioUrl: varchar("portfolio_url", { length: 500 }),
+  timezone: varchar("timezone", { length: 100 }),
+  availability: varchar("availability", { length: 255 }),
+  bio: text("bio"),
+  isProfileComplete: boolean("is_profile_complete").notNull().default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertContentProfileSchema = createInsertSchema(contentProfiles).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertContentProfile = z.infer<typeof insertContentProfileSchema>;
+export type ContentProfile = typeof contentProfiles.$inferSelect;
+
 // User Onboarding Status - track if user has completed onboarding
 export const userOnboarding = pgTable("user_onboarding", {
   id: serial("id").primaryKey(),

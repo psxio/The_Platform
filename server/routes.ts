@@ -1234,6 +1234,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   }
 
   // Update user role - ALL roles require valid invite codes
+  // Content role users go into "pending" state until admin approves them
   app.patch("/api/auth/role", isAuthenticated, async (req: any, res) => {
     try {
       const userId = req.user.id;
@@ -1255,6 +1256,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
                                bootstrapAdminEmail && 
                                currentUser.email.toLowerCase() === bootstrapAdminEmail.toLowerCase();
       
+      let validCodeRecord = null;
+      
       if (isBootstrapAdmin) {
         // Bootstrap admin can set their role without a code
         console.log(`Bootstrap admin access granted to ${currentUser.email}`);
@@ -1271,14 +1274,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
           // After first use, they should generate codes for others
         } else {
           // Check database for valid invite code for the requested role
-          const validCode = await storage.getValidInviteCode(inviteCode, role);
-          if (!validCode) {
+          validCodeRecord = await storage.getValidInviteCode(inviteCode, role);
+          if (!validCodeRecord) {
             return res.status(400).json({ error: `Invalid or expired invite code for ${role} access` });
           }
           
           // Mark the code as used and record the usage details
           await storage.useInviteCode(inviteCode, userId, role);
         }
+      }
+      
+      // For content role, create a pending content member entry instead of granting immediate access
+      if (role === "content" && !isBootstrapAdmin) {
+        // Check if user already has a pending entry
+        const existingPending = await storage.getPendingContentMember(userId);
+        if (!existingPending) {
+          // Create pending content member entry
+          await storage.createPendingContentMember({
+            userId,
+            inviteCodeId: validCodeRecord?.id || null,
+            status: "pending",
+          });
+        }
+        
+        // Still set the role to "content" but they won't have access until approved
+        const user = await storage.updateUserRole(userId, role);
+        if (!user) {
+          return res.status(404).json({ error: "User not found" });
+        }
+        
+        // Return with pending status info
+        return res.json({
+          ...user,
+          contentAccessStatus: "pending",
+          message: "Your content access request has been submitted. An admin will review it shortly."
+        });
       }
       
       const user = await storage.updateUserRole(userId, role);
@@ -1423,6 +1453,236 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error validating code:", error);
       res.status(500).json({ valid: false, error: "Failed to validate code" });
+    }
+  });
+
+  // ================== CONTENT ACCESS APPROVAL ENDPOINTS ==================
+  
+  // Get current user's content access status
+  app.get("/api/auth/content-access-status", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await storage.getUser(req.user.id);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      
+      // Only content users have pending status
+      if (user.role !== "content") {
+        return res.json({ status: "not_applicable", role: user.role });
+      }
+      
+      // Check pending content member status
+      const pendingMember = await storage.getPendingContentMember(req.user.id);
+      
+      if (!pendingMember) {
+        // No pending record means they're an approved legacy user OR admin approved them
+        // Check if they have a content profile - if so they're fully approved
+        const profile = await storage.getContentProfile(req.user.id);
+        if (profile?.isProfileComplete) {
+          return res.json({ status: "approved", profileComplete: true });
+        }
+        // They need to complete profile but are approved
+        return res.json({ status: "approved", profileComplete: false, needsProfile: true });
+      }
+      
+      // Check profile completion status if approved
+      if (pendingMember.status === "approved") {
+        const profile = await storage.getContentProfile(req.user.id);
+        return res.json({
+          status: "approved",
+          profileComplete: profile?.isProfileComplete || false,
+          needsProfile: !profile?.isProfileComplete,
+        });
+      }
+      
+      return res.json({
+        status: pendingMember.status,
+        createdAt: pendingMember.createdAt,
+        reviewNotes: pendingMember.reviewNotes,
+      });
+    } catch (error) {
+      console.error("Error checking content access status:", error);
+      res.status(500).json({ error: "Failed to check access status" });
+    }
+  });
+
+  // Get all pending content members (admin only)
+  app.get("/api/admin/pending-content-members", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await storage.getUser(req.user.id);
+      if (!user || user.role !== "admin") {
+        return res.status(403).json({ error: "Only admins can view pending members" });
+      }
+      
+      const pendingMembers = await storage.getPendingContentMembers();
+      
+      // Join with user data for display
+      const membersWithUserData = await Promise.all(
+        pendingMembers.map(async (member) => {
+          const memberUser = await storage.getUser(member.userId);
+          return {
+            ...member,
+            user: memberUser ? {
+              id: memberUser.id,
+              email: memberUser.email,
+              firstName: memberUser.firstName,
+              lastName: memberUser.lastName,
+            } : null,
+          };
+        })
+      );
+      
+      res.json(membersWithUserData);
+    } catch (error) {
+      console.error("Error fetching pending content members:", error);
+      res.status(500).json({ error: "Failed to fetch pending members" });
+    }
+  });
+
+  // Approve a pending content member (admin only)
+  app.post("/api/admin/pending-content-members/:userId/approve", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await storage.getUser(req.user.id);
+      if (!user || user.role !== "admin") {
+        return res.status(403).json({ error: "Only admins can approve members" });
+      }
+      
+      const { userId } = req.params;
+      const { reviewNotes, addToDirectory } = req.body;
+      
+      // Approve the pending member
+      const approvedMember = await storage.approvePendingContentMember(userId, req.user.id, reviewNotes);
+      if (!approvedMember) {
+        return res.status(404).json({ error: "Pending member not found" });
+      }
+      
+      // Get user data for directory
+      const memberUser = await storage.getUser(userId);
+      
+      // Optionally add to team directory
+      if (addToDirectory && memberUser) {
+        const fullName = [memberUser.firstName, memberUser.lastName].filter(Boolean).join(" ") || memberUser.email;
+        await storage.createDirectoryMember({
+          person: fullName,
+          email: memberUser.email,
+          skill: approvedMember.specialty || undefined,
+        });
+      }
+      
+      // Create a content profile for the user
+      await storage.createContentProfile({
+        userId,
+        specialty: approvedMember.specialty,
+        contactHandle: approvedMember.contactHandle,
+        portfolioUrl: approvedMember.portfolioUrl,
+        timezone: approvedMember.timezone,
+        availability: approvedMember.availability,
+        isProfileComplete: false, // They still need to complete full profile
+      });
+      
+      // Create a notification for the user
+      await storage.createNotification({
+        userId,
+        type: "approval",
+        title: "Content Access Approved",
+        message: "Your content access has been approved! Please complete your profile to start using ContentFlowStudio.",
+      });
+      
+      res.json({ success: true, member: approvedMember });
+    } catch (error) {
+      console.error("Error approving content member:", error);
+      res.status(500).json({ error: "Failed to approve member" });
+    }
+  });
+
+  // Reject a pending content member (admin only)
+  app.post("/api/admin/pending-content-members/:userId/reject", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await storage.getUser(req.user.id);
+      if (!user || user.role !== "admin") {
+        return res.status(403).json({ error: "Only admins can reject members" });
+      }
+      
+      const { userId } = req.params;
+      const { reviewNotes } = req.body;
+      
+      const rejectedMember = await storage.rejectPendingContentMember(userId, req.user.id, reviewNotes);
+      if (!rejectedMember) {
+        return res.status(404).json({ error: "Pending member not found" });
+      }
+      
+      // Create a notification for the user
+      await storage.createNotification({
+        userId,
+        type: "rejection",
+        title: "Content Access Request",
+        message: reviewNotes || "Your content access request was not approved. Please contact an admin for more information.",
+      });
+      
+      res.json({ success: true, member: rejectedMember });
+    } catch (error) {
+      console.error("Error rejecting content member:", error);
+      res.status(500).json({ error: "Failed to reject member" });
+    }
+  });
+
+  // ================== CONTENT PROFILE ENDPOINTS ==================
+  
+  // Get current user's content profile
+  app.get("/api/content-profile", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await storage.getContentProfile(req.user.id);
+      res.json(profile || null);
+    } catch (error) {
+      console.error("Error fetching content profile:", error);
+      res.status(500).json({ error: "Failed to fetch profile" });
+    }
+  });
+
+  // Create or update content profile
+  app.post("/api/content-profile", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = await storage.getUser(req.user.id);
+      if (!user || (user.role !== "content" && user.role !== "admin")) {
+        return res.status(403).json({ error: "Only content users can update their profile" });
+      }
+      
+      const { specialty, contactHandle, contactType, portfolioUrl, timezone, availability, bio } = req.body;
+      
+      // Check if required fields are filled to mark profile as complete
+      const isProfileComplete = !!(specialty && contactHandle && timezone);
+      
+      const existingProfile = await storage.getContentProfile(req.user.id);
+      
+      if (existingProfile) {
+        const updatedProfile = await storage.updateContentProfile(req.user.id, {
+          specialty,
+          contactHandle,
+          contactType,
+          portfolioUrl,
+          timezone,
+          availability,
+          bio,
+          isProfileComplete,
+        });
+        res.json(updatedProfile);
+      } else {
+        const newProfile = await storage.createContentProfile({
+          userId: req.user.id,
+          specialty,
+          contactHandle,
+          contactType,
+          portfolioUrl,
+          timezone,
+          availability,
+          bio,
+          isProfileComplete,
+        });
+        res.json(newProfile);
+      }
+    } catch (error) {
+      console.error("Error updating content profile:", error);
+      res.status(500).json({ error: "Failed to update profile" });
     }
   });
 

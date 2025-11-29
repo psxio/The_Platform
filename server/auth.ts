@@ -207,7 +207,38 @@ export const requireRole = (...roles: string[]): RequestHandler => {
         return res.status(403).json({ message: "No role assigned. Please select a role first." });
       }
 
-      if (userRole === "admin" || roles.includes(userRole)) {
+      // Admins have full access
+      if (userRole === "admin") {
+        (req as any).user = user;
+        return next();
+      }
+
+      // For content role, check if user is approved
+      if (userRole === "content" && roles.includes("content")) {
+        const pendingMember = await storage.getPendingContentMember(req.session.userId);
+        
+        // If there's a pending record and status is not "approved", deny access
+        if (pendingMember && pendingMember.status !== "approved") {
+          return res.status(403).json({ 
+            message: "Your content access is pending approval. Please wait for an admin to review your request.",
+            accessStatus: "pending"
+          });
+        }
+        
+        // Check if profile is complete (required for full access)
+        const profile = await storage.getContentProfile(req.session.userId);
+        if (!profile?.isProfileComplete) {
+          return res.status(403).json({ 
+            message: "Please complete your profile to access content features.",
+            accessStatus: "profile_incomplete"
+          });
+        }
+        
+        (req as any).user = user;
+        return next();
+      }
+
+      if (roles.includes(userRole)) {
         (req as any).user = user;
         return next();
       }

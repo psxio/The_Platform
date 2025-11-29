@@ -1276,8 +1276,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
             return res.status(400).json({ error: `Invalid or expired invite code for ${role} access` });
           }
           
-          // Mark the code as used
-          await storage.useInviteCode(inviteCode, userId);
+          // Mark the code as used and record the usage details
+          await storage.useInviteCode(inviteCode, userId, role);
         }
       }
       
@@ -1344,8 +1344,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ error: "Only admins can view invite codes" });
       }
       
-      const codes = await storage.getInviteCodes(req.user.id);
-      res.json(codes);
+      // Return invite codes with detailed usage information
+      const codesWithUses = await storage.getInviteCodesWithUses(req.user.id);
+      res.json(codesWithUses);
     } catch (error) {
       console.error("Error fetching invite codes:", error);
       res.status(500).json({ error: "Failed to fetch invite codes" });

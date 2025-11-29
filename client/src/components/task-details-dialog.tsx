@@ -393,7 +393,7 @@ export function TaskDetailsDialog({ open, onOpenChange, task, onEdit, currentUse
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col" data-testid="dialog-task-details">
+      <DialogContent className="max-w-3xl h-[90vh] overflow-hidden flex flex-col" data-testid="dialog-task-details">
         <DialogHeader className="flex-shrink-0">
           <div className="flex items-start justify-between gap-4">
             <div className="flex-1 space-y-2">

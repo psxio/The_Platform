@@ -1,8 +1,8 @@
 import type { ContentTask, Campaign } from "@shared/schema";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Calendar, User, Building2, Paperclip, UserCheck, AlertTriangle, Flag, FolderKanban } from "lucide-react";
+import { Calendar, User, Building2, AlertTriangle, Flag, FolderKanban } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 
@@ -10,7 +10,6 @@ function parseDate(dueDate: string): Date | null {
   try {
     let date: Date;
     
-    // Handle dates like "Nov 30" (without year) - assume current year
     if (/^[A-Za-z]{3}\s+\d{1,2}$/.test(dueDate.trim())) {
       const currentYear = new Date().getFullYear();
       date = new Date(`${dueDate.trim()}, ${currentYear}`);
@@ -18,10 +17,7 @@ function parseDate(dueDate: string): Date | null {
       date = new Date(dueDate);
     }
     
-    // Check if valid date
     if (isNaN(date.getTime())) return null;
-    
-    // Normalize to midnight for consistent comparison
     date.setHours(0, 0, 0, 0);
     return date;
   } catch {
@@ -82,18 +78,22 @@ const statusConfig = {
 const priorityConfig = {
   low: {
     className: "text-muted-foreground",
+    borderColor: "border-l-slate-300 dark:border-l-slate-600",
     icon: "opacity-50",
   },
   medium: {
     className: "text-blue-600 dark:text-blue-400",
+    borderColor: "border-l-blue-400 dark:border-l-blue-500",
     icon: "",
   },
   high: {
     className: "text-amber-600 dark:text-amber-400",
+    borderColor: "border-l-amber-400 dark:border-l-amber-500",
     icon: "",
   },
   urgent: {
     className: "text-destructive",
+    borderColor: "border-l-red-500 dark:border-l-red-400",
     icon: "animate-pulse",
   },
 };
@@ -122,65 +122,77 @@ export function ContentTaskCard({ task, isSelected, onSelectionChange, onEdit }:
   return (
     <Card
       className={cn(
-        "hover-elevate active-elevate-2 transition-all",
+        "hover-elevate active-elevate-2 transition-all overflow-hidden",
+        "border-l-4",
+        priorityStyle.borderColor,
         onEdit && "cursor-pointer",
-        isSelected && "ring-2 ring-primary",
-        taskIsOverdue && "border-destructive/50 bg-destructive/5",
-        taskIsDueSoon && !taskIsOverdue && "border-amber-500/50 bg-amber-500/5"
+        isSelected && "ring-2 ring-primary ring-offset-2",
+        taskIsOverdue && "border-l-destructive bg-destructive/5",
+        taskIsDueSoon && !taskIsOverdue && "border-l-amber-500 bg-amber-500/5"
       )}
       onClick={handleCardClick}
       data-testid={`card-content-task-${task.id}`}
     >
-      <CardHeader className="pb-3 space-y-0">
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex items-center gap-2 flex-wrap">
-            <Badge
-              variant={statusStyle.variant}
-              className={cn("text-xs font-medium", statusStyle.className)}
-              data-testid={`badge-status-${task.id}`}
-            >
-              {task.status}
-            </Badge>
-            {task.priority && task.priority !== "medium" && (
-              <div className={cn("flex items-center gap-1 text-xs", priorityStyle.className)}>
-                <Flag className={cn("w-3 h-3", priorityStyle.icon)} />
-                <span className="capitalize">{task.priority}</span>
+      <CardContent className="p-5 space-y-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex-1 min-w-0 space-y-3">
+            <div className="flex items-center gap-2 flex-wrap">
+              <Badge
+                variant={statusStyle.variant}
+                className={cn("text-xs font-medium", statusStyle.className)}
+                data-testid={`badge-status-${task.id}`}
+              >
+                {task.status}
+              </Badge>
+              {task.priority && task.priority !== "medium" && (
+                <Badge 
+                  variant="outline" 
+                  className={cn("text-xs gap-1 border-0", priorityStyle.className)}
+                >
+                  <Flag className={cn("w-3 h-3", priorityStyle.icon)} />
+                  <span className="capitalize">{task.priority}</span>
+                </Badge>
+              )}
+            </div>
+            
+            {campaign && (
+              <div className="flex items-center gap-2">
+                <div 
+                  className="w-2.5 h-2.5 rounded-full flex-shrink-0" 
+                  style={{ backgroundColor: campaign.color || "#3B82F6" }}
+                />
+                <span className="text-xs text-muted-foreground font-medium">
+                  {campaign.name}
+                </span>
               </div>
             )}
           </div>
+          
           {onSelectionChange && (
             <Checkbox
               checked={isSelected}
               onCheckedChange={onSelectionChange}
+              className="flex-shrink-0"
               data-testid={`checkbox-select-task-${task.id}`}
             />
           )}
         </div>
-        {campaign && (
-          <div className="flex items-center gap-1.5 mt-2 text-xs text-muted-foreground">
-            <div 
-              className="w-2 h-2 rounded-full" 
-              style={{ backgroundColor: campaign.color || "#3B82F6" }}
-            />
-            <span>{campaign.name}</span>
-          </div>
-        )}
-      </CardHeader>
 
-      <CardContent className="space-y-4">
         <p
-          className="text-sm font-medium text-foreground line-clamp-2 min-h-[2.5rem]"
+          className="text-sm font-medium text-foreground leading-relaxed line-clamp-2"
           title={task.description}
           data-testid={`text-description-${task.id}`}
         >
           {task.description}
         </p>
 
-        <div className="grid grid-cols-2 gap-3 text-xs">
+        <div className="flex items-center gap-4 flex-wrap text-xs text-muted-foreground pt-1">
           {task.assignedTo && (
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <User className="w-3.5 h-3.5 flex-shrink-0" />
-              <span className="truncate" data-testid={`text-assignee-${task.id}`}>
+            <div className="flex items-center gap-1.5">
+              <div className="w-5 h-5 rounded-full bg-primary/10 flex items-center justify-center">
+                <User className="w-3 h-3 text-primary" />
+              </div>
+              <span className="truncate max-w-[100px]" data-testid={`text-assignee-${task.id}`}>
                 {task.assignedTo}
               </span>
             </div>
@@ -188,36 +200,25 @@ export function ContentTaskCard({ task, isSelected, onSelectionChange, onEdit }:
 
           {task.dueDate && (
             <div className={cn(
-              "flex items-center gap-2",
-              taskIsOverdue ? "text-destructive" : taskIsDueSoon ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"
+              "flex items-center gap-1.5",
+              taskIsOverdue ? "text-destructive" : taskIsDueSoon ? "text-amber-600 dark:text-amber-400" : ""
             )}>
               {taskIsOverdue ? (
-                <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+                <AlertTriangle className="w-3.5 h-3.5" />
               ) : (
-                <Calendar className="w-3.5 h-3.5 flex-shrink-0" />
+                <Calendar className="w-3.5 h-3.5" />
               )}
-              <span className="truncate" data-testid={`text-duedate-${task.id}`}>
+              <span data-testid={`text-duedate-${task.id}`}>
                 {task.dueDate}
-                {taskIsOverdue && " (Overdue)"}
-                {taskIsDueSoon && !taskIsOverdue && " (Due Soon)"}
               </span>
             </div>
           )}
 
           {task.client && (
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <Building2 className="w-3.5 h-3.5 flex-shrink-0" />
-              <span className="truncate" data-testid={`text-client-${task.id}`}>
+            <div className="flex items-center gap-1.5">
+              <Building2 className="w-3.5 h-3.5" />
+              <span className="truncate max-w-[80px]" data-testid={`text-client-${task.id}`}>
                 {task.client}
-              </span>
-            </div>
-          )}
-
-          {task.assignedBy && (
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <UserCheck className="w-3.5 h-3.5 flex-shrink-0" />
-              <span className="truncate" data-testid={`text-assignedby-${task.id}`}>
-                {task.assignedBy}
               </span>
             </div>
           )}
@@ -225,21 +226,12 @@ export function ContentTaskCard({ task, isSelected, onSelectionChange, onEdit }:
 
         {task.notes && (
           <p
-            className="text-xs italic text-muted-foreground line-clamp-2 border-t border-border pt-3"
+            className="text-xs text-muted-foreground/80 line-clamp-1 italic border-t border-border/50 pt-3"
             title={task.notes}
             data-testid={`text-notes-${task.id}`}
           >
             {task.notes}
           </p>
-        )}
-
-        {task.deliverable && (
-          <div className="flex items-center gap-2 text-xs text-muted-foreground border-t border-border pt-3">
-            <Paperclip className="w-3.5 h-3.5" />
-            <span className="truncate" data-testid={`text-deliverable-${task.id}`}>
-              {task.deliverable}
-            </span>
-          </div>
         )}
       </CardContent>
     </Card>

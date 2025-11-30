@@ -17,6 +17,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Switch } from "@/components/ui/switch";
 import { 
   Upload, 
   Download, 
@@ -34,7 +35,9 @@ import {
   FileAudio,
   Loader2,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Clock,
+  ArrowLeftRight
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
@@ -67,6 +70,11 @@ function getFileIcon(fileName: string) {
   return <File className="w-5 h-5 text-muted-foreground" />;
 }
 
+function isImageFile(fileName: string): boolean {
+  const ext = fileName.toLowerCase().split('.').pop() || '';
+  return ['jpg', 'jpeg', 'png', 'gif', 'svg', 'webp'].includes(ext);
+}
+
 function isPreviewable(fileName: string): boolean {
   const ext = fileName.toLowerCase().split('.').pop() || '';
   return ['jpg', 'jpeg', 'png', 'gif', 'svg', 'webp', 'pdf'].includes(ext);
@@ -78,6 +86,7 @@ interface DeliverableItemProps {
   onDelete: (id: number) => void;
   onUploadVersion: (deliverable: Deliverable) => void;
   onViewVersions: (deliverable: Deliverable) => void;
+  versions?: DeliverableVersion[];
 }
 
 function DeliverableItem({ 
@@ -85,14 +94,33 @@ function DeliverableItem({
   taskDescription, 
   onDelete, 
   onUploadVersion,
-  onViewVersions 
+  onViewVersions,
+  versions = []
 }: DeliverableItemProps) {
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [showVersionToggle, setShowVersionToggle] = useState(false);
+  const [selectedVersionIndex, setSelectedVersionIndex] = useState<number>(-1);
+  
+  const currentFile = selectedVersionIndex === -1 
+    ? { 
+        fileName: deliverable.fileName, 
+        filePath: deliverable.filePath, 
+        fileSize: deliverable.fileSize,
+        uploadedAt: deliverable.uploadedAt,
+        isCurrent: true
+      }
+    : {
+        fileName: versions[selectedVersionIndex].fileName,
+        filePath: versions[selectedVersionIndex].filePath,
+        fileSize: versions[selectedVersionIndex].fileSize,
+        uploadedAt: versions[selectedVersionIndex].createdAt,
+        isCurrent: false,
+        versionNumber: versions[selectedVersionIndex].versionNumber
+      };
 
   const handleDownload = () => {
     const link = document.createElement("a");
-    link.href = deliverable.filePath;
-    link.download = deliverable.fileName;
+    link.href = currentFile.filePath;
+    link.download = currentFile.fileName;
     link.target = "_blank";
     document.body.appendChild(link);
     link.click();
@@ -100,132 +128,157 @@ function DeliverableItem({
   };
 
   const handlePreview = () => {
-    window.open(deliverable.filePath, '_blank');
+    window.open(currentFile.filePath, '_blank');
   };
+
+  const isImage = isImageFile(deliverable.fileName);
 
   return (
     <div
-      className="border border-border rounded-lg hover-elevate overflow-hidden"
+      className="group border border-border rounded-xl hover-elevate overflow-hidden bg-card"
       data-testid={`item-deliverable-${deliverable.id}`}
     >
-      <div className="flex items-center justify-between p-4">
-        <div className="flex items-center gap-3 flex-1 min-w-0">
-          {getFileIcon(deliverable.fileName)}
-          <div className="flex-1 min-w-0">
-            <p className="font-medium text-sm truncate" data-testid={`text-filename-${deliverable.id}`}>
-              {deliverable.fileName}
-            </p>
-            <p className="text-xs text-muted-foreground truncate">
-              {taskDescription}
-            </p>
-            <div className="flex items-center gap-2 mt-1 flex-wrap">
-              {deliverable.fileSize && (
-                <Badge variant="secondary" className="text-xs">
-                  {formatBytes(parseInt(deliverable.fileSize))}
-                </Badge>
+      <div className="flex gap-4 p-4">
+        {isImage ? (
+          <div 
+            className="w-20 h-20 rounded-lg overflow-hidden bg-muted flex-shrink-0 cursor-pointer border"
+            onClick={handlePreview}
+          >
+            <img 
+              src={currentFile.filePath} 
+              alt={currentFile.fileName}
+              className="w-full h-full object-cover hover:scale-105 transition-transform duration-200"
+            />
+          </div>
+        ) : (
+          <div className="w-20 h-20 rounded-lg bg-muted/50 flex items-center justify-center flex-shrink-0 border">
+            {getFileIcon(currentFile.fileName)}
+          </div>
+        )}
+        
+        <div className="flex-1 min-w-0 space-y-2">
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <p className="font-medium text-sm truncate" data-testid={`text-filename-${deliverable.id}`}>
+                  {currentFile.fileName}
+                </p>
+                {!currentFile.isCurrent && (
+                  <Badge variant="outline" className="text-xs shrink-0">
+                    v{currentFile.versionNumber}
+                  </Badge>
+                )}
+                {currentFile.isCurrent && versions.length > 0 && (
+                  <Badge className="text-xs shrink-0">Latest</Badge>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground truncate mt-0.5">
+                {taskDescription}
+              </p>
+            </div>
+            
+            <div className="flex items-center gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+              {isPreviewable(currentFile.fileName) && (
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  onClick={handlePreview}
+                  title="Preview"
+                  data-testid={`button-preview-${deliverable.id}`}
+                >
+                  <Eye className="w-4 h-4" />
+                </Button>
               )}
-              {deliverable.uploadedAt && (
-                <span className="text-xs text-muted-foreground">
-                  {format(new Date(deliverable.uploadedAt), "MMM d, yyyy 'at' h:mm a")}
-                </span>
-              )}
+              <Button
+                size="icon"
+                variant="ghost"
+                onClick={handleDownload}
+                title="Download"
+                data-testid={`button-download-${deliverable.id}`}
+              >
+                <Download className="w-4 h-4" />
+              </Button>
+              <Button
+                size="icon"
+                variant="ghost"
+                onClick={() => onUploadVersion(deliverable)}
+                title="Upload New Version"
+                data-testid={`button-upload-version-${deliverable.id}`}
+              >
+                <Plus className="w-4 h-4" />
+              </Button>
+              <Button
+                size="icon"
+                variant="ghost"
+                onClick={() => onDelete(deliverable.id)}
+                title="Delete"
+                data-testid={`button-delete-${deliverable.id}`}
+              >
+                <Trash2 className="w-4 h-4 text-destructive" />
+              </Button>
             </div>
           </div>
-        </div>
-        
-        <div className="flex items-center gap-1">
-          {isPreviewable(deliverable.fileName) && (
-            <Button
-              size="icon"
-              variant="ghost"
-              onClick={handlePreview}
-              title="Preview"
-              data-testid={`button-preview-${deliverable.id}`}
-            >
-              <Eye className="w-4 h-4" />
-            </Button>
-          )}
-          <Button
-            size="icon"
-            variant="ghost"
-            onClick={handleDownload}
-            title="Download"
-            data-testid={`button-download-${deliverable.id}`}
-          >
-            <Download className="w-4 h-4" />
-          </Button>
-          <Button
-            size="icon"
-            variant="ghost"
-            onClick={() => onViewVersions(deliverable)}
-            title="Version History"
-            data-testid={`button-versions-${deliverable.id}`}
-          >
-            <History className="w-4 h-4" />
-          </Button>
-          <Button
-            size="icon"
-            variant="ghost"
-            onClick={() => onUploadVersion(deliverable)}
-            title="Upload New Version"
-            data-testid={`button-upload-version-${deliverable.id}`}
-          >
-            <Plus className="w-4 h-4" />
-          </Button>
-          <Button
-            size="icon"
-            variant="ghost"
-            onClick={() => onDelete(deliverable.id)}
-            title="Delete"
-            data-testid={`button-delete-${deliverable.id}`}
-          >
-            <Trash2 className="w-4 h-4 text-destructive" />
-          </Button>
-          <Button
-            size="icon"
-            variant="ghost"
-            onClick={() => setIsExpanded(!isExpanded)}
-            data-testid={`button-expand-${deliverable.id}`}
-          >
-            {isExpanded ? (
-              <ChevronUp className="w-4 h-4" />
-            ) : (
-              <ChevronDown className="w-4 h-4" />
+
+          <div className="flex items-center gap-3 flex-wrap text-xs text-muted-foreground">
+            {currentFile.fileSize && (
+              <span>{formatBytes(parseInt(currentFile.fileSize))}</span>
             )}
-          </Button>
+            {currentFile.uploadedAt && (
+              <span className="flex items-center gap-1">
+                <Clock className="w-3 h-3" />
+                {format(new Date(currentFile.uploadedAt), "MMM d, yyyy")}
+              </span>
+            )}
+            {versions.length > 0 && (
+              <button
+                onClick={() => setShowVersionToggle(!showVersionToggle)}
+                className="flex items-center gap-1 text-primary hover:underline"
+              >
+                <History className="w-3 h-3" />
+                {versions.length + 1} versions
+              </button>
+            )}
+          </div>
+
+          {showVersionToggle && versions.length > 0 && (
+            <div className="flex items-center gap-3 pt-2 border-t border-border/50 mt-2">
+              <div className="flex items-center gap-2">
+                <ArrowLeftRight className="w-3.5 h-3.5 text-muted-foreground" />
+                <span className="text-xs text-muted-foreground">Version:</span>
+              </div>
+              <div className="flex items-center gap-1 flex-wrap">
+                <Button
+                  size="sm"
+                  variant={selectedVersionIndex === -1 ? "default" : "outline"}
+                  className="h-7 text-xs"
+                  onClick={() => setSelectedVersionIndex(-1)}
+                >
+                  Latest
+                </Button>
+                {versions.map((version, idx) => (
+                  <Button
+                    key={version.id}
+                    size="sm"
+                    variant={selectedVersionIndex === idx ? "default" : "outline"}
+                    className="h-7 text-xs"
+                    onClick={() => setSelectedVersionIndex(idx)}
+                  >
+                    v{version.versionNumber}
+                  </Button>
+                ))}
+              </div>
+              <Button
+                size="sm"
+                variant="ghost"
+                className="h-7 text-xs ml-auto"
+                onClick={() => onViewVersions(deliverable)}
+              >
+                View All
+              </Button>
+            </div>
+          )}
         </div>
       </div>
-      
-      {isExpanded && (
-        <div className="border-t px-4 py-3 bg-muted/30">
-          <div className="flex items-center gap-4 text-sm">
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => onViewVersions(deliverable)}
-            >
-              <History className="w-4 h-4 mr-2" />
-              View All Versions
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => onUploadVersion(deliverable)}
-            >
-              <Upload className="w-4 h-4 mr-2" />
-              Upload New Version
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => window.open(deliverable.filePath, '_blank')}
-            >
-              <ExternalLink className="w-4 h-4 mr-2" />
-              Open in New Tab
-            </Button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -258,7 +311,27 @@ export function DeliverablesView() {
       if (!res.ok) return [];
       return res.json();
     },
-    enabled: !!selectedDeliverable && isVersionDialogOpen,
+    enabled: !!selectedDeliverable,
+  });
+
+  const { data: allVersionsMap } = useQuery<Record<number, DeliverableVersion[]>>({
+    queryKey: ["/api/deliverables/all-versions"],
+    queryFn: async () => {
+      if (!deliverables) return {};
+      const map: Record<number, DeliverableVersion[]> = {};
+      for (const d of deliverables) {
+        try {
+          const res = await fetch(`/api/deliverables/${d.id}/versions`, { credentials: "include" });
+          if (res.ok) {
+            map[d.id] = await res.json();
+          }
+        } catch {
+          map[d.id] = [];
+        }
+      }
+      return map;
+    },
+    enabled: !!deliverables && deliverables.length > 0,
   });
 
   const deleteDeliverableMutation = useMutation({
@@ -293,6 +366,7 @@ export function DeliverablesView() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/deliverables"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/deliverables/all-versions"] });
       refetchVersions();
       setIsUploadVersionDialogOpen(false);
       setVersionFile(null);
@@ -437,7 +511,7 @@ export function DeliverablesView() {
             </Select>
           </div>
 
-          <div className="border-2 border-dashed border-primary rounded-lg p-8 text-center bg-primary/5">
+          <div className="border-2 border-dashed border-primary/30 rounded-xl p-8 text-center bg-primary/5 hover:bg-primary/10 hover:border-primary/50 transition-colors">
             <input
               type="file"
               id="file-upload"
@@ -449,9 +523,11 @@ export function DeliverablesView() {
             />
             <label
               htmlFor="file-upload"
-              className={`flex flex-col items-center gap-2 cursor-pointer ${!selectedTaskId ? 'opacity-50 cursor-not-allowed' : ''}`}
+              className={`flex flex-col items-center gap-3 cursor-pointer ${!selectedTaskId ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
-              <Upload className="w-8 h-8 text-muted-foreground" />
+              <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
+                <Upload className="w-6 h-6 text-primary" />
+              </div>
               <div>
                 <p className="font-medium text-sm">
                   {isUploading ? "Uploading..." : "Drop files or click to upload"}
@@ -479,12 +555,14 @@ export function DeliverablesView() {
           {isLoading ? (
             <div className="space-y-3">
               {[1, 2, 3].map((i) => (
-                <Skeleton key={i} className="h-16" data-testid={`skeleton-deliverable-${i}`} />
+                <Skeleton key={i} className="h-24" data-testid={`skeleton-deliverable-${i}`} />
               ))}
             </div>
           ) : filteredDeliverables.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-center" data-testid="empty-deliverables">
-              <Inbox className="w-16 h-16 text-muted-foreground mb-4" />
+            <div className="flex flex-col items-center justify-center py-16 text-center" data-testid="empty-deliverables">
+              <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-4">
+                <Inbox className="w-8 h-8 text-muted-foreground" />
+              </div>
               <h3 className="text-lg font-semibold text-foreground mb-2">No deliverables</h3>
               <p className="text-sm text-muted-foreground max-w-sm">
                 {selectedTaskId 
@@ -502,6 +580,7 @@ export function DeliverablesView() {
                   onDelete={(id) => deleteDeliverableMutation.mutate(id)}
                   onUploadVersion={handleUploadVersion}
                   onViewVersions={handleViewVersions}
+                  versions={allVersionsMap?.[deliverable.id] || []}
                 />
               ))}
             </div>
@@ -509,7 +588,6 @@ export function DeliverablesView() {
         </CardContent>
       </Card>
 
-      {/* Version History Dialog */}
       <Dialog open={isVersionDialogOpen} onOpenChange={setIsVersionDialogOpen}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
@@ -524,24 +602,33 @@ export function DeliverablesView() {
 
           <ScrollArea className="max-h-[400px]">
             <div className="space-y-3">
-              {/* Current Version */}
               {selectedDeliverable && (
-                <div className="p-3 border rounded-lg bg-primary/5">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      {getFileIcon(selectedDeliverable.fileName)}
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <p className="font-medium text-sm">{selectedDeliverable.fileName}</p>
-                          <Badge>Current</Badge>
-                        </div>
-                        <p className="text-xs text-muted-foreground">
-                          {selectedDeliverable.uploadedAt && 
-                            format(new Date(selectedDeliverable.uploadedAt), "MMM d, yyyy 'at' h:mm a")}
-                          {selectedDeliverable.fileSize && 
-                            ` - ${formatBytes(parseInt(selectedDeliverable.fileSize))}`}
-                        </p>
+                <div className="p-4 border rounded-xl bg-primary/5 border-primary/20">
+                  <div className="flex items-center gap-4">
+                    {isImageFile(selectedDeliverable.fileName) ? (
+                      <div className="w-16 h-16 rounded-lg overflow-hidden bg-muted border">
+                        <img 
+                          src={selectedDeliverable.filePath} 
+                          alt={selectedDeliverable.fileName}
+                          className="w-full h-full object-cover"
+                        />
                       </div>
+                    ) : (
+                      <div className="w-16 h-16 rounded-lg bg-muted flex items-center justify-center border">
+                        {getFileIcon(selectedDeliverable.fileName)}
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium text-sm truncate">{selectedDeliverable.fileName}</p>
+                        <Badge>Current</Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1">
+                        {selectedDeliverable.uploadedAt && 
+                          format(new Date(selectedDeliverable.uploadedAt), "MMM d, yyyy 'at' h:mm a")}
+                        {selectedDeliverable.fileSize && 
+                          ` - ${formatBytes(parseInt(selectedDeliverable.fileSize))}`}
+                      </p>
                     </div>
                     <Button
                       size="sm"
@@ -555,33 +642,42 @@ export function DeliverablesView() {
                 </div>
               )}
 
-              {/* Previous Versions */}
               {versions && versions.length > 0 ? (
                 versions.map((version) => (
-                  <div key={version.id} className="p-3 border rounded-lg">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        {getFileIcon(version.fileName)}
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <p className="font-medium text-sm">{version.fileName}</p>
-                            <Badge variant="outline">v{version.versionNumber}</Badge>
-                          </div>
-                          <p className="text-xs text-muted-foreground">
-                            {version.createdAt && 
-                              format(new Date(version.createdAt), "MMM d, yyyy 'at' h:mm a")}
-                            {version.fileSize && 
-                              ` - ${formatBytes(parseInt(version.fileSize))}`}
-                          </p>
-                          {version.notes && (
-                            <p className="text-xs text-muted-foreground mt-1 italic">
-                              "{version.notes}"
-                            </p>
-                          )}
+                  <div key={version.id} className="p-4 border rounded-xl">
+                    <div className="flex items-center gap-4">
+                      {isImageFile(version.fileName) ? (
+                        <div className="w-16 h-16 rounded-lg overflow-hidden bg-muted border">
+                          <img 
+                            src={version.filePath} 
+                            alt={version.fileName}
+                            className="w-full h-full object-cover"
+                          />
                         </div>
+                      ) : (
+                        <div className="w-16 h-16 rounded-lg bg-muted flex items-center justify-center border">
+                          {getFileIcon(version.fileName)}
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium text-sm truncate">{version.fileName}</p>
+                          <Badge variant="outline">v{version.versionNumber}</Badge>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {version.createdAt && 
+                            format(new Date(version.createdAt), "MMM d, yyyy 'at' h:mm a")}
+                          {version.fileSize && 
+                            ` - ${formatBytes(parseInt(version.fileSize))}`}
+                        </p>
+                        {version.notes && (
+                          <p className="text-xs text-muted-foreground mt-1 italic">
+                            "{version.notes}"
+                          </p>
+                        )}
                       </div>
                       <Button
-                        size="sm"
+                        size="icon"
                         variant="ghost"
                         onClick={() => window.open(version.filePath, '_blank')}
                       >
@@ -591,7 +687,7 @@ export function DeliverablesView() {
                   </div>
                 ))
               ) : (
-                <div className="text-center py-6 text-muted-foreground">
+                <div className="text-center py-8 text-muted-foreground">
                   <History className="w-8 h-8 mx-auto mb-2 opacity-50" />
                   <p className="text-sm">No previous versions</p>
                 </div>
@@ -614,7 +710,6 @@ export function DeliverablesView() {
         </DialogContent>
       </Dialog>
 
-      {/* Upload Version Dialog */}
       <Dialog open={isUploadVersionDialogOpen} onOpenChange={setIsUploadVersionDialogOpen}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -629,7 +724,7 @@ export function DeliverablesView() {
               <Label>File</Label>
               <div
                 className={cn(
-                  "mt-2 border-2 border-dashed rounded-lg p-6 text-center cursor-pointer transition-colors",
+                  "mt-2 border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition-colors",
                   versionFile ? "border-primary bg-primary/5" : "border-muted-foreground/25 hover:border-primary/50"
                 )}
                 onClick={() => document.getElementById('version-file-upload')?.click()}
@@ -644,11 +739,13 @@ export function DeliverablesView() {
                 {versionFile ? (
                   <div className="flex items-center justify-center gap-2">
                     {getFileIcon(versionFile.name)}
-                    <span className="truncate max-w-[200px]">{versionFile.name}</span>
+                    <span className="truncate max-w-[200px] text-sm">{versionFile.name}</span>
                   </div>
                 ) : (
                   <>
-                    <Upload className="w-8 h-8 mx-auto mb-2 text-muted-foreground" />
+                    <div className="w-10 h-10 rounded-full bg-muted flex items-center justify-center mx-auto mb-2">
+                      <Upload className="w-5 h-5 text-muted-foreground" />
+                    </div>
                     <p className="text-sm text-muted-foreground">Click to select file</p>
                   </>
                 )}

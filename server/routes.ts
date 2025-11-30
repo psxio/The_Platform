@@ -5451,6 +5451,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
           
           recordsProcessed = taskData.length;
+        } else if (sheet.sheetType === "data") {
+          // Generic data sync - read headers and all rows
+          const sheetData = await googleSheetsService.readDataSheet(sheet.sheetId, sheet.tabName || undefined);
+          
+          // Store the data in the connected sheet record
+          await storage.updateConnectedSheet(id, {
+            cachedHeaders: sheetData.headers,
+            cachedData: JSON.stringify(sheetData.rows),
+          });
+          
+          recordsProcessed = sheetData.rows.length;
+          recordsCreated = sheetData.rows.length;
         }
         
         // Update sync log with success
@@ -5531,6 +5543,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching multi-column tasks:", error);
       res.status(500).json({ error: "Failed to fetch tasks" });
+    }
+  });
+
+  // Get cached data for a data-type sheet
+  app.get("/api/sheets-hub/:id/data", requireRole("admin"), async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const sheet = await storage.getConnectedSheet(id);
+      
+      if (!sheet) {
+        return res.status(404).json({ error: "Sheet not found" });
+      }
+      
+      if (sheet.sheetType !== "data") {
+        return res.status(400).json({ error: "Sheet is not a data type" });
+      }
+      
+      const headers = sheet.cachedHeaders || [];
+      const rows = sheet.cachedData ? JSON.parse(sheet.cachedData) : [];
+      
+      res.json({ headers, rows });
+    } catch (error) {
+      console.error("Error fetching cached data:", error);
+      res.status(500).json({ error: "Failed to fetch data" });
     }
   });
 

@@ -909,7 +909,7 @@ export type BrandPackFile = typeof brandPackFiles.$inferSelect;
 // ==================== GOOGLE SHEETS HUB TABLES ====================
 
 // Sheet types supported by the hub
-export const sheetTypes = ["payroll", "tasks", "directory", "custom"] as const;
+export const sheetTypes = ["payroll", "tasks", "directory", "data", "custom"] as const;
 export type SheetType = typeof sheetTypes[number];
 
 // Connected Google Sheets - track multiple sheets
@@ -926,6 +926,8 @@ export const connectedSheets = pgTable("connected_sheets", {
   lastSyncStatus: varchar("last_sync_status", { length: 50 }), // success, error, pending
   lastSyncMessage: text("last_sync_message"),
   syncDirection: varchar("sync_direction", { length: 20 }).default("both"), // push, pull, both
+  cachedHeaders: text("cached_headers").array(), // Column headers for data type sheets
+  cachedData: text("cached_data"), // JSON stringified data for data type sheets
   createdBy: varchar("created_by").references(() => users.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),

@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { Link } from "wouter";
 import { 
@@ -31,7 +32,9 @@ import {
   AlertCircle,
   Settings,
   Wallet,
-  Building2
+  Building2,
+  TableIcon,
+  LayoutGrid
 } from "lucide-react";
 
 type ConnectedSheet = {
@@ -77,19 +80,26 @@ type MultiColumnTask = {
   tasks: { id: number; taskDescription: string; rowIndex: number }[];
 };
 
+type SheetPreview = {
+  sheetId: string;
+  title: string;
+  tabs: string[];
+};
+
+type SelectedTab = {
+  tabName: string;
+  sheetType: string;
+  selected: boolean;
+};
+
 export default function AdminSheetsHub() {
   const { toast } = useToast();
   const [selectedSheet, setSelectedSheet] = useState<ConnectedSheet | null>(null);
   const [showAddDialog, setShowAddDialog] = useState(false);
-  const [previewUrl, setPreviewUrl] = useState("");
-  const [newSheet, setNewSheet] = useState({
-    name: "",
-    sheetUrl: "",
-    sheetType: "payroll",
-    tabName: "",
-    description: "",
-    syncDirection: "both",
-  });
+  const [sheetUrl, setSheetUrl] = useState("");
+  const [sheetPreview, setSheetPreview] = useState<SheetPreview | null>(null);
+  const [selectedTabs, setSelectedTabs] = useState<SelectedTab[]>([]);
+  const [sheetDescription, setSheetDescription] = useState("");
 
   // Fetch connected sheets
   const { data: sheets, isLoading: sheetsLoading } = useQuery<ConnectedSheet[]>({
@@ -131,21 +141,44 @@ export default function AdminSheetsHub() {
     },
     enabled: !!selectedSheet?.id && selectedSheet.sheetType === "tasks",
   });
+  
+  // Fetch generic data for data type sheet
+  const { data: genericSheetData, isLoading: genericDataLoading } = useQuery<{
+    headers: string[];
+    rows: { rowIndex: number; cells: { [column: string]: string } }[];
+  }>({
+    queryKey: ["/api/sheets-hub", selectedSheet?.id, "data"],
+    queryFn: async () => {
+      if (!selectedSheet?.id || selectedSheet.sheetType !== "data") return { headers: [], rows: [] };
+      const res = await fetch(`/api/sheets-hub/${selectedSheet.id}/data`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch data");
+      return res.json();
+    },
+    enabled: !!selectedSheet?.id && selectedSheet.sheetType === "data",
+  });
 
   // Preview sheet mutation
   const previewMutation = useMutation({
-    mutationFn: async (sheetUrl: string) => {
-      const res = await apiRequest("POST", "/api/sheets-hub/preview", { sheetUrl });
+    mutationFn: async (url: string) => {
+      const res = await apiRequest("POST", "/api/sheets-hub/preview", { sheetUrl: url });
       return res.json();
     },
-    onSuccess: (data) => {
+    onSuccess: (data: SheetPreview) => {
+      setSheetPreview(data);
+      // Initialize all tabs as unselected with "data" type
+      setSelectedTabs(data.tabs.map(tab => ({
+        tabName: tab,
+        sheetType: "data",
+        selected: false,
+      })));
       toast({
         title: "Sheet Found",
-        description: `"${data.title}" with ${data.tabs.length} tab(s): ${data.tabs.join(", ")}`,
+        description: `"${data.title}" has ${data.tabs.length} tab(s). Select which ones to import.`,
       });
-      setNewSheet(prev => ({ ...prev, name: data.title || prev.name }));
     },
     onError: (error: Error) => {
+      setSheetPreview(null);
+      setSelectedTabs([]);
       toast({
         title: "Cannot access sheet",
         description: error.message,
@@ -154,36 +187,65 @@ export default function AdminSheetsHub() {
     },
   });
 
-  // Connect sheet mutation
+  // Connect multiple tabs mutation
   const connectMutation = useMutation({
-    mutationFn: async (sheetData: typeof newSheet) => {
-      const res = await apiRequest("POST", "/api/sheets-hub", sheetData);
-      return res.json();
+    mutationFn: async (tabsToConnect: { tabName: string; sheetType: string }[]) => {
+      const results = [];
+      for (const tab of tabsToConnect) {
+        const res = await apiRequest("POST", "/api/sheets-hub", {
+          name: `${sheetPreview?.title || "Sheet"} - ${tab.tabName}`,
+          sheetUrl,
+          sheetType: tab.sheetType,
+          tabName: tab.tabName,
+          description: sheetDescription || null,
+          syncDirection: "both",
+        });
+        results.push(await res.json());
+      }
+      return results;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/sheets-hub"] });
       setShowAddDialog(false);
-      setNewSheet({
-        name: "",
-        sheetUrl: "",
-        sheetType: "payroll",
-        tabName: "",
-        description: "",
-        syncDirection: "both",
-      });
+      resetAddDialog();
       toast({
-        title: "Sheet connected",
-        description: "You can now sync data from this sheet.",
+        title: "Tabs connected",
+        description: `Successfully connected ${data.length} tab(s). Click "Sync Now" to import data.`,
       });
     },
     onError: (error: Error) => {
       toast({
-        title: "Failed to connect sheet",
+        title: "Failed to connect",
         description: error.message,
         variant: "destructive",
       });
     },
   });
+
+  // Helper to reset the add dialog
+  const resetAddDialog = () => {
+    setSheetUrl("");
+    setSheetPreview(null);
+    setSelectedTabs([]);
+    setSheetDescription("");
+  };
+
+  // Toggle tab selection
+  const toggleTabSelection = (tabName: string) => {
+    setSelectedTabs(prev => prev.map(tab => 
+      tab.tabName === tabName ? { ...tab, selected: !tab.selected } : tab
+    ));
+  };
+
+  // Update tab type
+  const updateTabType = (tabName: string, sheetType: string) => {
+    setSelectedTabs(prev => prev.map(tab => 
+      tab.tabName === tabName ? { ...tab, sheetType } : tab
+    ));
+  };
+
+  // Get selected tabs for connection
+  const getTabsToConnect = () => selectedTabs.filter(tab => tab.selected);
 
   // Sync sheet mutation
   const syncMutation = useMutation({
@@ -265,6 +327,8 @@ export default function AdminSheetsHub() {
         return <Badge variant="secondary"><DollarSign className="w-3 h-3 mr-1" />Payroll</Badge>;
       case "tasks":
         return <Badge variant="secondary"><ClipboardList className="w-3 h-3 mr-1" />Tasks</Badge>;
+      case "data":
+        return <Badge variant="secondary"><TableIcon className="w-3 h-3 mr-1" />Data</Badge>;
       default:
         return <Badge variant="outline">{type}</Badge>;
     }
@@ -297,105 +361,159 @@ export default function AdminSheetsHub() {
             Connect and sync data from Google Sheets
           </p>
         </div>
-        <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
+        <Dialog open={showAddDialog} onOpenChange={(open) => {
+          setShowAddDialog(open);
+          if (!open) resetAddDialog();
+        }}>
           <DialogTrigger asChild>
             <Button data-testid="button-add-sheet">
               <Plus className="w-4 h-4 mr-2" />
               Connect Sheet
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-lg">
+          <DialogContent className="max-w-2xl">
             <DialogHeader>
               <DialogTitle>Connect Google Sheet</DialogTitle>
               <DialogDescription>
-                Paste a Google Sheets URL to connect and sync data
+                Paste a Google Sheets URL, then select which tabs to import
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
+              {/* Step 1: Enter URL */}
               <div className="space-y-2">
                 <Label htmlFor="sheetUrl">Sheet URL</Label>
                 <div className="flex gap-2">
                   <Input
                     id="sheetUrl"
                     placeholder="https://docs.google.com/spreadsheets/d/..."
-                    value={newSheet.sheetUrl}
-                    onChange={(e) => setNewSheet(prev => ({ ...prev, sheetUrl: e.target.value }))}
+                    value={sheetUrl}
+                    onChange={(e) => {
+                      setSheetUrl(e.target.value);
+                      setSheetPreview(null);
+                      setSelectedTabs([]);
+                    }}
                     data-testid="input-sheet-url"
                   />
                   <Button 
                     variant="outline" 
-                    onClick={() => previewMutation.mutate(newSheet.sheetUrl)}
-                    disabled={!newSheet.sheetUrl || previewMutation.isPending}
+                    onClick={() => previewMutation.mutate(sheetUrl)}
+                    disabled={!sheetUrl || previewMutation.isPending}
                     data-testid="button-preview-sheet"
                   >
-                    {previewMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Verify"}
+                    {previewMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : "Load Tabs"}
                   </Button>
                 </div>
               </div>
               
-              <div className="space-y-2">
-                <Label htmlFor="name">Name</Label>
-                <Input
-                  id="name"
-                  placeholder="e.g., Payroll Sheet Q4"
-                  value={newSheet.name}
-                  onChange={(e) => setNewSheet(prev => ({ ...prev, name: e.target.value }))}
-                  data-testid="input-sheet-name"
-                />
-              </div>
-              
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="sheetType">Type</Label>
-                  <Select
-                    value={newSheet.sheetType}
-                    onValueChange={(value) => setNewSheet(prev => ({ ...prev, sheetType: value }))}
-                  >
-                    <SelectTrigger data-testid="select-sheet-type">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="payroll">Payroll</SelectItem>
-                      <SelectItem value="tasks">Multi-Column Tasks</SelectItem>
-                      <SelectItem value="custom">Custom</SelectItem>
-                    </SelectContent>
-                  </Select>
+              {/* Step 2: Show available tabs */}
+              {sheetPreview && (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <FileSpreadsheet className="w-4 h-4 text-green-600" />
+                    <span className="font-medium">{sheetPreview.title}</span>
+                    <Badge variant="outline">{sheetPreview.tabs.length} tabs</Badge>
+                  </div>
+                  
+                  <Label>Select tabs to import:</Label>
+                  <div className="border rounded-lg divide-y max-h-[300px] overflow-y-auto">
+                    {selectedTabs.map((tab) => (
+                      <div 
+                        key={tab.tabName}
+                        className={`flex items-center gap-3 p-3 ${tab.selected ? 'bg-accent/50' : ''}`}
+                      >
+                        <Checkbox
+                          id={`tab-${tab.tabName}`}
+                          checked={tab.selected}
+                          onCheckedChange={() => toggleTabSelection(tab.tabName)}
+                          data-testid={`checkbox-tab-${tab.tabName}`}
+                        />
+                        <label 
+                          htmlFor={`tab-${tab.tabName}`}
+                          className="flex-1 font-medium cursor-pointer"
+                        >
+                          {tab.tabName}
+                        </label>
+                        {tab.selected && (
+                          <Select
+                            value={tab.sheetType}
+                            onValueChange={(value) => updateTabType(tab.tabName, value)}
+                          >
+                            <SelectTrigger className="w-[160px]" data-testid={`select-type-${tab.tabName}`}>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="data">
+                                <div className="flex items-center gap-2">
+                                  <TableIcon className="w-3 h-3" />
+                                  Auto-detect
+                                </div>
+                              </SelectItem>
+                              <SelectItem value="payroll">
+                                <div className="flex items-center gap-2">
+                                  <DollarSign className="w-3 h-3" />
+                                  Payroll
+                                </div>
+                              </SelectItem>
+                              <SelectItem value="tasks">
+                                <div className="flex items-center gap-2">
+                                  <ClipboardList className="w-3 h-3" />
+                                  Task Board
+                                </div>
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  
+                  {/* Quick select all */}
+                  <div className="flex gap-2">
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => setSelectedTabs(prev => prev.map(t => ({ ...t, selected: true })))}
+                    >
+                      Select All
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => setSelectedTabs(prev => prev.map(t => ({ ...t, selected: false })))}
+                    >
+                      Clear
+                    </Button>
+                  </div>
+                  
+                  {/* Optional description */}
+                  <div className="space-y-2">
+                    <Label htmlFor="description">Description (optional)</Label>
+                    <Textarea
+                      id="description"
+                      placeholder="What is this sheet used for?"
+                      value={sheetDescription}
+                      onChange={(e) => setSheetDescription(e.target.value)}
+                      data-testid="input-description"
+                      className="h-16"
+                    />
+                  </div>
                 </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="tabName">Tab Name (optional)</Label>
-                  <Input
-                    id="tabName"
-                    placeholder="Sheet1"
-                    value={newSheet.tabName}
-                    onChange={(e) => setNewSheet(prev => ({ ...prev, tabName: e.target.value }))}
-                    data-testid="input-tab-name"
-                  />
-                </div>
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="description">Description (optional)</Label>
-                <Textarea
-                  id="description"
-                  placeholder="What is this sheet used for?"
-                  value={newSheet.description}
-                  onChange={(e) => setNewSheet(prev => ({ ...prev, description: e.target.value }))}
-                  data-testid="input-description"
-                />
-              </div>
+              )}
             </div>
             <DialogFooter>
-              <Button variant="outline" onClick={() => setShowAddDialog(false)}>
+              <Button variant="outline" onClick={() => {
+                setShowAddDialog(false);
+                resetAddDialog();
+              }}>
                 Cancel
               </Button>
               <Button 
-                onClick={() => connectMutation.mutate(newSheet)}
-                disabled={!newSheet.name || !newSheet.sheetUrl || connectMutation.isPending}
+                onClick={() => connectMutation.mutate(getTabsToConnect())}
+                disabled={getTabsToConnect().length === 0 || connectMutation.isPending}
                 data-testid="button-connect-sheet"
               >
                 {connectMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
-                Connect Sheet
+                Import {getTabsToConnect().length} Tab{getTabsToConnect().length !== 1 ? 's' : ''}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -699,6 +817,57 @@ export default function AdminSheetsHub() {
                             </CardContent>
                           </Card>
                         ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+                
+                {selectedSheet.sheetType === "data" && (
+                  <div>
+                    {genericDataLoading ? (
+                      <div className="flex items-center justify-center py-8">
+                        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                      </div>
+                    ) : !genericSheetData?.headers?.length ? (
+                      <div className="flex flex-col items-center justify-center py-8 text-center">
+                        <TableIcon className="w-12 h-12 text-muted-foreground/30 mb-2" />
+                        <p className="text-sm text-muted-foreground">No data synced yet</p>
+                        <p className="text-xs text-muted-foreground mt-1">Click "Sync Now" to pull data from the sheet</p>
+                      </div>
+                    ) : (
+                      <div className="border rounded-lg overflow-hidden">
+                        <ScrollArea className="h-[400px]">
+                          <table className="w-full text-sm">
+                            <thead className="bg-muted/50 sticky top-0">
+                              <tr>
+                                <th className="px-3 py-2 text-left font-medium text-muted-foreground border-b">#</th>
+                                {genericSheetData.headers.map((header, idx) => (
+                                  <th key={idx} className="px-3 py-2 text-left font-medium border-b">
+                                    {header}
+                                  </th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {genericSheetData.rows.map((row, rowIdx) => (
+                                <tr 
+                                  key={row.rowIndex} 
+                                  className={rowIdx % 2 === 0 ? "bg-background" : "bg-muted/20"}
+                                >
+                                  <td className="px-3 py-2 text-muted-foreground border-b">{row.rowIndex}</td>
+                                  {genericSheetData.headers.map((header, colIdx) => (
+                                    <td key={colIdx} className="px-3 py-2 border-b">
+                                      {row.cells[header] || "—"}
+                                    </td>
+                                  ))}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </ScrollArea>
+                        <div className="px-3 py-2 bg-muted/30 border-t text-xs text-muted-foreground">
+                          {genericSheetData.rows.length} rows × {genericSheetData.headers.length} columns
+                        </div>
                       </div>
                     )}
                   </div>

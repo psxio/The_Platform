@@ -623,6 +623,42 @@ export class GoogleSheetsService {
     return tasks;
   }
   
+  // Read generic data sheet - returns headers and rows for table display
+  async readDataSheet(sheetId: string, tabName?: string): Promise<{
+    headers: string[];
+    rows: { rowIndex: number; cells: { [column: string]: string } }[];
+  }> {
+    // Get header row
+    const headerRange = tabName ? `'${tabName}'!A1:ZZ1` : "A1:ZZ1";
+    const headerRows = await this.readSheetValues(sheetId, headerRange);
+    const headers = (headerRows[0] || []).filter(h => h?.trim());
+    
+    // Get all data rows
+    const dataRange = tabName ? `'${tabName}'!A2:ZZ` : "A2:ZZ";
+    const dataRows = await this.readSheetValues(sheetId, dataRange);
+    
+    const rows: { rowIndex: number; cells: { [column: string]: string } }[] = [];
+    
+    for (let rowIdx = 0; rowIdx < dataRows.length; rowIdx++) {
+      const row = dataRows[rowIdx];
+      // Skip completely empty rows
+      if (!row || row.every(cell => !cell?.trim())) continue;
+      
+      const cells: { [column: string]: string } = {};
+      for (let colIdx = 0; colIdx < headers.length; colIdx++) {
+        const header = headers[colIdx] || `Column ${colIdx + 1}`;
+        cells[header] = row[colIdx]?.trim() || "";
+      }
+      
+      rows.push({
+        rowIndex: rowIdx + 2,
+        cells,
+      });
+    }
+    
+    return { headers, rows };
+  }
+  
   // Write value to a specific cell
   async writeSheetCell(sheetId: string, range: string, value: string): Promise<void> {
     if (!this.sheets) {

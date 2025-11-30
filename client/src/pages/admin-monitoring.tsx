@@ -265,7 +265,11 @@ function ScreenshotTimeline({
   screenshots: TimelineItem[];
   onViewScreenshot: (id: number) => void;
 }) {
-  const groupedByDate = screenshots.reduce((acc, item) => {
+  const sortedScreenshots = [...screenshots].sort(
+    (a, b) => new Date(b.capturedAt).getTime() - new Date(a.capturedAt).getTime()
+  );
+  
+  const groupedByDate = sortedScreenshots.reduce((acc, item) => {
     const dateKey = format(new Date(item.capturedAt), "yyyy-MM-dd");
     if (!acc[dateKey]) {
       acc[dateKey] = [];
@@ -438,9 +442,13 @@ export default function AdminMonitoring() {
     setShowScreenshotDialog(true);
   };
 
-  const activityScore = appSummary 
-    ? Math.round((appSummary.totalActiveMinutes / (appSummary.totalActiveMinutes + appSummary.totalIdleMinutes || 1)) * 100)
-    : 0;
+  const activityScore = (() => {
+    if (!appSummary) return 0;
+    const total = (appSummary.totalActiveMinutes || 0) + (appSummary.totalIdleMinutes || 0);
+    if (total === 0) return 0;
+    const score = (appSummary.totalActiveMinutes || 0) / total * 100;
+    return isNaN(score) ? 0 : Math.round(score);
+  })();
 
   return (
     <div className="max-w-6xl mx-auto p-6 space-y-6">

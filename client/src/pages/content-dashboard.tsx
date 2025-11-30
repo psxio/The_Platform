@@ -23,11 +23,11 @@ import { ContentAccessGuard } from "@/components/content-access-guard";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Plus, ClipboardList, Users, Upload, Settings, FolderKanban, BarChart3, LayoutGrid, Columns3, Calendar, FileText, Image, Repeat, Clock, Download, Camera, DollarSign, Package } from "lucide-react";
+import { Plus, ClipboardList, Users, Upload, Settings, FolderKanban, BarChart3, LayoutGrid, Columns3, Calendar, FileText, Image, Repeat, Clock, Download, Camera, DollarSign, Package, MoreHorizontal, ChevronDown } from "lucide-react";
 import { Link } from "wouter";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 
@@ -121,8 +121,8 @@ export default function ContentDashboard() {
         <CreditBalanceDisplay />
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <ScrollArea className="w-full">
-            <TabsList className="inline-flex w-max gap-1 mb-2">
+          <div className="flex items-center gap-2 mb-2">
+            <TabsList className="inline-flex gap-1">
               <TabsTrigger value="tasks" className="gap-2" data-testid="tab-tasks">
                 <ClipboardList className="h-4 w-4" />
                 <span className="hidden sm:inline">Tasks</span>
@@ -130,14 +130,6 @@ export default function ContentDashboard() {
               <TabsTrigger value="campaigns" className="gap-2" data-testid="tab-campaigns">
                 <FolderKanban className="h-4 w-4" />
                 <span className="hidden sm:inline">Campaigns</span>
-              </TabsTrigger>
-              <TabsTrigger value="templates" className="gap-2" data-testid="tab-templates">
-                <FileText className="h-4 w-4" />
-                <span className="hidden sm:inline">Templates</span>
-              </TabsTrigger>
-              <TabsTrigger value="recurring" className="gap-2" data-testid="tab-recurring">
-                <Repeat className="h-4 w-4" />
-                <span className="hidden sm:inline">Recurring</span>
               </TabsTrigger>
               <TabsTrigger value="directory" className="gap-2" data-testid="tab-directory">
                 <Users className="h-4 w-4" />
@@ -147,33 +139,60 @@ export default function ContentDashboard() {
                 <Upload className="h-4 w-4" />
                 <span className="hidden sm:inline">Deliverables</span>
               </TabsTrigger>
-              <TabsTrigger value="assets" className="gap-2" data-testid="tab-assets">
-                <Image className="h-4 w-4" />
-                <span className="hidden sm:inline">Assets</span>
-              </TabsTrigger>
-              <TabsTrigger value="brand-packs" className="gap-2" data-testid="tab-brand-packs">
-                <Package className="h-4 w-4" />
-                <span className="hidden sm:inline">Brands</span>
-              </TabsTrigger>
-              <TabsTrigger value="time-reports" className="gap-2" data-testid="tab-time-reports">
-                <Clock className="h-4 w-4" />
-                <span className="hidden sm:inline">Time</span>
-              </TabsTrigger>
-              <TabsTrigger value="payments" className="gap-2" data-testid="tab-payments">
-                <DollarSign className="h-4 w-4" />
-                <span className="hidden sm:inline">Payments</span>
-              </TabsTrigger>
-              <TabsTrigger value="analytics" className="gap-2" data-testid="tab-analytics">
-                <BarChart3 className="h-4 w-4" />
-                <span className="hidden sm:inline">Analytics</span>
-              </TabsTrigger>
-              <TabsTrigger value="settings" className="gap-2" data-testid="tab-settings">
-                <Settings className="h-4 w-4" />
-                <span className="hidden sm:inline">Settings</span>
-              </TabsTrigger>
             </TabsList>
-            <ScrollBar orientation="horizontal" />
-          </ScrollArea>
+            
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button 
+                  variant={["templates", "recurring", "assets", "brand-packs", "time-reports", "payments", "analytics", "settings"].includes(activeTab) ? "secondary" : "outline"} 
+                  size="sm" 
+                  className="gap-1"
+                  data-testid="button-more-tabs"
+                >
+                  <MoreHorizontal className="h-4 w-4" />
+                  <span className="hidden sm:inline">More</span>
+                  <ChevronDown className="h-3 w-3" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-48">
+                <DropdownMenuItem onClick={() => setActiveTab("templates")} data-testid="menu-templates">
+                  <FileText className="h-4 w-4 mr-2" />
+                  Templates
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setActiveTab("recurring")} data-testid="menu-recurring">
+                  <Repeat className="h-4 w-4 mr-2" />
+                  Recurring Tasks
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => setActiveTab("assets")} data-testid="menu-assets">
+                  <Image className="h-4 w-4 mr-2" />
+                  Assets
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setActiveTab("brand-packs")} data-testid="menu-brand-packs">
+                  <Package className="h-4 w-4 mr-2" />
+                  Brand Packs
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => setActiveTab("time-reports")} data-testid="menu-time-reports">
+                  <Clock className="h-4 w-4 mr-2" />
+                  Time Reports
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setActiveTab("payments")} data-testid="menu-payments">
+                  <DollarSign className="h-4 w-4 mr-2" />
+                  Payments
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setActiveTab("analytics")} data-testid="menu-analytics">
+                  <BarChart3 className="h-4 w-4 mr-2" />
+                  Analytics
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => setActiveTab("settings")} data-testid="menu-settings">
+                  <Settings className="h-4 w-4 mr-2" />
+                  Settings
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
 
           <TabsContent value="tasks" className="mt-6">
             {taskViewMode === "grid" && <ContentTasksView />}

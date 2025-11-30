@@ -5793,14 +5793,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get all users with content role for credit management (admin only)
+  // Get all users for credit management (admin only)
   app.get("/api/client-credits/eligible-users", requireRole("admin"), async (req, res) => {
     try {
       const allUsers = await storage.getAllUsers();
-      // Filter users that could potentially receive credits (content role or admin)
-      const eligibleUsers = allUsers.filter(u => 
-        u.roleContent || u.roleAdmin || u.roleWeb3
-      );
+      // All registered users are eligible for credits
+      const eligibleUsers = allUsers.filter(u => u.role);
       
       // Get their credit info too
       const usersWithCredits = await Promise.all(
@@ -5811,9 +5809,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
             email: user.email,
             firstName: user.firstName,
             lastName: user.lastName,
-            roleContent: user.roleContent,
-            roleAdmin: user.roleAdmin,
-            roleWeb3: user.roleWeb3,
+            role: user.role,
+            roleContent: user.role === "content",
+            roleAdmin: user.role === "admin",
+            roleWeb3: user.role === "web3",
             balance: credit?.balance || 0,
             currency: credit?.currency || "USD",
           };

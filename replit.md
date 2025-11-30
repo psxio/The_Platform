@@ -11,6 +11,18 @@ Preferred communication style: Simple, everyday language.
 ### UI/UX Decisions
 The frontend is built with React and TypeScript using Vite, Wouter for routing, and Shadcn UI (New York style) with Radix UI primitives for components. Design emphasizes modern aesthetics, utilizing task templates for ContentFlowStudio, multiple task views (Grid, Kanban, Calendar), visual indicators for task status, and an analytics dashboard. Task detail dialogs feature inline editing with role-based permissions and quick status workflow buttons.
 
+### Navigation Structure
+The main navigation (MainNav component) organizes the application into four sections with role-based visibility:
+-   **Web3 Tools** (`/web3/*`): Compare, Extract, Merge, Collections, History, To-Do - visible to web3/admin roles
+-   **Content Studio** (`/content-dashboard`): Dashboard, Monitoring - visible to content/admin roles
+-   **Client Portal** (`/client-portal`): Direct link for credit self-service - visible to content/admin roles
+-   **Admin** (`/admin/*`): User management, payments, invite codes, settings - visible to admin role only
+
+Mobile navigation uses a responsive Sheet-based hamburger menu. Route guards (Web3RouteGuard, ContentRouteGuard, AdminRouteGuard) enforce access control and redirect unauthorized users to their default routes.
+
+### Role Architecture
+The system uses three roles: `web3`, `content`, and `admin`. "Clients" in the credit system are content-role users who access the self-service portal to view balances, request credits, and submit content orders. Admins manage client credit grants and approve requests. If a dedicated external client role is needed in the future, the architecture supports extension by: (1) adding "client" to userRoles in schema.ts, (2) creating a ClientRouteGuard, (3) updating MainNav visibility logic.
+
 ### Technical Implementations
 The backend is a Node.js application using Express, providing APIs for Web3 tools, ContentFlowStudio features (tasks, directory, deliverables, subtasks, comments, activity, analytics, notifications, time tracking, task watchers, approval workflows, task templates, assets, recurring tasks, saved filters, deliverable versions, campaigns), personal to-do lists, and authentication/admin functionalities. Authentication uses `bcryptjs` for password hashing and PostgreSQL for session storage, enforcing role-based access control with invite codes.
 

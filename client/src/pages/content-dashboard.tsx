@@ -13,6 +13,7 @@ import { RecurringTasksView } from "@/components/recurring-tasks-view";
 import { TimeReportsView } from "@/components/time-reports-view";
 import { PaymentRequestsView } from "@/components/payment-requests-view";
 import { BrandPacksView } from "@/components/brand-packs-view";
+import { CreditBalanceDisplay } from "@/components/credit-balance-display";
 import { AddContentTaskDialog } from "@/components/add-content-task-dialog";
 import { AddCampaignDialog } from "@/components/add-campaign-dialog";
 import { WelcomeModal } from "@/components/welcome-modal";
@@ -116,6 +117,8 @@ export default function ContentDashboard() {
             )}
           </div>
         </div>
+
+        <CreditBalanceDisplay />
 
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <ScrollArea className="w-full">

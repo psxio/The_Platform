@@ -55,9 +55,13 @@ function LoginForm() {
       if (!user.role) {
         setLocation("/role-select");
       } else if (user.role === "content") {
-        setLocation("/content");
+        setLocation("/content-dashboard");
+      } else if (user.role === "web3") {
+        setLocation("/web3/compare");
+      } else if (user.role === "admin") {
+        setLocation("/content-dashboard");
       } else {
-        setLocation("/compare");
+        setLocation("/role-select");
       }
     },
     onError: (error: any) => {

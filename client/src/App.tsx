@@ -1,24 +1,13 @@
-import { Switch, Route, Link, useLocation, Redirect } from "wouter";
-import { queryClient, apiRequest } from "./lib/queryClient";
-import { QueryClientProvider, useMutation } from "@tanstack/react-query";
+import { Switch, Route, useLocation, Redirect } from "wouter";
+import { queryClient } from "./lib/queryClient";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { 
-  DropdownMenu, 
-  DropdownMenuContent, 
-  DropdownMenuItem, 
-  DropdownMenuLabel, 
-  DropdownMenuSeparator, 
-  DropdownMenuTrigger 
-} from "@/components/ui/dropdown-menu";
-import { FileText, History as HistoryIcon, FileSearch, Database, CheckSquare, ClipboardList, LogOut, Settings, Loader2, Key, Combine, UserPlus, Users, Monitor, DollarSign, Camera, Package, FileSpreadsheet, CreditCard } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
-import { NotificationBell } from "@/components/notification-bell";
+import { Loader2 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { ThemeProvider } from "@/components/theme-provider";
-import { ThemeToggle } from "@/components/theme-toggle";
+import { MainNav } from "@/components/main-nav";
+
 import Home from "@/pages/home";
 import History from "@/pages/history";
 import Extract from "@/pages/extract";
@@ -43,269 +32,55 @@ import AuthPage from "@/pages/auth";
 import InvitePage from "@/pages/invite";
 import NotFound from "@/pages/not-found";
 
-function UserMenu() {
-  const { user } = useAuth();
-  const [, setLocation] = useLocation();
-  
-  const logoutMutation = useMutation({
-    mutationFn: async () => {
-      await apiRequest("POST", "/api/logout");
-    },
-    onSuccess: () => {
-      queryClient.setQueryData(["/api/auth/user"], null);
-      setLocation("/");
-    },
-  });
-  
-  if (!user) return null;
-  
-  const initials = [user.firstName, user.lastName]
-    .filter(Boolean)
-    .map(n => n?.[0])
-    .join('')
-    .toUpperCase() || user.email?.[0]?.toUpperCase() || '?';
-  
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="ghost" className="relative h-8 w-8 rounded-full" data-testid="button-user-menu">
-          <Avatar className="h-8 w-8">
-            <AvatarImage src={user.profileImageUrl || undefined} alt={user.firstName || "User"} />
-            <AvatarFallback>{initials}</AvatarFallback>
-          </Avatar>
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent className="w-56" align="end">
-        <DropdownMenuLabel className="font-normal">
-          <div className="flex flex-col space-y-1">
-            <p className="text-sm font-medium" data-testid="text-user-name">
-              {[user.firstName, user.lastName].filter(Boolean).join(' ') || 'User'}
-            </p>
-            <p className="text-xs text-muted-foreground" data-testid="text-user-email">
-              {user.email}
-            </p>
-            {user.role && (
-              <p className="text-xs text-muted-foreground capitalize" data-testid="text-user-role">
-                Role: {user.role}
-              </p>
-            )}
-          </div>
-        </DropdownMenuLabel>
-        <DropdownMenuSeparator />
-        {user.role === "admin" && (
-          <>
-            <DropdownMenuItem asChild>
-              <Link href="/admin/content-users">
-                <Users className="mr-2 h-4 w-4" />
-                Manage Users
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <Link href="/admin/pending-members">
-                <UserPlus className="mr-2 h-4 w-4" />
-                Pending Members
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <Link href="/admin/monitoring">
-                <Monitor className="mr-2 h-4 w-4" />
-                Worker Monitoring
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <Link href="/admin/payments">
-                <DollarSign className="mr-2 h-4 w-4" />
-                Payment Requests
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <Link href="/admin/brand-packs">
-                <Package className="mr-2 h-4 w-4" />
-                Brand Packs
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <Link href="/admin/sheets-hub">
-                <FileSpreadsheet className="mr-2 h-4 w-4" />
-                Sheets Hub
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <Link href="/admin/credits">
-                <CreditCard className="mr-2 h-4 w-4" />
-                Client Credits
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <Link href="/admin/credit-requests">
-                <DollarSign className="mr-2 h-4 w-4" />
-                Credit Requests
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <Link href="/admin/codes">
-                <Key className="mr-2 h-4 w-4" />
-                Invite Codes
-              </Link>
-            </DropdownMenuItem>
-          </>
-        )}
-        <DropdownMenuItem asChild>
-          <Link href="/role-select">
-            <Settings className="mr-2 h-4 w-4" />
-            Change Role
-          </Link>
-        </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => logoutMutation.mutate()} data-testid="button-logout">
-          <LogOut className="mr-2 h-4 w-4" />
-          Log out
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
+function getDefaultRoute(role: string | null | undefined): string {
+  switch (role) {
+    case "content":
+      return "/content-dashboard";
+    case "web3":
+      return "/web3/compare";
+    case "admin":
+      return "/content-dashboard";
+    default:
+      return "/role-select";
+  }
 }
 
-function Nav() {
-  const [location] = useLocation();
-  const { user, isAuthenticated } = useAuth();
-  const userRole = user?.role;
+function Web3RouteGuard({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
+  const canAccess = user?.role === "web3" || user?.role === "admin";
   
-  const showWeb3 = userRole === "web3" || userRole === "admin";
-  const showContent = userRole === "content" || userRole === "admin";
+  if (!canAccess) {
+    return <Redirect to={getDefaultRoute(user?.role)} />;
+  }
   
-  const { data: sessionData } = useQuery<{ session: { id: number; status: string } | null }>({
-    queryKey: ["/api/monitoring/session/active"],
-    enabled: showContent,
-    refetchInterval: 30000,
-  });
+  return <>{children}</>;
+}
+
+function ContentRouteGuard({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
+  const canAccess = user?.role === "content" || user?.role === "admin";
   
-  const hasActiveSession = sessionData?.session?.status === "active";
+  if (!canAccess) {
+    return <Redirect to={getDefaultRoute(user?.role)} />;
+  }
   
-  return (
-    <nav className="border-b">
-      <div className="max-w-6xl mx-auto px-4 md:px-6 py-4">
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-2 flex-wrap">
-            {showWeb3 && (
-              <>
-                <Link href="/compare">
-                  <Button 
-                    variant={location === "/compare" || location === "/" ? "default" : "ghost"}
-                    size="sm"
-                    data-testid="nav-compare"
-                  >
-                    <FileText className="w-4 h-4 mr-2" />
-                    Compare
-                  </Button>
-                </Link>
-                <Link href="/extract">
-                  <Button 
-                    variant={location === "/extract" ? "default" : "ghost"}
-                    size="sm"
-                    data-testid="nav-extract"
-                  >
-                    <FileSearch className="w-4 h-4 mr-2" />
-                    Extract
-                  </Button>
-                </Link>
-                <Link href="/merge">
-                  <Button 
-                    variant={location === "/merge" ? "default" : "ghost"}
-                    size="sm"
-                    data-testid="nav-merge"
-                  >
-                    <Combine className="w-4 h-4 mr-2" />
-                    Merge
-                  </Button>
-                </Link>
-                <Link href="/collections">
-                  <Button 
-                    variant={location === "/collections" ? "default" : "ghost"}
-                    size="sm"
-                    data-testid="nav-collections"
-                  >
-                    <Database className="w-4 h-4 mr-2" />
-                    Collections
-                  </Button>
-                </Link>
-                <Link href="/history">
-                  <Button 
-                    variant={location === "/history" ? "default" : "ghost"}
-                    size="sm"
-                    data-testid="nav-history"
-                  >
-                    <HistoryIcon className="w-4 h-4 mr-2" />
-                    History
-                  </Button>
-                </Link>
-                <Link href="/todo">
-                  <Button 
-                    variant={location === "/todo" ? "default" : "ghost"}
-                    size="sm"
-                    data-testid="nav-todo"
-                  >
-                    <CheckSquare className="w-4 h-4 mr-2" />
-                    To Do
-                  </Button>
-                </Link>
-              </>
-            )}
-            
-            {showContent && (
-              <>
-                <Link href="/content">
-                  <Button 
-                    variant={location === "/content" ? "default" : "ghost"}
-                    size="sm"
-                    data-testid="nav-content"
-                  >
-                    <ClipboardList className="w-4 h-4 mr-2" />
-                    Content
-                  </Button>
-                </Link>
-                <Link href="/client-portal">
-                  <Button 
-                    variant={location === "/client-portal" ? "default" : "ghost"}
-                    size="sm"
-                    data-testid="nav-client-portal"
-                  >
-                    <CreditCard className="w-4 h-4 mr-2" />
-                    My Credits
-                  </Button>
-                </Link>
-                <Link href="/content/monitoring">
-                  <Button 
-                    variant={location === "/content/monitoring" ? "default" : "ghost"}
-                    size="sm"
-                    className={hasActiveSession ? "relative" : ""}
-                    data-testid="nav-monitoring"
-                  >
-                    <Camera className={`w-4 h-4 mr-2 ${hasActiveSession ? "text-green-500 animate-pulse" : ""}`} />
-                    Monitoring
-                    {hasActiveSession && (
-                      <span className="absolute -top-1 -right-1 h-3 w-3 rounded-full bg-green-500 border-2 border-background" />
-                    )}
-                  </Button>
-                </Link>
-              </>
-            )}
-          </div>
-          
-          <div className="flex items-center gap-2">
-            <NotificationBell />
-            <ThemeToggle />
-            <UserMenu />
-          </div>
-        </div>
-      </div>
-    </nav>
-  );
+  return <>{children}</>;
+}
+
+function AdminRouteGuard({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
+  
+  if (user?.role !== "admin") {
+    return <Redirect to={getDefaultRoute(user?.role)} />;
+  }
+  
+  return <>{children}</>;
 }
 
 function AuthenticatedRouter() {
   const { user, isLoading } = useAuth();
   const [location] = useLocation();
-  
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[50vh]">
@@ -313,65 +88,121 @@ function AuthenticatedRouter() {
       </div>
     );
   }
-  
+
   if (!user) {
     return <AuthPage />;
   }
-  
+
   if (!user.role && location !== "/role-select") {
     return <Redirect to="/role-select" />;
   }
-  
-  const showWeb3 = user.role === "web3" || user.role === "admin";
-  const showContent = user.role === "content" || user.role === "admin";
-  
+
   return (
     <Switch>
       <Route path="/role-select" component={RoleSelect} />
-      
-      {showWeb3 && (
-        <>
-          <Route path="/" component={Home} />
-          <Route path="/compare" component={Home} />
-          <Route path="/extract" component={Extract} />
-          <Route path="/merge" component={Merge} />
-          <Route path="/collections" component={Collections} />
-          <Route path="/history" component={History} />
-          <Route path="/todo" component={Todo} />
-        </>
-      )}
-      
-      {showContent && (
-        <>
-          <Route path="/content" component={ContentDashboard} />
-          <Route path="/content/profile-setup" component={ContentProfileSetup} />
-          <Route path="/content/monitoring" component={WorkerMonitoring} />
-          <Route path="/client-portal" component={ClientPortal} />
-        </>
-      )}
-      
-      {user.role === "admin" && (
-        <>
-          <Route path="/admin/codes" component={AdminCodes} />
-          <Route path="/admin/pending-members" component={AdminPendingMembers} />
-          <Route path="/admin/content-users" component={AdminContentUsers} />
-          <Route path="/admin/monitoring" component={AdminMonitoring} />
-          <Route path="/admin/payments" component={AdminPayments} />
-          <Route path="/admin/brand-packs" component={AdminBrandPacks} />
-          <Route path="/admin/sheets-hub" component={AdminSheetsHub} />
-          <Route path="/admin/credits" component={AdminCredits} />
-          <Route path="/admin/credit-requests" component={AdminCreditRequests} />
-        </>
-      )}
-      
+
+      {/* Web3 Routes */}
+      <Route path="/web3/compare">
+        <Web3RouteGuard><Home /></Web3RouteGuard>
+      </Route>
+      <Route path="/web3/extract">
+        <Web3RouteGuard><Extract /></Web3RouteGuard>
+      </Route>
+      <Route path="/web3/merge">
+        <Web3RouteGuard><Merge /></Web3RouteGuard>
+      </Route>
+      <Route path="/web3/collections">
+        <Web3RouteGuard><Collections /></Web3RouteGuard>
+      </Route>
+      <Route path="/web3/history">
+        <Web3RouteGuard><History /></Web3RouteGuard>
+      </Route>
+      <Route path="/web3/todo">
+        <Web3RouteGuard><Todo /></Web3RouteGuard>
+      </Route>
+      <Route path="/web3">
+        <Web3RouteGuard><Home /></Web3RouteGuard>
+      </Route>
+
+      {/* Legacy Web3 routes - redirect to new paths */}
+      <Route path="/compare">
+        <Redirect to="/web3/compare" />
+      </Route>
+      <Route path="/extract">
+        <Redirect to="/web3/extract" />
+      </Route>
+      <Route path="/merge">
+        <Redirect to="/web3/merge" />
+      </Route>
+      <Route path="/collections">
+        <Redirect to="/web3/collections" />
+      </Route>
+      <Route path="/history">
+        <Redirect to="/web3/history" />
+      </Route>
+      <Route path="/todo">
+        <Redirect to="/web3/todo" />
+      </Route>
+
+      {/* Content Routes */}
+      <Route path="/content-dashboard">
+        <ContentRouteGuard><ContentDashboard /></ContentRouteGuard>
+      </Route>
+      <Route path="/content/profile-setup">
+        <ContentRouteGuard><ContentProfileSetup /></ContentRouteGuard>
+      </Route>
+      <Route path="/content/monitoring">
+        <ContentRouteGuard><WorkerMonitoring /></ContentRouteGuard>
+      </Route>
+      <Route path="/content">
+        <Redirect to="/content-dashboard" />
+      </Route>
+
+      {/* Client Portal */}
+      <Route path="/client-portal">
+        <ContentRouteGuard><ClientPortal /></ContentRouteGuard>
+      </Route>
+
+      {/* Admin Routes */}
+      <Route path="/admin/codes">
+        <AdminRouteGuard><AdminCodes /></AdminRouteGuard>
+      </Route>
+      <Route path="/admin/pending-members">
+        <AdminRouteGuard><AdminPendingMembers /></AdminRouteGuard>
+      </Route>
+      <Route path="/admin/content-users">
+        <AdminRouteGuard><AdminContentUsers /></AdminRouteGuard>
+      </Route>
+      <Route path="/admin/monitoring">
+        <AdminRouteGuard><AdminMonitoring /></AdminRouteGuard>
+      </Route>
+      <Route path="/admin/payments">
+        <AdminRouteGuard><AdminPayments /></AdminRouteGuard>
+      </Route>
+      <Route path="/admin/brand-packs">
+        <AdminRouteGuard><AdminBrandPacks /></AdminRouteGuard>
+      </Route>
+      <Route path="/admin/sheets-hub">
+        <AdminRouteGuard><AdminSheetsHub /></AdminRouteGuard>
+      </Route>
+      <Route path="/admin/credits">
+        <AdminRouteGuard><AdminCredits /></AdminRouteGuard>
+      </Route>
+      <Route path="/admin/credit-requests">
+        <AdminRouteGuard><AdminCreditRequests /></AdminRouteGuard>
+      </Route>
+      <Route path="/admin">
+        <AdminRouteGuard><Redirect to="/admin/content-users" /></AdminRouteGuard>
+      </Route>
+
+      {/* Root redirect based on role */}
+      <Route path="/">
+        <Redirect to={getDefaultRoute(user.role)} />
+      </Route>
+
+      {/* Fallback - redirect to role-appropriate page */}
       <Route>
-        {user.role === "content" ? (
-          <Redirect to="/content" />
-        ) : user.role === "web3" || user.role === "admin" ? (
-          <Redirect to="/compare" />
-        ) : (
-          <Redirect to="/role-select" />
-        )}
+        <Redirect to={getDefaultRoute(user.role)} />
       </Route>
     </Switch>
   );
@@ -380,16 +211,17 @@ function AuthenticatedRouter() {
 function Router() {
   const { isAuthenticated, isLoading } = useAuth();
   const [location] = useLocation();
-  
-  // Handle invite page separately - it's a public route
+
   if (location.startsWith("/invite/")) {
     return <InvitePage />;
   }
-  
+
   return (
     <>
-      {!isLoading && isAuthenticated && <Nav />}
-      <AuthenticatedRouter />
+      {!isLoading && isAuthenticated && <MainNav />}
+      <main className="flex-1">
+        <AuthenticatedRouter />
+      </main>
     </>
   );
 }
@@ -399,8 +231,10 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <ThemeProvider defaultTheme="system" storageKey="app-theme">
         <TooltipProvider>
+          <div className="min-h-screen flex flex-col bg-background">
+            <Router />
+          </div>
           <Toaster />
-          <Router />
         </TooltipProvider>
       </ThemeProvider>
     </QueryClientProvider>

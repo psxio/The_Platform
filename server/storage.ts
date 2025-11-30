@@ -53,6 +53,12 @@ import {
   // Client Credits types
   type ClientCredit, type InsertClientCredit, clientCredits,
   type CreditTransaction, type InsertCreditTransaction, creditTransactions,
+  // Credit Requests types
+  type CreditRequest, type InsertCreditRequest, creditRequests,
+  // Content Orders types
+  type ContentOrder, type InsertContentOrder, contentOrders,
+  // Client Onboarding types
+  type ClientOnboarding, type InsertClientOnboarding, clientOnboarding,
 } from "@shared/schema";
 import { db } from "./db";
 import { desc, eq, and, sql, or, isNull } from "drizzle-orm";
@@ -353,6 +359,39 @@ export interface IStorage {
   // Credit Transaction methods
   getCreditTransactions(userId: string, limit?: number): Promise<CreditTransaction[]>;
   createCreditTransaction(transaction: InsertCreditTransaction): Promise<CreditTransaction>;
+  
+  // ==================== CREDIT REQUESTS METHODS ====================
+  
+  // Credit Request methods
+  getCreditRequests(userId?: string): Promise<CreditRequest[]>;
+  getCreditRequest(id: number): Promise<CreditRequest | undefined>;
+  createCreditRequest(request: InsertCreditRequest): Promise<CreditRequest>;
+  updateCreditRequest(id: number, updates: Partial<CreditRequest>): Promise<CreditRequest | undefined>;
+  cancelCreditRequest(id: number, userId: string): Promise<CreditRequest | undefined>;
+  approveCreditRequest(id: number, adminId: string, approvedAmount: number, note?: string): Promise<CreditRequest | undefined>;
+  rejectCreditRequest(id: number, adminId: string, note?: string): Promise<CreditRequest | undefined>;
+  getPendingCreditRequests(): Promise<CreditRequest[]>;
+  
+  // ==================== CONTENT ORDERS METHODS ====================
+  
+  // Content Order methods
+  getContentOrders(clientId?: string): Promise<ContentOrder[]>;
+  getContentOrder(id: number): Promise<ContentOrder | undefined>;
+  createContentOrder(order: InsertContentOrder): Promise<ContentOrder>;
+  updateContentOrder(id: number, updates: Partial<ContentOrder>): Promise<ContentOrder | undefined>;
+  submitContentOrder(id: number, userId: string): Promise<ContentOrder | undefined>;
+  assignContentOrder(id: number, assignedTo: string, adminId: string): Promise<ContentOrder | undefined>;
+  completeContentOrder(id: number, deliverableUrl: string, adminId: string): Promise<ContentOrder | undefined>;
+  cancelContentOrder(id: number, userId: string): Promise<ContentOrder | undefined>;
+  getOrdersForTeamMember(assignedTo: string): Promise<ContentOrder[]>;
+  
+  // ==================== CLIENT ONBOARDING METHODS ====================
+  
+  // Client Onboarding methods
+  getClientOnboarding(userId: string): Promise<ClientOnboarding | undefined>;
+  createClientOnboarding(onboarding: InsertClientOnboarding): Promise<ClientOnboarding>;
+  updateClientOnboarding(userId: string, updates: Partial<ClientOnboarding>): Promise<ClientOnboarding | undefined>;
+  markClientOnboardingStep(userId: string, step: keyof InsertClientOnboarding): Promise<ClientOnboarding | undefined>;
 }
 
 export class DbStorage implements IStorage {
@@ -2160,6 +2199,272 @@ export class DbStorage implements IStorage {
   async createCreditTransaction(transaction: InsertCreditTransaction): Promise<CreditTransaction> {
     const [created] = await db.insert(creditTransactions).values(transaction).returning();
     return created;
+  }
+  
+  // ==================== CREDIT REQUESTS IMPLEMENTATION ====================
+  
+  async getCreditRequests(userId?: string): Promise<CreditRequest[]> {
+    if (userId) {
+      return await db
+        .select()
+        .from(creditRequests)
+        .where(eq(creditRequests.requesterId, userId))
+        .orderBy(desc(creditRequests.requestedAt));
+    }
+    return await db
+      .select()
+      .from(creditRequests)
+      .orderBy(desc(creditRequests.requestedAt));
+  }
+  
+  async getCreditRequest(id: number): Promise<CreditRequest | undefined> {
+    const [request] = await db.select().from(creditRequests).where(eq(creditRequests.id, id));
+    return request;
+  }
+  
+  async createCreditRequest(request: InsertCreditRequest): Promise<CreditRequest> {
+    const [created] = await db.insert(creditRequests).values(request).returning();
+    return created;
+  }
+  
+  async updateCreditRequest(id: number, updates: Partial<CreditRequest>): Promise<CreditRequest | undefined> {
+    const [updated] = await db
+      .update(creditRequests)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(creditRequests.id, id))
+      .returning();
+    return updated;
+  }
+  
+  async cancelCreditRequest(id: number, userId: string): Promise<CreditRequest | undefined> {
+    const request = await this.getCreditRequest(id);
+    if (!request || request.requesterId !== userId || request.status !== "pending") {
+      return undefined;
+    }
+    return await this.updateCreditRequest(id, { status: "cancelled" });
+  }
+  
+  async approveCreditRequest(id: number, adminId: string, approvedAmount: number, note?: string): Promise<CreditRequest | undefined> {
+    const request = await this.getCreditRequest(id);
+    if (!request || request.status !== "pending") {
+      return undefined;
+    }
+    
+    // Update the request
+    const updated = await this.updateCreditRequest(id, {
+      status: "approved",
+      adminReviewerId: adminId,
+      approvedAmount,
+      adminNote: note,
+      reviewedAt: new Date(),
+    });
+    
+    // Add the credits to the user's balance
+    if (updated) {
+      await this.addClientCredit(
+        request.requesterId,
+        approvedAmount,
+        `Credit request #${id} approved`,
+        adminId
+      );
+    }
+    
+    return updated;
+  }
+  
+  async rejectCreditRequest(id: number, adminId: string, note?: string): Promise<CreditRequest | undefined> {
+    const request = await this.getCreditRequest(id);
+    if (!request || request.status !== "pending") {
+      return undefined;
+    }
+    
+    return await this.updateCreditRequest(id, {
+      status: "rejected",
+      adminReviewerId: adminId,
+      adminNote: note,
+      reviewedAt: new Date(),
+    });
+  }
+  
+  async getPendingCreditRequests(): Promise<CreditRequest[]> {
+    return await db
+      .select()
+      .from(creditRequests)
+      .where(eq(creditRequests.status, "pending"))
+      .orderBy(desc(creditRequests.requestedAt));
+  }
+  
+  // ==================== CONTENT ORDERS IMPLEMENTATION ====================
+  
+  async getContentOrders(clientId?: string): Promise<ContentOrder[]> {
+    if (clientId) {
+      return await db
+        .select()
+        .from(contentOrders)
+        .where(eq(contentOrders.clientId, clientId))
+        .orderBy(desc(contentOrders.createdAt));
+    }
+    return await db
+      .select()
+      .from(contentOrders)
+      .orderBy(desc(contentOrders.createdAt));
+  }
+  
+  async getContentOrder(id: number): Promise<ContentOrder | undefined> {
+    const [order] = await db.select().from(contentOrders).where(eq(contentOrders.id, id));
+    return order;
+  }
+  
+  async createContentOrder(order: InsertContentOrder): Promise<ContentOrder> {
+    const [created] = await db.insert(contentOrders).values(order).returning();
+    return created;
+  }
+  
+  async updateContentOrder(id: number, updates: Partial<ContentOrder>): Promise<ContentOrder | undefined> {
+    const [updated] = await db
+      .update(contentOrders)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(contentOrders.id, id))
+      .returning();
+    return updated;
+  }
+  
+  async submitContentOrder(id: number, userId: string): Promise<ContentOrder | undefined> {
+    const order = await this.getContentOrder(id);
+    if (!order || order.clientId !== userId || order.status !== "draft") {
+      return undefined;
+    }
+    
+    // Check if client has enough credits
+    const credit = await this.getClientCredit(userId);
+    if (!credit || credit.balance < order.creditCost) {
+      throw new Error("Insufficient credits to submit this order");
+    }
+    
+    // Deduct the credits
+    await this.deductClientCredit(
+      userId,
+      order.creditCost,
+      `Content order #${id}: ${order.title}`,
+      undefined,
+      userId
+    );
+    
+    // Update order status
+    return await this.updateContentOrder(id, {
+      status: "submitted",
+      submittedAt: new Date(),
+    });
+  }
+  
+  async assignContentOrder(id: number, assignedTo: string, adminId: string): Promise<ContentOrder | undefined> {
+    const order = await this.getContentOrder(id);
+    if (!order || (order.status !== "submitted" && order.status !== "in_progress")) {
+      return undefined;
+    }
+    
+    return await this.updateContentOrder(id, {
+      assignedTo,
+      status: "in_progress",
+    });
+  }
+  
+  async completeContentOrder(id: number, deliverableUrl: string, adminId: string): Promise<ContentOrder | undefined> {
+    const order = await this.getContentOrder(id);
+    if (!order || (order.status !== "in_progress" && order.status !== "review")) {
+      return undefined;
+    }
+    
+    return await this.updateContentOrder(id, {
+      status: "completed",
+      deliverableUrl,
+      completedAt: new Date(),
+    });
+  }
+  
+  async cancelContentOrder(id: number, userId: string): Promise<ContentOrder | undefined> {
+    const order = await this.getContentOrder(id);
+    if (!order) {
+      return undefined;
+    }
+    
+    // Only allow cancellation of draft orders by the client
+    if (order.status === "draft" && order.clientId === userId) {
+      return await this.updateContentOrder(id, { status: "cancelled" });
+    }
+    
+    // For submitted orders, refund the credits
+    if (order.status === "submitted" && order.clientId === userId) {
+      await this.addClientCredit(
+        userId,
+        order.creditCost,
+        `Refund for cancelled order #${id}: ${order.title}`,
+        userId
+      );
+      return await this.updateContentOrder(id, { status: "cancelled" });
+    }
+    
+    return undefined;
+  }
+  
+  async getOrdersForTeamMember(assignedTo: string): Promise<ContentOrder[]> {
+    return await db
+      .select()
+      .from(contentOrders)
+      .where(eq(contentOrders.assignedTo, assignedTo))
+      .orderBy(desc(contentOrders.createdAt));
+  }
+  
+  // ==================== CLIENT ONBOARDING IMPLEMENTATION ====================
+  
+  async getClientOnboarding(userId: string): Promise<ClientOnboarding | undefined> {
+    const [onboarding] = await db
+      .select()
+      .from(clientOnboarding)
+      .where(eq(clientOnboarding.userId, userId));
+    return onboarding;
+  }
+  
+  async createClientOnboarding(onboarding: InsertClientOnboarding): Promise<ClientOnboarding> {
+    const [created] = await db.insert(clientOnboarding).values(onboarding).returning();
+    return created;
+  }
+  
+  async updateClientOnboarding(userId: string, updates: Partial<ClientOnboarding>): Promise<ClientOnboarding | undefined> {
+    // Check if all onboarding steps are complete
+    const current = await this.getClientOnboarding(userId);
+    if (!current) {
+      return undefined;
+    }
+    
+    const merged = { ...current, ...updates };
+    const allComplete = merged.hasSeenWelcome && 
+                        merged.hasViewedCredits && 
+                        merged.hasPlacedFirstOrder && 
+                        merged.hasViewedBrandPacks && 
+                        merged.hasViewedTransactionHistory;
+    
+    const [updated] = await db
+      .update(clientOnboarding)
+      .set({ 
+        ...updates, 
+        updatedAt: new Date(),
+        completedAt: allComplete && !current.completedAt ? new Date() : current.completedAt,
+      })
+      .where(eq(clientOnboarding.userId, userId))
+      .returning();
+    return updated;
+  }
+  
+  async markClientOnboardingStep(userId: string, step: keyof InsertClientOnboarding): Promise<ClientOnboarding | undefined> {
+    // Create onboarding record if doesn't exist
+    let onboarding = await this.getClientOnboarding(userId);
+    if (!onboarding) {
+      onboarding = await this.createClientOnboarding({ userId, [step]: true });
+      return onboarding;
+    }
+    
+    return await this.updateClientOnboarding(userId, { [step]: true });
   }
 }
 

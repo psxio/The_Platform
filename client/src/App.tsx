@@ -36,6 +36,8 @@ import AdminSheetsHub from "@/pages/admin-sheets-hub";
 import AdminCredits from "@/pages/admin-credits";
 import ContentProfileSetup from "@/pages/content-profile-setup";
 import WorkerMonitoring from "@/pages/worker-monitoring";
+import ClientPortal from "@/pages/client-portal";
+import AdminCreditRequests from "@/pages/admin-credit-requests";
 import RoleSelect from "@/pages/role-select";
 import AuthPage from "@/pages/auth";
 import InvitePage from "@/pages/invite";
@@ -132,6 +134,12 @@ function UserMenu() {
               <Link href="/admin/credits">
                 <CreditCard className="mr-2 h-4 w-4" />
                 Client Credits
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link href="/admin/credit-requests">
+                <DollarSign className="mr-2 h-4 w-4" />
+                Credit Requests
               </Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
@@ -255,6 +263,16 @@ function Nav() {
                     Content
                   </Button>
                 </Link>
+                <Link href="/client-portal">
+                  <Button 
+                    variant={location === "/client-portal" ? "default" : "ghost"}
+                    size="sm"
+                    data-testid="nav-client-portal"
+                  >
+                    <CreditCard className="w-4 h-4 mr-2" />
+                    My Credits
+                  </Button>
+                </Link>
                 <Link href="/content/monitoring">
                   <Button 
                     variant={location === "/content/monitoring" ? "default" : "ghost"}
@@ -328,6 +346,7 @@ function AuthenticatedRouter() {
           <Route path="/content" component={ContentDashboard} />
           <Route path="/content/profile-setup" component={ContentProfileSetup} />
           <Route path="/content/monitoring" component={WorkerMonitoring} />
+          <Route path="/client-portal" component={ClientPortal} />
         </>
       )}
       
@@ -341,6 +360,7 @@ function AuthenticatedRouter() {
           <Route path="/admin/brand-packs" component={AdminBrandPacks} />
           <Route path="/admin/sheets-hub" component={AdminSheetsHub} />
           <Route path="/admin/credits" component={AdminCredits} />
+          <Route path="/admin/credit-requests" component={AdminCreditRequests} />
         </>
       )}
       

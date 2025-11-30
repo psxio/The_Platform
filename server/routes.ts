@@ -5829,7 +5829,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ==================== CREDIT REQUESTS ROUTES ====================
 
   // Get all credit requests (admin) or own requests (client)
-  app.get("/api/credit-requests", requireAuth, async (req, res) => {
+  app.get("/api/credit-requests", isAuthenticated, async (req: any, res) => {
     try {
       const user = req.user as User;
       if (user.role === "admin") {
@@ -5857,7 +5857,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Create a new credit request (client)
-  app.post("/api/credit-requests", requireAuth, async (req, res) => {
+  app.post("/api/credit-requests", isAuthenticated, async (req: any, res) => {
     try {
       const user = req.user as User;
       const { amount, currency, reason, description } = req.body;
@@ -5885,7 +5885,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Cancel a credit request (owner only)
-  app.post("/api/credit-requests/:id/cancel", requireAuth, async (req, res) => {
+  app.post("/api/credit-requests/:id/cancel", isAuthenticated, async (req: any, res) => {
     try {
       const user = req.user as User;
       const id = parseInt(req.params.id);
@@ -5953,7 +5953,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ==================== CONTENT ORDERS ROUTES ====================
 
   // Get all content orders (admin) or own orders (client)
-  app.get("/api/content-orders", requireAuth, async (req, res) => {
+  app.get("/api/content-orders", isAuthenticated, async (req: any, res) => {
     try {
       const user = req.user as User;
       if (user.role === "admin") {
@@ -5970,7 +5970,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get orders assigned to current team member
-  app.get("/api/content-orders/assigned-to-me", requireAuth, async (req, res) => {
+  app.get("/api/content-orders/assigned-to-me", isAuthenticated, async (req: any, res) => {
     try {
       const user = req.user as User;
       const orders = await storage.getOrdersForTeamMember(user.id);
@@ -5982,7 +5982,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get a specific content order
-  app.get("/api/content-orders/:id", requireAuth, async (req, res) => {
+  app.get("/api/content-orders/:id", isAuthenticated, async (req: any, res) => {
     try {
       const user = req.user as User;
       const id = parseInt(req.params.id);
@@ -6005,7 +6005,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Create a new content order (draft)
-  app.post("/api/content-orders", requireAuth, async (req, res) => {
+  app.post("/api/content-orders", isAuthenticated, async (req: any, res) => {
     try {
       const user = req.user as User;
       const { orderType, title, description, specifications, creditCost, priority, dueDate, clientNotes } = req.body;
@@ -6034,7 +6034,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Update a content order (owner for drafts, admin for others)
-  app.patch("/api/content-orders/:id", requireAuth, async (req, res) => {
+  app.patch("/api/content-orders/:id", isAuthenticated, async (req: any, res) => {
     try {
       const user = req.user as User;
       const id = parseInt(req.params.id);
@@ -6066,7 +6066,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Submit a content order (spend credits)
-  app.post("/api/content-orders/:id/submit", requireAuth, async (req, res) => {
+  app.post("/api/content-orders/:id/submit", isAuthenticated, async (req: any, res) => {
     try {
       const user = req.user as User;
       const id = parseInt(req.params.id);
@@ -6107,7 +6107,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Complete a content order (admin or assigned team member)
-  app.post("/api/content-orders/:id/complete", requireAuth, async (req, res) => {
+  app.post("/api/content-orders/:id/complete", isAuthenticated, async (req: any, res) => {
     try {
       const user = req.user as User;
       const id = parseInt(req.params.id);
@@ -6140,7 +6140,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Cancel a content order (owner only for draft/submitted)
-  app.post("/api/content-orders/:id/cancel", requireAuth, async (req, res) => {
+  app.post("/api/content-orders/:id/cancel", isAuthenticated, async (req: any, res) => {
     try {
       const user = req.user as User;
       const id = parseInt(req.params.id);
@@ -6160,7 +6160,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ==================== CLIENT ONBOARDING ROUTES ====================
 
   // Get client onboarding status
-  app.get("/api/client-onboarding", requireAuth, async (req, res) => {
+  app.get("/api/client-onboarding", isAuthenticated, async (req: any, res) => {
     try {
       const user = req.user as User;
       let onboarding = await storage.getClientOnboarding(user.id);
@@ -6185,7 +6185,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Mark an onboarding step as complete
-  app.post("/api/client-onboarding/mark-step", requireAuth, async (req, res) => {
+  app.post("/api/client-onboarding/mark-step", isAuthenticated, async (req: any, res) => {
     try {
       const user = req.user as User;
       const { step } = req.body;

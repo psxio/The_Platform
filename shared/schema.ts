@@ -1065,3 +1065,115 @@ export const insertCreditTransactionSchema = createInsertSchema(creditTransactio
 
 export type InsertCreditTransaction = z.infer<typeof insertCreditTransactionSchema>;
 export type CreditTransaction = typeof creditTransactions.$inferSelect;
+
+// ==================== CLIENT CREDIT REQUESTS ====================
+
+// Credit request statuses
+export const creditRequestStatuses = ["pending", "approved", "rejected", "cancelled"] as const;
+export type CreditRequestStatus = typeof creditRequestStatuses[number];
+
+// Credit Requests - clients can request additional credits
+export const creditRequests = pgTable("credit_requests", {
+  id: serial("id").primaryKey(),
+  requesterId: varchar("requester_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  amount: integer("amount").notNull(), // Requested amount in cents
+  currency: varchar("currency", { length: 10 }).notNull().default("USD"),
+  reason: text("reason").notNull(), // Why they need more credits
+  description: text("description"), // Additional details
+  status: varchar("status", { length: 20 }).$type<CreditRequestStatus>().notNull().default("pending"),
+  adminReviewerId: varchar("admin_reviewer_id").references(() => users.id, { onDelete: "set null" }),
+  adminNote: text("admin_note"), // Note from admin when approving/rejecting
+  approvedAmount: integer("approved_amount"), // Admin may approve a different amount
+  requestedAt: timestamp("requested_at").defaultNow().notNull(),
+  reviewedAt: timestamp("reviewed_at"),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertCreditRequestSchema = createInsertSchema(creditRequests).omit({
+  id: true,
+  requestedAt: true,
+  reviewedAt: true,
+  updatedAt: true,
+  status: true,
+  adminReviewerId: true,
+  adminNote: true,
+  approvedAmount: true,
+});
+
+export type InsertCreditRequest = z.infer<typeof insertCreditRequestSchema>;
+export type CreditRequest = typeof creditRequests.$inferSelect;
+
+// ==================== CONTENT ORDERS (SPENDING CREDITS) ====================
+
+// Content order statuses
+export const contentOrderStatuses = ["draft", "submitted", "in_progress", "review", "completed", "cancelled"] as const;
+export type ContentOrderStatus = typeof contentOrderStatuses[number];
+
+// Content order types
+export const contentOrderTypes = ["article", "blog_post", "social_media", "video_script", "graphics", "other"] as const;
+export type ContentOrderType = typeof contentOrderTypes[number];
+
+// Content Orders - clients can spend credits to order content
+export const contentOrders = pgTable("content_orders", {
+  id: serial("id").primaryKey(),
+  clientId: varchar("client_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  orderType: varchar("order_type", { length: 50 }).$type<ContentOrderType>().notNull(),
+  title: varchar("title", { length: 255 }).notNull(),
+  description: text("description").notNull(), // Detailed requirements
+  specifications: text("specifications"), // Technical specs, dimensions, etc.
+  creditCost: integer("credit_cost").notNull(), // Cost in cents
+  status: varchar("status", { length: 20 }).$type<ContentOrderStatus>().notNull().default("draft"),
+  priority: varchar("priority", { length: 20 }).default("normal"), // low, normal, high, urgent
+  dueDate: timestamp("due_date"),
+  assignedTo: varchar("assigned_to").references(() => users.id, { onDelete: "set null" }), // Content team member
+  relatedTaskId: integer("related_task_id").references(() => contentTasks.id, { onDelete: "set null" }), // Linked task
+  deliverableUrl: text("deliverable_url"), // Final deliverable
+  clientNotes: text("client_notes"), // Notes from client
+  teamNotes: text("team_notes"), // Notes from content team
+  submittedAt: timestamp("submitted_at"),
+  completedAt: timestamp("completed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertContentOrderSchema = createInsertSchema(contentOrders).omit({
+  id: true,
+  status: true,
+  assignedTo: true,
+  relatedTaskId: true,
+  deliverableUrl: true,
+  teamNotes: true,
+  submittedAt: true,
+  completedAt: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertContentOrder = z.infer<typeof insertContentOrderSchema>;
+export type ContentOrder = typeof contentOrders.$inferSelect;
+
+// ==================== CLIENT ONBOARDING ====================
+
+// Client Onboarding - track client-specific onboarding progress
+export const clientOnboarding = pgTable("client_onboarding", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }).unique(),
+  hasSeenWelcome: boolean("has_seen_welcome").notNull().default(false),
+  hasViewedCredits: boolean("has_viewed_credits").notNull().default(false),
+  hasPlacedFirstOrder: boolean("has_placed_first_order").notNull().default(false),
+  hasViewedBrandPacks: boolean("has_viewed_brand_packs").notNull().default(false),
+  hasViewedTransactionHistory: boolean("has_viewed_transaction_history").notNull().default(false),
+  completedAt: timestamp("completed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertClientOnboardingSchema = createInsertSchema(clientOnboarding).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  completedAt: true,
+});
+
+export type InsertClientOnboarding = z.infer<typeof insertClientOnboardingSchema>;
+export type ClientOnboarding = typeof clientOnboarding.$inferSelect;

@@ -491,6 +491,179 @@ export class GoogleSheetsService {
   isDriveConfigured(): boolean {
     return this.drive !== null;
   }
+  
+  // ==================== SHEETS HUB METHODS ====================
+  
+  // Extract sheet ID from URL or return as-is if already an ID
+  extractSheetId(urlOrId: string): string {
+    // If it looks like a URL, extract the ID
+    const urlMatch = urlOrId.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+    if (urlMatch) {
+      return urlMatch[1];
+    }
+    // Otherwise assume it's already an ID
+    return urlOrId;
+  }
+  
+  // Generic method to read any sheet by ID
+  async readSheetValues(sheetId: string, range: string): Promise<string[][]> {
+    if (!this.sheets) {
+      throw new Error("Google Sheets not initialized - please connect first");
+    }
+    
+    try {
+      const response = await this.sheets.spreadsheets.values.get({
+        spreadsheetId: sheetId,
+        range,
+      });
+      return response.data.values || [];
+    } catch (error: any) {
+      console.error("Failed to read sheet:", error);
+      if (error?.code === 403) {
+        throw new Error("Permission denied. Make sure the sheet is shared with the service account email.");
+      }
+      if (error?.code === 404) {
+        throw new Error("Spreadsheet not found. Check the Sheet ID or URL.");
+      }
+      throw error;
+    }
+  }
+  
+  // Get sheet metadata (tabs, title, etc.)
+  async getSheetMetadata(sheetId: string): Promise<{ title: string; tabs: string[] }> {
+    if (!this.sheets) {
+      throw new Error("Google Sheets not initialized");
+    }
+    
+    try {
+      const response = await this.sheets.spreadsheets.get({
+        spreadsheetId: sheetId,
+      });
+      
+      const title = response.data.properties?.title || "Untitled";
+      const tabs = (response.data.sheets || []).map(s => s.properties?.title || "Sheet");
+      
+      return { title, tabs };
+    } catch (error: any) {
+      console.error("Failed to get sheet metadata:", error);
+      if (error?.code === 403) {
+        throw new Error("Permission denied. Make sure the sheet is shared with the service account email.");
+      }
+      if (error?.code === 404) {
+        throw new Error("Spreadsheet not found. Check the Sheet ID or URL.");
+      }
+      throw error;
+    }
+  }
+  
+  // Read payroll sheet data - matches the payroll sheet structure
+  async readPayrollSheet(sheetId: string, tabName?: string): Promise<{
+    entityName: string;
+    walletAddress: string | null;
+    inflowItem: string | null;
+    amountIn: string | null;
+    amountOut: string | null;
+    tokenType: string | null;
+    tokenAddress: string | null;
+    receiver: string | null;
+    rawAmount: string | null;
+    sheetRowId: string | null;
+    rowIndex: number;
+  }[]> {
+    const range = tabName ? `'${tabName}'!A2:J` : "A2:J"; // Skip header row
+    const rows = await this.readSheetValues(sheetId, range);
+    
+    return rows.map((row, idx) => ({
+      entityName: row[0] || "Unknown",
+      walletAddress: row[1] || null,
+      inflowItem: row[2] || null,
+      amountIn: row[3] || null,
+      amountOut: row[4] || null,
+      tokenType: row[5] || null,
+      tokenAddress: row[6] || null,
+      receiver: row[7] || null,
+      rawAmount: row[8] || null,
+      sheetRowId: row[9] || null,
+      rowIndex: idx + 2, // Account for header row
+    }));
+  }
+  
+  // Read multi-column task board - matches the task board structure
+  async readMultiColumnTaskSheet(sheetId: string, tabName?: string): Promise<{
+    columnName: string;
+    taskDescription: string;
+    rowIndex: number;
+  }[]> {
+    // First get the header row to find column names
+    const headerRange = tabName ? `'${tabName}'!A1:Z1` : "A1:Z1";
+    const headerRows = await this.readSheetValues(sheetId, headerRange);
+    const headers = headerRows[0] || [];
+    
+    // Then get all data rows
+    const dataRange = tabName ? `'${tabName}'!A2:Z` : "A2:Z";
+    const dataRows = await this.readSheetValues(sheetId, dataRange);
+    
+    const tasks: { columnName: string; taskDescription: string; rowIndex: number }[] = [];
+    
+    for (let rowIdx = 0; rowIdx < dataRows.length; rowIdx++) {
+      const row = dataRows[rowIdx];
+      for (let colIdx = 0; colIdx < row.length; colIdx++) {
+        const cellValue = row[colIdx]?.trim();
+        if (cellValue) {
+          const columnName = headers[colIdx] || `Column ${colIdx + 1}`;
+          tasks.push({
+            columnName,
+            taskDescription: cellValue,
+            rowIndex: rowIdx + 2, // Account for header row
+          });
+        }
+      }
+    }
+    
+    return tasks;
+  }
+  
+  // Write value to a specific cell
+  async writeSheetCell(sheetId: string, range: string, value: string): Promise<void> {
+    if (!this.sheets) {
+      throw new Error("Google Sheets not initialized");
+    }
+    
+    try {
+      await this.sheets.spreadsheets.values.update({
+        spreadsheetId: sheetId,
+        range,
+        valueInputOption: "RAW",
+        requestBody: {
+          values: [[value]],
+        },
+      });
+    } catch (error) {
+      console.error("Failed to write to sheet:", error);
+      throw error;
+    }
+  }
+  
+  // Append a row to a sheet
+  async appendSheetRow(sheetId: string, range: string, values: string[]): Promise<void> {
+    if (!this.sheets) {
+      throw new Error("Google Sheets not initialized");
+    }
+    
+    try {
+      await this.sheets.spreadsheets.values.append({
+        spreadsheetId: sheetId,
+        range,
+        valueInputOption: "RAW",
+        requestBody: {
+          values: [values],
+        },
+      });
+    } catch (error) {
+      console.error("Failed to append to sheet:", error);
+      throw error;
+    }
+  }
 }
 
 export const googleSheetsService = new GoogleSheetsService();

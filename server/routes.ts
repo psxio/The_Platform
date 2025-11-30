@@ -5228,6 +5228,325 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ================== SHEETS HUB ENDPOINTS ==================
+
+  // Get all connected sheets (admin only)
+  app.get("/api/sheets-hub", requireRole("admin"), async (req, res) => {
+    try {
+      const sheets = await storage.getConnectedSheets();
+      res.json(sheets);
+    } catch (error) {
+      console.error("Error fetching connected sheets:", error);
+      res.status(500).json({ error: "Failed to fetch connected sheets" });
+    }
+  });
+
+  // Get single connected sheet with details
+  app.get("/api/sheets-hub/:id", requireRole("admin"), async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const sheet = await storage.getConnectedSheet(id);
+      
+      if (!sheet) {
+        return res.status(404).json({ error: "Sheet not found" });
+      }
+      
+      // Get sync logs and record counts
+      const syncLogs = await storage.getSheetSyncLogs(id, 10);
+      let recordCount = 0;
+      
+      if (sheet.sheetType === "payroll") {
+        const records = await storage.getPayrollRecords(id);
+        recordCount = records.length;
+      } else if (sheet.sheetType === "tasks") {
+        const tasks = await storage.getMultiColumnTasks(id);
+        recordCount = tasks.length;
+      }
+      
+      res.json({ ...sheet, syncLogs, recordCount });
+    } catch (error) {
+      console.error("Error fetching sheet details:", error);
+      res.status(500).json({ error: "Failed to fetch sheet details" });
+    }
+  });
+
+  // Connect a new sheet (admin only)
+  app.post("/api/sheets-hub", requireRole("admin"), async (req, res) => {
+    try {
+      const user = (req as any).user;
+      const { name, sheetUrl, sheetType, tabName, description, syncDirection } = req.body;
+      
+      if (!name || !sheetUrl) {
+        return res.status(400).json({ error: "Name and sheet URL are required" });
+      }
+      
+      // Extract sheet ID from URL
+      const sheetId = googleSheetsService.extractSheetId(sheetUrl);
+      
+      // Check if already connected
+      const existing = await storage.getConnectedSheetBySheetId(sheetId);
+      if (existing) {
+        return res.status(400).json({ error: "This sheet is already connected" });
+      }
+      
+      // Verify sheet is accessible
+      try {
+        await googleSheetsService.getSheetMetadata(sheetId);
+      } catch (error: any) {
+        return res.status(400).json({ error: error.message || "Cannot access sheet. Make sure it's shared with the service account." });
+      }
+      
+      const connectedSheet = await storage.createConnectedSheet({
+        name,
+        sheetId,
+        sheetUrl,
+        sheetType: sheetType || "custom",
+        tabName: tabName || null,
+        description: description || null,
+        syncDirection: syncDirection || "both",
+        isActive: true,
+        createdBy: user?.id,
+      });
+      
+      res.status(201).json(connectedSheet);
+    } catch (error) {
+      console.error("Error connecting sheet:", error);
+      res.status(500).json({ error: "Failed to connect sheet" });
+    }
+  });
+
+  // Update connected sheet (admin only)
+  app.patch("/api/sheets-hub/:id", requireRole("admin"), async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const { name, tabName, description, sheetType, syncDirection, isActive } = req.body;
+      
+      const updated = await storage.updateConnectedSheet(id, {
+        name,
+        tabName,
+        description,
+        sheetType,
+        syncDirection,
+        isActive,
+      });
+      
+      if (!updated) {
+        return res.status(404).json({ error: "Sheet not found" });
+      }
+      
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating connected sheet:", error);
+      res.status(500).json({ error: "Failed to update sheet" });
+    }
+  });
+
+  // Delete connected sheet (admin only)
+  app.delete("/api/sheets-hub/:id", requireRole("admin"), async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const deleted = await storage.deleteConnectedSheet(id);
+      
+      if (!deleted) {
+        return res.status(404).json({ error: "Sheet not found" });
+      }
+      
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting connected sheet:", error);
+      res.status(500).json({ error: "Failed to delete sheet" });
+    }
+  });
+
+  // Get sheet metadata (tabs, title) - for previewing before connecting
+  app.post("/api/sheets-hub/preview", requireRole("admin"), async (req, res) => {
+    try {
+      const { sheetUrl } = req.body;
+      
+      if (!sheetUrl) {
+        return res.status(400).json({ error: "Sheet URL is required" });
+      }
+      
+      const sheetId = googleSheetsService.extractSheetId(sheetUrl);
+      const metadata = await googleSheetsService.getSheetMetadata(sheetId);
+      
+      res.json({ sheetId, ...metadata });
+    } catch (error: any) {
+      console.error("Error previewing sheet:", error);
+      res.status(400).json({ error: error.message || "Failed to preview sheet" });
+    }
+  });
+
+  // Sync sheet data (pull from Google Sheets to database)
+  app.post("/api/sheets-hub/:id/sync", requireRole("admin"), async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const user = (req as any).user;
+      
+      const sheet = await storage.getConnectedSheet(id);
+      if (!sheet) {
+        return res.status(404).json({ error: "Sheet not found" });
+      }
+      
+      // Create sync log
+      const syncLog = await storage.createSheetSyncLog({
+        connectedSheetId: id,
+        syncType: "pull",
+        status: "pending",
+        initiatedBy: user?.id,
+      });
+      
+      try {
+        let recordsProcessed = 0;
+        let recordsCreated = 0;
+        
+        if (sheet.sheetType === "payroll") {
+          // Clear existing records for this sheet
+          await storage.deletePayrollRecordsBySheet(id);
+          
+          // Pull payroll data
+          const payrollData = await googleSheetsService.readPayrollSheet(sheet.sheetId, sheet.tabName || undefined);
+          
+          // Filter out empty rows
+          const validRecords = payrollData.filter(r => r.entityName && r.entityName !== "Unknown");
+          
+          if (validRecords.length > 0) {
+            const records = validRecords.map(r => ({
+              connectedSheetId: id,
+              entityName: r.entityName,
+              walletAddress: r.walletAddress,
+              inflowItem: r.inflowItem,
+              amountIn: r.amountIn,
+              amountOut: r.amountOut,
+              tokenType: r.tokenType,
+              tokenAddress: r.tokenAddress,
+              receiver: r.receiver,
+              rawAmount: r.rawAmount,
+              sheetRowId: r.sheetRowId,
+              sheetRowIndex: r.rowIndex,
+            }));
+            
+            await storage.createPayrollRecordsBulk(records);
+            recordsCreated = records.length;
+          }
+          
+          recordsProcessed = payrollData.length;
+        } else if (sheet.sheetType === "tasks") {
+          // Clear existing tasks for this sheet
+          await storage.deleteMultiColumnTasksBySheet(id);
+          
+          // Pull task data
+          const taskData = await googleSheetsService.readMultiColumnTaskSheet(sheet.sheetId, sheet.tabName || undefined);
+          
+          if (taskData.length > 0) {
+            const tasks = taskData.map(t => ({
+              connectedSheetId: id,
+              columnName: t.columnName,
+              taskDescription: t.taskDescription,
+              rowIndex: t.rowIndex,
+            }));
+            
+            await storage.createMultiColumnTasksBulk(tasks);
+            recordsCreated = tasks.length;
+          }
+          
+          recordsProcessed = taskData.length;
+        }
+        
+        // Update sync log with success
+        await storage.updateSheetSyncLog(syncLog.id, {
+          status: "success",
+          recordsProcessed,
+          recordsCreated,
+        });
+        
+        // Update sheet sync status
+        await storage.updateSheetSyncStatus(id, "success", `Synced ${recordsCreated} records`);
+        
+        res.json({
+          success: true,
+          recordsProcessed,
+          recordsCreated,
+          message: `Successfully synced ${recordsCreated} records from sheet`,
+        });
+      } catch (syncError: any) {
+        // Update sync log with error
+        await storage.updateSheetSyncLog(syncLog.id, {
+          status: "error",
+          errorMessage: syncError.message,
+        });
+        
+        // Update sheet sync status
+        await storage.updateSheetSyncStatus(id, "error", syncError.message);
+        
+        throw syncError;
+      }
+    } catch (error: any) {
+      console.error("Error syncing sheet:", error);
+      res.status(500).json({ error: error.message || "Failed to sync sheet" });
+    }
+  });
+
+  // Get payroll records for a sheet
+  app.get("/api/sheets-hub/:id/payroll", requireRole("admin"), async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const records = await storage.getPayrollRecords(id);
+      res.json(records);
+    } catch (error) {
+      console.error("Error fetching payroll records:", error);
+      res.status(500).json({ error: "Failed to fetch payroll records" });
+    }
+  });
+
+  // Get payroll aggregations
+  app.get("/api/sheets-hub/:id/payroll/aggregations", requireRole("admin"), async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const aggregations = await storage.getPayrollAggregations(id);
+      res.json(aggregations);
+    } catch (error) {
+      console.error("Error fetching payroll aggregations:", error);
+      res.status(500).json({ error: "Failed to fetch aggregations" });
+    }
+  });
+
+  // Get all payroll aggregations (across all sheets)
+  app.get("/api/sheets-hub/payroll/all-aggregations", requireRole("admin"), async (req, res) => {
+    try {
+      const aggregations = await storage.getPayrollAggregations();
+      res.json(aggregations);
+    } catch (error) {
+      console.error("Error fetching all payroll aggregations:", error);
+      res.status(500).json({ error: "Failed to fetch aggregations" });
+    }
+  });
+
+  // Get multi-column tasks for a sheet
+  app.get("/api/sheets-hub/:id/tasks", requireRole("admin"), async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const tasksByColumn = await storage.getMultiColumnTasksByColumn(id);
+      res.json(tasksByColumn);
+    } catch (error) {
+      console.error("Error fetching multi-column tasks:", error);
+      res.status(500).json({ error: "Failed to fetch tasks" });
+    }
+  });
+
+  // Get sync logs for a sheet
+  app.get("/api/sheets-hub/:id/logs", requireRole("admin"), async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const limit = parseInt(req.query.limit as string) || 20;
+      const logs = await storage.getSheetSyncLogs(id, limit);
+      res.json(logs);
+    } catch (error) {
+      console.error("Error fetching sync logs:", error);
+      res.status(500).json({ error: "Failed to fetch sync logs" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

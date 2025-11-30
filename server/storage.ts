@@ -45,6 +45,11 @@ import {
   // Brand Pack types
   type ClientBrandPack, type InsertClientBrandPack, clientBrandPacks,
   type BrandPackFile, type InsertBrandPackFile, brandPackFiles,
+  // Sheets Hub types
+  type ConnectedSheet, type InsertConnectedSheet, connectedSheets,
+  type PayrollRecord, type InsertPayrollRecord, payrollRecords,
+  type SheetSyncLog, type InsertSheetSyncLog, sheetSyncLogs,
+  type MultiColumnTask, type InsertMultiColumnTask, multiColumnTasks,
 } from "@shared/schema";
 import { db } from "./db";
 import { desc, eq, and, sql, or, isNull } from "drizzle-orm";
@@ -299,6 +304,38 @@ export interface IStorage {
   createBrandPackFile(file: InsertBrandPackFile): Promise<BrandPackFile>;
   updateBrandPackFile(id: number, updates: Partial<InsertBrandPackFile>): Promise<BrandPackFile | undefined>;
   deleteBrandPackFile(id: number): Promise<boolean>;
+  
+  // ==================== SHEETS HUB METHODS ====================
+  
+  // Connected Sheet methods
+  getConnectedSheets(): Promise<ConnectedSheet[]>;
+  getConnectedSheet(id: number): Promise<ConnectedSheet | undefined>;
+  getConnectedSheetBySheetId(sheetId: string): Promise<ConnectedSheet | undefined>;
+  createConnectedSheet(sheet: InsertConnectedSheet): Promise<ConnectedSheet>;
+  updateConnectedSheet(id: number, updates: Partial<InsertConnectedSheet>): Promise<ConnectedSheet | undefined>;
+  updateSheetSyncStatus(id: number, status: string, message?: string): Promise<ConnectedSheet | undefined>;
+  deleteConnectedSheet(id: number): Promise<boolean>;
+  
+  // Payroll Record methods
+  getPayrollRecords(sheetId?: number): Promise<PayrollRecord[]>;
+  getPayrollRecord(id: number): Promise<PayrollRecord | undefined>;
+  createPayrollRecord(record: InsertPayrollRecord): Promise<PayrollRecord>;
+  createPayrollRecordsBulk(records: InsertPayrollRecord[]): Promise<PayrollRecord[]>;
+  updatePayrollRecord(id: number, updates: Partial<InsertPayrollRecord>): Promise<PayrollRecord | undefined>;
+  deletePayrollRecordsBySheet(sheetId: number): Promise<number>;
+  getPayrollAggregations(sheetId?: number): Promise<{ entityName: string; totalIn: number; totalOut: number; count: number }[]>;
+  
+  // Sheet Sync Log methods
+  getSheetSyncLogs(sheetId?: number, limit?: number): Promise<SheetSyncLog[]>;
+  createSheetSyncLog(log: InsertSheetSyncLog): Promise<SheetSyncLog>;
+  updateSheetSyncLog(id: number, updates: Partial<InsertSheetSyncLog>): Promise<SheetSyncLog | undefined>;
+  
+  // Multi-Column Task methods
+  getMultiColumnTasks(sheetId?: number): Promise<MultiColumnTask[]>;
+  createMultiColumnTask(task: InsertMultiColumnTask): Promise<MultiColumnTask>;
+  createMultiColumnTasksBulk(tasks: InsertMultiColumnTask[]): Promise<MultiColumnTask[]>;
+  deleteMultiColumnTasksBySheet(sheetId: number): Promise<number>;
+  getMultiColumnTasksByColumn(sheetId: number): Promise<{ columnName: string; tasks: MultiColumnTask[] }[]>;
 }
 
 export class DbStorage implements IStorage {
@@ -1789,6 +1826,216 @@ export class DbStorage implements IStorage {
   async deleteBrandPackFile(id: number): Promise<boolean> {
     const result = await db.delete(brandPackFiles).where(eq(brandPackFiles.id, id)).returning();
     return result.length > 0;
+  }
+  
+  // ==================== SHEETS HUB METHODS ====================
+  
+  // Connected Sheet methods
+  async getConnectedSheets(): Promise<ConnectedSheet[]> {
+    return await db
+      .select()
+      .from(connectedSheets)
+      .orderBy(desc(connectedSheets.createdAt));
+  }
+  
+  async getConnectedSheet(id: number): Promise<ConnectedSheet | undefined> {
+    const [sheet] = await db
+      .select()
+      .from(connectedSheets)
+      .where(eq(connectedSheets.id, id));
+    return sheet;
+  }
+  
+  async getConnectedSheetBySheetId(sheetId: string): Promise<ConnectedSheet | undefined> {
+    const [sheet] = await db
+      .select()
+      .from(connectedSheets)
+      .where(eq(connectedSheets.sheetId, sheetId));
+    return sheet;
+  }
+  
+  async createConnectedSheet(sheet: InsertConnectedSheet): Promise<ConnectedSheet> {
+    const [created] = await db.insert(connectedSheets).values(sheet).returning();
+    return created;
+  }
+  
+  async updateConnectedSheet(id: number, updates: Partial<InsertConnectedSheet>): Promise<ConnectedSheet | undefined> {
+    const [updated] = await db
+      .update(connectedSheets)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(connectedSheets.id, id))
+      .returning();
+    return updated;
+  }
+  
+  async updateSheetSyncStatus(id: number, status: string, message?: string): Promise<ConnectedSheet | undefined> {
+    const [updated] = await db
+      .update(connectedSheets)
+      .set({ 
+        lastSyncAt: new Date(),
+        lastSyncStatus: status,
+        lastSyncMessage: message || null,
+        updatedAt: new Date()
+      })
+      .where(eq(connectedSheets.id, id))
+      .returning();
+    return updated;
+  }
+  
+  async deleteConnectedSheet(id: number): Promise<boolean> {
+    const result = await db.delete(connectedSheets).where(eq(connectedSheets.id, id)).returning();
+    return result.length > 0;
+  }
+  
+  // Payroll Record methods
+  async getPayrollRecords(sheetId?: number): Promise<PayrollRecord[]> {
+    if (sheetId) {
+      return await db
+        .select()
+        .from(payrollRecords)
+        .where(eq(payrollRecords.connectedSheetId, sheetId))
+        .orderBy(desc(payrollRecords.syncedAt));
+    }
+    return await db
+      .select()
+      .from(payrollRecords)
+      .orderBy(desc(payrollRecords.syncedAt));
+  }
+  
+  async getPayrollRecord(id: number): Promise<PayrollRecord | undefined> {
+    const [record] = await db
+      .select()
+      .from(payrollRecords)
+      .where(eq(payrollRecords.id, id));
+    return record;
+  }
+  
+  async createPayrollRecord(record: InsertPayrollRecord): Promise<PayrollRecord> {
+    const [created] = await db.insert(payrollRecords).values(record).returning();
+    return created;
+  }
+  
+  async createPayrollRecordsBulk(records: InsertPayrollRecord[]): Promise<PayrollRecord[]> {
+    if (records.length === 0) return [];
+    const created = await db.insert(payrollRecords).values(records).returning();
+    return created;
+  }
+  
+  async updatePayrollRecord(id: number, updates: Partial<InsertPayrollRecord>): Promise<PayrollRecord | undefined> {
+    const [updated] = await db
+      .update(payrollRecords)
+      .set(updates)
+      .where(eq(payrollRecords.id, id))
+      .returning();
+    return updated;
+  }
+  
+  async deletePayrollRecordsBySheet(sheetId: number): Promise<number> {
+    const result = await db.delete(payrollRecords).where(eq(payrollRecords.connectedSheetId, sheetId)).returning();
+    return result.length;
+  }
+  
+  async getPayrollAggregations(sheetId?: number): Promise<{ entityName: string; totalIn: number; totalOut: number; count: number }[]> {
+    let query = db
+      .select({
+        entityName: payrollRecords.entityName,
+        totalIn: sql<number>`COALESCE(SUM(CAST(NULLIF(REPLACE(${payrollRecords.amountIn}, ',', ''), '') AS DECIMAL)), 0)`,
+        totalOut: sql<number>`COALESCE(SUM(CAST(NULLIF(REPLACE(${payrollRecords.amountOut}, ',', ''), '') AS DECIMAL)), 0)`,
+        count: sql<number>`COUNT(*)`,
+      })
+      .from(payrollRecords)
+      .groupBy(payrollRecords.entityName);
+    
+    if (sheetId) {
+      query = query.where(eq(payrollRecords.connectedSheetId, sheetId)) as any;
+    }
+    
+    const results = await query;
+    return results.map(r => ({
+      entityName: r.entityName,
+      totalIn: Number(r.totalIn) || 0,
+      totalOut: Number(r.totalOut) || 0,
+      count: Number(r.count) || 0,
+    }));
+  }
+  
+  // Sheet Sync Log methods
+  async getSheetSyncLogs(sheetId?: number, limit: number = 50): Promise<SheetSyncLog[]> {
+    if (sheetId) {
+      return await db
+        .select()
+        .from(sheetSyncLogs)
+        .where(eq(sheetSyncLogs.connectedSheetId, sheetId))
+        .orderBy(desc(sheetSyncLogs.startedAt))
+        .limit(limit);
+    }
+    return await db
+      .select()
+      .from(sheetSyncLogs)
+      .orderBy(desc(sheetSyncLogs.startedAt))
+      .limit(limit);
+  }
+  
+  async createSheetSyncLog(log: InsertSheetSyncLog): Promise<SheetSyncLog> {
+    const [created] = await db.insert(sheetSyncLogs).values(log).returning();
+    return created;
+  }
+  
+  async updateSheetSyncLog(id: number, updates: Partial<InsertSheetSyncLog>): Promise<SheetSyncLog | undefined> {
+    const [updated] = await db
+      .update(sheetSyncLogs)
+      .set({ ...updates, completedAt: updates.status ? new Date() : undefined })
+      .where(eq(sheetSyncLogs.id, id))
+      .returning();
+    return updated;
+  }
+  
+  // Multi-Column Task methods
+  async getMultiColumnTasks(sheetId?: number): Promise<MultiColumnTask[]> {
+    if (sheetId) {
+      return await db
+        .select()
+        .from(multiColumnTasks)
+        .where(eq(multiColumnTasks.connectedSheetId, sheetId))
+        .orderBy(multiColumnTasks.columnName, multiColumnTasks.rowIndex);
+    }
+    return await db
+      .select()
+      .from(multiColumnTasks)
+      .orderBy(multiColumnTasks.columnName, multiColumnTasks.rowIndex);
+  }
+  
+  async createMultiColumnTask(task: InsertMultiColumnTask): Promise<MultiColumnTask> {
+    const [created] = await db.insert(multiColumnTasks).values(task).returning();
+    return created;
+  }
+  
+  async createMultiColumnTasksBulk(tasks: InsertMultiColumnTask[]): Promise<MultiColumnTask[]> {
+    if (tasks.length === 0) return [];
+    const created = await db.insert(multiColumnTasks).values(tasks).returning();
+    return created;
+  }
+  
+  async deleteMultiColumnTasksBySheet(sheetId: number): Promise<number> {
+    const result = await db.delete(multiColumnTasks).where(eq(multiColumnTasks.connectedSheetId, sheetId)).returning();
+    return result.length;
+  }
+  
+  async getMultiColumnTasksByColumn(sheetId: number): Promise<{ columnName: string; tasks: MultiColumnTask[] }[]> {
+    const allTasks = await this.getMultiColumnTasks(sheetId);
+    const grouped: Record<string, MultiColumnTask[]> = {};
+    
+    for (const task of allTasks) {
+      if (!grouped[task.columnName]) {
+        grouped[task.columnName] = [];
+      }
+      grouped[task.columnName].push(task);
+    }
+    
+    return Object.entries(grouped).map(([columnName, tasks]) => ({
+      columnName,
+      tasks,
+    }));
   }
 }
 

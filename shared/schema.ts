@@ -905,3 +905,114 @@ export const insertBrandPackFileSchema = createInsertSchema(brandPackFiles).omit
 
 export type InsertBrandPackFile = z.infer<typeof insertBrandPackFileSchema>;
 export type BrandPackFile = typeof brandPackFiles.$inferSelect;
+
+// ==================== GOOGLE SHEETS HUB TABLES ====================
+
+// Sheet types supported by the hub
+export const sheetTypes = ["payroll", "tasks", "directory", "custom"] as const;
+export type SheetType = typeof sheetTypes[number];
+
+// Connected Google Sheets - track multiple sheets
+export const connectedSheets = pgTable("connected_sheets", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  sheetId: varchar("sheet_id", { length: 255 }).notNull(),
+  sheetUrl: text("sheet_url"),
+  sheetType: varchar("sheet_type", { length: 50 }).$type<SheetType>().notNull().default("custom"),
+  tabName: varchar("tab_name", { length: 100 }), // specific tab within the spreadsheet
+  description: text("description"),
+  isActive: boolean("is_active").notNull().default(true),
+  lastSyncAt: timestamp("last_sync_at"),
+  lastSyncStatus: varchar("last_sync_status", { length: 50 }), // success, error, pending
+  lastSyncMessage: text("last_sync_message"),
+  syncDirection: varchar("sync_direction", { length: 20 }).default("both"), // push, pull, both
+  createdBy: varchar("created_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertConnectedSheetSchema = createInsertSchema(connectedSheets).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  lastSyncAt: true,
+  lastSyncStatus: true,
+  lastSyncMessage: true,
+});
+
+export type InsertConnectedSheet = z.infer<typeof insertConnectedSheetSchema>;
+export type ConnectedSheet = typeof connectedSheets.$inferSelect;
+
+// Payroll Records - synced from payroll sheets
+export const payrollRecords = pgTable("payroll_records", {
+  id: serial("id").primaryKey(),
+  connectedSheetId: integer("connected_sheet_id").references(() => connectedSheets.id, { onDelete: "cascade" }),
+  entityName: varchar("entity_name", { length: 255 }).notNull(), // "Based" column
+  walletAddress: varchar("wallet_address", { length: 255 }), // "0x" column
+  inflowItem: text("inflow_item"),
+  amountIn: varchar("amount_in", { length: 100 }),
+  amountOut: varchar("amount_out", { length: 100 }),
+  tokenType: varchar("token_type", { length: 100 }),
+  tokenAddress: varchar("token_address", { length: 255 }),
+  receiver: varchar("receiver", { length: 255 }),
+  rawAmount: varchar("raw_amount", { length: 100 }),
+  sheetRowId: varchar("sheet_row_id", { length: 100 }), // "id" column from sheet
+  sheetRowIndex: integer("sheet_row_index"), // row number in sheet for updates
+  syncedAt: timestamp("synced_at").defaultNow(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertPayrollRecordSchema = createInsertSchema(payrollRecords).omit({
+  id: true,
+  createdAt: true,
+  syncedAt: true,
+});
+
+export type InsertPayrollRecord = z.infer<typeof insertPayrollRecordSchema>;
+export type PayrollRecord = typeof payrollRecords.$inferSelect;
+
+// Sheet Sync Logs - track all sync operations
+export const sheetSyncLogs = pgTable("sheet_sync_logs", {
+  id: serial("id").primaryKey(),
+  connectedSheetId: integer("connected_sheet_id").references(() => connectedSheets.id, { onDelete: "cascade" }),
+  syncType: varchar("sync_type", { length: 20 }).notNull(), // push, pull
+  status: varchar("status", { length: 20 }).notNull(), // success, error, partial
+  recordsProcessed: integer("records_processed").default(0),
+  recordsCreated: integer("records_created").default(0),
+  recordsUpdated: integer("records_updated").default(0),
+  recordsDeleted: integer("records_deleted").default(0),
+  errorMessage: text("error_message"),
+  initiatedBy: varchar("initiated_by").references(() => users.id, { onDelete: "set null" }),
+  startedAt: timestamp("started_at").defaultNow(),
+  completedAt: timestamp("completed_at"),
+});
+
+export const insertSheetSyncLogSchema = createInsertSchema(sheetSyncLogs).omit({
+  id: true,
+  startedAt: true,
+  completedAt: true,
+});
+
+export type InsertSheetSyncLog = z.infer<typeof insertSheetSyncLogSchema>;
+export type SheetSyncLog = typeof sheetSyncLogs.$inferSelect;
+
+// Multi-column Tasks - for project board style sheets
+export const multiColumnTasks = pgTable("multi_column_tasks", {
+  id: serial("id").primaryKey(),
+  connectedSheetId: integer("connected_sheet_id").references(() => connectedSheets.id, { onDelete: "cascade" }),
+  columnName: varchar("column_name", { length: 255 }).notNull(), // e.g., "4444 PORTAL", "BASE CHAPTERS"
+  taskDescription: text("task_description").notNull(),
+  rowIndex: integer("row_index"),
+  status: varchar("status", { length: 50 }).default("pending"),
+  syncedAt: timestamp("synced_at").defaultNow(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertMultiColumnTaskSchema = createInsertSchema(multiColumnTasks).omit({
+  id: true,
+  createdAt: true,
+  syncedAt: true,
+});
+
+export type InsertMultiColumnTask = z.infer<typeof insertMultiColumnTaskSchema>;
+export type MultiColumnTask = typeof multiColumnTasks.$inferSelect;

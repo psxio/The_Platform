@@ -45,6 +45,10 @@ The system utilizes a **PostgreSQL** database managed with **Drizzle ORM**. Key 
 -   `payment_request_events`: Audit trail for payment request status changes (created, approved, rejected, cancelled).
 -   `client_brand_packs`: Client brand packs with metadata (name, description, website, colors, notes).
 -   `brand_pack_files`: Files attached to brand packs with category and metadata.
+-   `connected_sheets`: Google Sheets connections with sheet ID, URL, type (payroll/tasks/custom), sync settings.
+-   `payroll_records`: Synced payroll data with entity names, wallet addresses, amounts, token info.
+-   `sheet_sync_logs`: Sync operation history with status, record counts, and error messages.
+-   `multi_column_tasks`: Tasks parsed from multi-column task sheets with column names and descriptions.
 
 ### UI/UX Decisions
 -   **Color Schemes**: Leverages Shadcn UI's New York style for a modern and clean aesthetic.
@@ -112,7 +116,17 @@ The system utilizes a **PostgreSQL** database managed with **Drizzle ORM**. Key 
         -   Quick access to brand pack from task details when client is assigned (shows file count badge).
         -   Files stored via Google Drive integration for reliable hosting.
         -   Routes: `/content` (Brands tab), `/admin/brand-packs` (admin management).
--   **Admin Features**: Invite code generation and management with detailed usage tracking (shows who used each code, when, and what role was granted), team invitation system via email, integration settings for Telegram/Discord, payment request management, brand pack management.
+    -   **Sheets Hub**: Google Sheets integration for multi-sheet data synchronization:
+        -   Connect multiple Google Sheets by URL with automatic sheet ID extraction.
+        -   Support for different sheet types: Payroll (financial tracking) and Multi-Column Tasks.
+        -   Payroll sheets: Track entity names, wallet addresses, inflow/outflow amounts, token types, and receivers.
+        -   Multi-column task sheets: Parse project-based column headers with task descriptions.
+        -   Sync operations pull data from Google Sheets into local database with full sync logging.
+        -   Entity aggregations with total in/out calculations and record counts.
+        -   Sheet metadata preview before connecting (shows title and tab names).
+        -   Sync status tracking (success, error, pending) with last sync timestamps.
+        -   Admin-only access with route: `/admin/sheets-hub`.
+-   **Admin Features**: Invite code generation and management with detailed usage tracking (shows who used each code, when, and what role was granted), team invitation system via email, integration settings for Telegram/Discord, payment request management, brand pack management, sheets hub for Google Sheets integration.
 -   **Security**: Role-based access control, bcrypt hashing, server-side middleware for route protection.
 
 ## External Dependencies

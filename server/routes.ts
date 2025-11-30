@@ -5583,6 +5583,250 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ================== CLIENT CREDITS ENDPOINTS ==================
+
+  // Get all client credits (admin only)
+  app.get("/api/client-credits", requireRole("admin"), async (req, res) => {
+    try {
+      const credits = await storage.getClientCredits();
+      
+      // Fetch user info for each credit record
+      const creditsWithUsers = await Promise.all(
+        credits.map(async (credit) => {
+          const user = await storage.getUser(credit.userId);
+          return {
+            ...credit,
+            user: user ? {
+              id: user.id,
+              email: user.email,
+              firstName: user.firstName,
+              lastName: user.lastName,
+            } : null,
+          };
+        })
+      );
+      
+      res.json(creditsWithUsers);
+    } catch (error) {
+      console.error("Error fetching client credits:", error);
+      res.status(500).json({ error: "Failed to fetch client credits" });
+    }
+  });
+
+  // Get credit balance for current user (content users can see their own balance)
+  app.get("/api/client-credits/my-balance", requireRole("content"), async (req, res) => {
+    try {
+      const user = (req as any).user;
+      const credit = await storage.getClientCredit(user.id);
+      
+      if (!credit) {
+        // Return zero balance if no credit record exists
+        return res.json({
+          balance: 0,
+          currency: "USD",
+          transactions: [],
+        });
+      }
+      
+      // Get recent transactions
+      const transactions = await storage.getCreditTransactions(user.id, 10);
+      
+      res.json({
+        balance: credit.balance,
+        currency: credit.currency,
+        notes: credit.notes,
+        transactions,
+      });
+    } catch (error) {
+      console.error("Error fetching user credit balance:", error);
+      res.status(500).json({ error: "Failed to fetch credit balance" });
+    }
+  });
+
+  // Get credit for a specific user (admin only)
+  app.get("/api/client-credits/:userId", requireRole("admin"), async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const credit = await storage.getClientCredit(userId);
+      const user = await storage.getUser(userId);
+      
+      if (!credit) {
+        return res.json({
+          userId,
+          balance: 0,
+          currency: "USD",
+          notes: null,
+          user: user ? {
+            id: user.id,
+            email: user.email,
+            firstName: user.firstName,
+            lastName: user.lastName,
+          } : null,
+          transactions: [],
+        });
+      }
+      
+      const transactions = await storage.getCreditTransactions(userId, 50);
+      
+      res.json({
+        ...credit,
+        user: user ? {
+          id: user.id,
+          email: user.email,
+          firstName: user.firstName,
+          lastName: user.lastName,
+        } : null,
+        transactions,
+      });
+    } catch (error) {
+      console.error("Error fetching client credit:", error);
+      res.status(500).json({ error: "Failed to fetch credit" });
+    }
+  });
+
+  // Add credit to a user's account (admin only)
+  app.post("/api/client-credits/:userId/add", requireRole("admin"), async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const { amount, description } = req.body;
+      const admin = (req as any).user;
+      
+      if (!amount || amount <= 0) {
+        return res.status(400).json({ error: "Amount must be a positive number" });
+      }
+      
+      // Check if user exists
+      const user = await storage.getUser(userId);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+      
+      // Convert amount to cents if given in dollars
+      const amountInCents = Math.round(amount * 100);
+      
+      const credit = await storage.addClientCredit(
+        userId,
+        amountInCents,
+        description || "Credit added by admin",
+        admin.id
+      );
+      
+      res.json({
+        ...credit,
+        message: `Successfully added $${amount.toFixed(2)} credit to account`,
+      });
+    } catch (error: any) {
+      console.error("Error adding credit:", error);
+      res.status(500).json({ error: error.message || "Failed to add credit" });
+    }
+  });
+
+  // Deduct credit from a user's account (admin only)
+  app.post("/api/client-credits/:userId/deduct", requireRole("admin"), async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const { amount, description, taskId } = req.body;
+      const admin = (req as any).user;
+      
+      if (!amount || amount <= 0) {
+        return res.status(400).json({ error: "Amount must be a positive number" });
+      }
+      
+      // Convert amount to cents if given in dollars
+      const amountInCents = Math.round(amount * 100);
+      
+      const credit = await storage.deductClientCredit(
+        userId,
+        amountInCents,
+        description || "Credit deducted by admin",
+        taskId || undefined,
+        admin.id
+      );
+      
+      res.json({
+        ...credit,
+        message: `Successfully deducted $${amount.toFixed(2)} credit from account`,
+      });
+    } catch (error: any) {
+      console.error("Error deducting credit:", error);
+      res.status(500).json({ error: error.message || "Failed to deduct credit" });
+    }
+  });
+
+  // Update credit notes (admin only)
+  app.patch("/api/client-credits/:userId/notes", requireRole("admin"), async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const { notes } = req.body;
+      
+      // Get or create credit record
+      let credit = await storage.getClientCredit(userId);
+      
+      if (!credit) {
+        credit = await storage.createClientCredit({
+          userId,
+          balance: 0,
+          currency: "USD",
+          notes,
+        });
+      } else {
+        credit = await storage.updateClientCredit(userId, { notes });
+      }
+      
+      res.json(credit);
+    } catch (error: any) {
+      console.error("Error updating credit notes:", error);
+      res.status(500).json({ error: error.message || "Failed to update notes" });
+    }
+  });
+
+  // Get transaction history for a user (admin only)
+  app.get("/api/client-credits/:userId/transactions", requireRole("admin"), async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const limit = parseInt(req.query.limit as string) || 50;
+      const transactions = await storage.getCreditTransactions(userId, limit);
+      res.json(transactions);
+    } catch (error) {
+      console.error("Error fetching transactions:", error);
+      res.status(500).json({ error: "Failed to fetch transactions" });
+    }
+  });
+
+  // Get all users with content role for credit management (admin only)
+  app.get("/api/client-credits/eligible-users", requireRole("admin"), async (req, res) => {
+    try {
+      const allUsers = await storage.getAllUsers();
+      // Filter users that could potentially receive credits (content role or admin)
+      const eligibleUsers = allUsers.filter(u => 
+        u.roleContent || u.roleAdmin || u.roleWeb3
+      );
+      
+      // Get their credit info too
+      const usersWithCredits = await Promise.all(
+        eligibleUsers.map(async (user) => {
+          const credit = await storage.getClientCredit(user.id);
+          return {
+            id: user.id,
+            email: user.email,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            roleContent: user.roleContent,
+            roleAdmin: user.roleAdmin,
+            roleWeb3: user.roleWeb3,
+            balance: credit?.balance || 0,
+            currency: credit?.currency || "USD",
+          };
+        })
+      );
+      
+      res.json(usersWithCredits);
+    } catch (error) {
+      console.error("Error fetching eligible users:", error);
+      res.status(500).json({ error: "Failed to fetch eligible users" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

@@ -5451,7 +5451,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           }
           
           recordsProcessed = taskData.length;
-        } else if (sheet.sheetType === "data") {
+        } else if (sheet.sheetType === "data" || sheet.sheetType === "custom") {
           // Generic data sync - read headers and all rows
           const sheetData = await googleSheetsService.readDataSheet(sheet.sheetId, sheet.tabName || undefined);
           
@@ -5546,7 +5546,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get cached data for a data-type sheet
+  // Get cached data for a data or custom type sheet
   app.get("/api/sheets-hub/:id/data", requireRole("admin"), async (req, res) => {
     try {
       const id = parseInt(req.params.id);
@@ -5556,7 +5556,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ error: "Sheet not found" });
       }
       
-      if (sheet.sheetType !== "data") {
+      if (sheet.sheetType !== "data" && sheet.sheetType !== "custom") {
         return res.status(400).json({ error: "Sheet is not a data type" });
       }
       

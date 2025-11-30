@@ -142,19 +142,21 @@ export default function AdminSheetsHub() {
     enabled: !!selectedSheet?.id && selectedSheet.sheetType === "tasks",
   });
   
-  // Fetch generic data for data type sheet
+  // Fetch generic data for data or custom type sheets
   const { data: genericSheetData, isLoading: genericDataLoading } = useQuery<{
     headers: string[];
     rows: { rowIndex: number; cells: { [column: string]: string } }[];
   }>({
     queryKey: ["/api/sheets-hub", selectedSheet?.id, "data"],
     queryFn: async () => {
-      if (!selectedSheet?.id || selectedSheet.sheetType !== "data") return { headers: [], rows: [] };
+      if (!selectedSheet?.id || (selectedSheet.sheetType !== "data" && selectedSheet.sheetType !== "custom")) {
+        return { headers: [], rows: [] };
+      }
       const res = await fetch(`/api/sheets-hub/${selectedSheet.id}/data`, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to fetch data");
       return res.json();
     },
-    enabled: !!selectedSheet?.id && selectedSheet.sheetType === "data",
+    enabled: !!selectedSheet?.id && (selectedSheet.sheetType === "data" || selectedSheet.sheetType === "custom"),
   });
 
   // Preview sheet mutation
@@ -822,7 +824,7 @@ export default function AdminSheetsHub() {
                   </div>
                 )}
                 
-                {selectedSheet.sheetType === "data" && (
+                {(selectedSheet.sheetType === "data" || selectedSheet.sheetType === "custom") && (
                   <div>
                     {genericDataLoading ? (
                       <div className="flex items-center justify-center py-8">
@@ -870,14 +872,6 @@ export default function AdminSheetsHub() {
                         </div>
                       </div>
                     )}
-                  </div>
-                )}
-                
-                {selectedSheet.sheetType === "custom" && (
-                  <div className="flex flex-col items-center justify-center py-8 text-center">
-                    <Settings className="w-12 h-12 text-muted-foreground/30 mb-2" />
-                    <p className="text-sm text-muted-foreground">Custom sheet type</p>
-                    <p className="text-xs text-muted-foreground mt-1">Configure sync settings for this sheet type</p>
                   </div>
                 )}
               </CardContent>

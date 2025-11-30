@@ -13,7 +13,7 @@ import {
   DropdownMenuSeparator, 
   DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu";
-import { FileText, History as HistoryIcon, FileSearch, Database, CheckSquare, ClipboardList, LogOut, Settings, Loader2, Key, Combine, UserPlus, Users, Monitor, DollarSign, Camera, Package, FileSpreadsheet } from "lucide-react";
+import { FileText, History as HistoryIcon, FileSearch, Database, CheckSquare, ClipboardList, LogOut, Settings, Loader2, Key, Combine, UserPlus, Users, Monitor, DollarSign, Camera, Package, FileSpreadsheet, CreditCard } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { NotificationBell } from "@/components/notification-bell";
 import { useAuth } from "@/hooks/useAuth";
@@ -33,6 +33,7 @@ import AdminMonitoring from "@/pages/admin-monitoring";
 import AdminPayments from "@/pages/admin-payments";
 import AdminBrandPacks from "@/pages/admin-brand-packs";
 import AdminSheetsHub from "@/pages/admin-sheets-hub";
+import AdminCredits from "@/pages/admin-credits";
 import ContentProfileSetup from "@/pages/content-profile-setup";
 import WorkerMonitoring from "@/pages/worker-monitoring";
 import RoleSelect from "@/pages/role-select";
@@ -125,6 +126,12 @@ function UserMenu() {
               <Link href="/admin/sheets-hub">
                 <FileSpreadsheet className="mr-2 h-4 w-4" />
                 Sheets Hub
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link href="/admin/credits">
+                <CreditCard className="mr-2 h-4 w-4" />
+                Client Credits
               </Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
@@ -333,6 +340,7 @@ function AuthenticatedRouter() {
           <Route path="/admin/payments" component={AdminPayments} />
           <Route path="/admin/brand-packs" component={AdminBrandPacks} />
           <Route path="/admin/sheets-hub" component={AdminSheetsHub} />
+          <Route path="/admin/credits" component={AdminCredits} />
         </>
       )}
       

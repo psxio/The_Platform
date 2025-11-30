@@ -5826,6 +5826,383 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ==================== CREDIT REQUESTS ROUTES ====================
+
+  // Get all credit requests (admin) or own requests (client)
+  app.get("/api/credit-requests", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      if (user.role === "admin") {
+        const requests = await storage.getCreditRequests();
+        res.json(requests);
+      } else {
+        const requests = await storage.getCreditRequests(user.id);
+        res.json(requests);
+      }
+    } catch (error) {
+      console.error("Error fetching credit requests:", error);
+      res.status(500).json({ error: "Failed to fetch credit requests" });
+    }
+  });
+
+  // Get pending credit requests (admin only)
+  app.get("/api/credit-requests/pending", requireRole("admin"), async (req, res) => {
+    try {
+      const requests = await storage.getPendingCreditRequests();
+      res.json(requests);
+    } catch (error) {
+      console.error("Error fetching pending requests:", error);
+      res.status(500).json({ error: "Failed to fetch pending requests" });
+    }
+  });
+
+  // Create a new credit request (client)
+  app.post("/api/credit-requests", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const { amount, currency, reason, description } = req.body;
+      
+      if (!amount || amount <= 0) {
+        return res.status(400).json({ error: "Amount must be positive" });
+      }
+      if (!reason) {
+        return res.status(400).json({ error: "Reason is required" });
+      }
+      
+      const request = await storage.createCreditRequest({
+        requesterId: user.id,
+        amount: Math.round(amount * 100), // Convert to cents
+        currency: currency || "USD",
+        reason,
+        description,
+      });
+      
+      res.status(201).json(request);
+    } catch (error: any) {
+      console.error("Error creating credit request:", error);
+      res.status(500).json({ error: error.message || "Failed to create request" });
+    }
+  });
+
+  // Cancel a credit request (owner only)
+  app.post("/api/credit-requests/:id/cancel", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const id = parseInt(req.params.id);
+      
+      const cancelled = await storage.cancelCreditRequest(id, user.id);
+      if (!cancelled) {
+        return res.status(400).json({ error: "Cannot cancel this request" });
+      }
+      
+      res.json(cancelled);
+    } catch (error: any) {
+      console.error("Error cancelling request:", error);
+      res.status(500).json({ error: error.message || "Failed to cancel request" });
+    }
+  });
+
+  // Approve a credit request (admin only)
+  app.post("/api/credit-requests/:id/approve", requireRole("admin"), async (req, res) => {
+    try {
+      const user = req.user as User;
+      const id = parseInt(req.params.id);
+      const { approvedAmount, note } = req.body;
+      
+      if (!approvedAmount || approvedAmount <= 0) {
+        return res.status(400).json({ error: "Approved amount must be positive" });
+      }
+      
+      const approved = await storage.approveCreditRequest(
+        id,
+        user.id,
+        Math.round(approvedAmount * 100), // Convert to cents
+        note
+      );
+      
+      if (!approved) {
+        return res.status(400).json({ error: "Cannot approve this request" });
+      }
+      
+      res.json(approved);
+    } catch (error: any) {
+      console.error("Error approving request:", error);
+      res.status(500).json({ error: error.message || "Failed to approve request" });
+    }
+  });
+
+  // Reject a credit request (admin only)
+  app.post("/api/credit-requests/:id/reject", requireRole("admin"), async (req, res) => {
+    try {
+      const user = req.user as User;
+      const id = parseInt(req.params.id);
+      const { note } = req.body;
+      
+      const rejected = await storage.rejectCreditRequest(id, user.id, note);
+      if (!rejected) {
+        return res.status(400).json({ error: "Cannot reject this request" });
+      }
+      
+      res.json(rejected);
+    } catch (error: any) {
+      console.error("Error rejecting request:", error);
+      res.status(500).json({ error: error.message || "Failed to reject request" });
+    }
+  });
+
+  // ==================== CONTENT ORDERS ROUTES ====================
+
+  // Get all content orders (admin) or own orders (client)
+  app.get("/api/content-orders", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      if (user.role === "admin") {
+        const orders = await storage.getContentOrders();
+        res.json(orders);
+      } else {
+        const orders = await storage.getContentOrders(user.id);
+        res.json(orders);
+      }
+    } catch (error) {
+      console.error("Error fetching content orders:", error);
+      res.status(500).json({ error: "Failed to fetch content orders" });
+    }
+  });
+
+  // Get orders assigned to current team member
+  app.get("/api/content-orders/assigned-to-me", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const orders = await storage.getOrdersForTeamMember(user.id);
+      res.json(orders);
+    } catch (error) {
+      console.error("Error fetching assigned orders:", error);
+      res.status(500).json({ error: "Failed to fetch assigned orders" });
+    }
+  });
+
+  // Get a specific content order
+  app.get("/api/content-orders/:id", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const id = parseInt(req.params.id);
+      
+      const order = await storage.getContentOrder(id);
+      if (!order) {
+        return res.status(404).json({ error: "Order not found" });
+      }
+      
+      // Check permissions
+      if (user.role !== "admin" && order.clientId !== user.id && order.assignedTo !== user.id) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      
+      res.json(order);
+    } catch (error) {
+      console.error("Error fetching order:", error);
+      res.status(500).json({ error: "Failed to fetch order" });
+    }
+  });
+
+  // Create a new content order (draft)
+  app.post("/api/content-orders", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const { orderType, title, description, specifications, creditCost, priority, dueDate, clientNotes } = req.body;
+      
+      if (!orderType || !title || !description || !creditCost) {
+        return res.status(400).json({ error: "Missing required fields" });
+      }
+      
+      const order = await storage.createContentOrder({
+        clientId: user.id,
+        orderType,
+        title,
+        description,
+        specifications,
+        creditCost: Math.round(creditCost * 100), // Convert to cents
+        priority,
+        dueDate: dueDate ? new Date(dueDate) : null,
+        clientNotes,
+      });
+      
+      res.status(201).json(order);
+    } catch (error: any) {
+      console.error("Error creating order:", error);
+      res.status(500).json({ error: error.message || "Failed to create order" });
+    }
+  });
+
+  // Update a content order (owner for drafts, admin for others)
+  app.patch("/api/content-orders/:id", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const id = parseInt(req.params.id);
+      
+      const order = await storage.getContentOrder(id);
+      if (!order) {
+        return res.status(404).json({ error: "Order not found" });
+      }
+      
+      // Only owner can edit drafts, admin can edit anything
+      if (user.role !== "admin" && (order.clientId !== user.id || order.status !== "draft")) {
+        return res.status(403).json({ error: "Cannot edit this order" });
+      }
+      
+      const updates = req.body;
+      if (updates.creditCost) {
+        updates.creditCost = Math.round(updates.creditCost * 100);
+      }
+      if (updates.dueDate) {
+        updates.dueDate = new Date(updates.dueDate);
+      }
+      
+      const updated = await storage.updateContentOrder(id, updates);
+      res.json(updated);
+    } catch (error: any) {
+      console.error("Error updating order:", error);
+      res.status(500).json({ error: error.message || "Failed to update order" });
+    }
+  });
+
+  // Submit a content order (spend credits)
+  app.post("/api/content-orders/:id/submit", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const id = parseInt(req.params.id);
+      
+      const submitted = await storage.submitContentOrder(id, user.id);
+      if (!submitted) {
+        return res.status(400).json({ error: "Cannot submit this order" });
+      }
+      
+      res.json(submitted);
+    } catch (error: any) {
+      console.error("Error submitting order:", error);
+      res.status(500).json({ error: error.message || "Failed to submit order" });
+    }
+  });
+
+  // Assign a content order to a team member (admin only)
+  app.post("/api/content-orders/:id/assign", requireRole("admin"), async (req, res) => {
+    try {
+      const user = req.user as User;
+      const id = parseInt(req.params.id);
+      const { assignedTo } = req.body;
+      
+      if (!assignedTo) {
+        return res.status(400).json({ error: "assignedTo is required" });
+      }
+      
+      const assigned = await storage.assignContentOrder(id, assignedTo, user.id);
+      if (!assigned) {
+        return res.status(400).json({ error: "Cannot assign this order" });
+      }
+      
+      res.json(assigned);
+    } catch (error: any) {
+      console.error("Error assigning order:", error);
+      res.status(500).json({ error: error.message || "Failed to assign order" });
+    }
+  });
+
+  // Complete a content order (admin or assigned team member)
+  app.post("/api/content-orders/:id/complete", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const id = parseInt(req.params.id);
+      const { deliverableUrl } = req.body;
+      
+      const order = await storage.getContentOrder(id);
+      if (!order) {
+        return res.status(404).json({ error: "Order not found" });
+      }
+      
+      // Only admin or assigned team member can complete
+      if (user.role !== "admin" && order.assignedTo !== user.id) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      
+      if (!deliverableUrl) {
+        return res.status(400).json({ error: "deliverableUrl is required" });
+      }
+      
+      const completed = await storage.completeContentOrder(id, deliverableUrl, user.id);
+      if (!completed) {
+        return res.status(400).json({ error: "Cannot complete this order" });
+      }
+      
+      res.json(completed);
+    } catch (error: any) {
+      console.error("Error completing order:", error);
+      res.status(500).json({ error: error.message || "Failed to complete order" });
+    }
+  });
+
+  // Cancel a content order (owner only for draft/submitted)
+  app.post("/api/content-orders/:id/cancel", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const id = parseInt(req.params.id);
+      
+      const cancelled = await storage.cancelContentOrder(id, user.id);
+      if (!cancelled) {
+        return res.status(400).json({ error: "Cannot cancel this order" });
+      }
+      
+      res.json(cancelled);
+    } catch (error: any) {
+      console.error("Error cancelling order:", error);
+      res.status(500).json({ error: error.message || "Failed to cancel order" });
+    }
+  });
+
+  // ==================== CLIENT ONBOARDING ROUTES ====================
+
+  // Get client onboarding status
+  app.get("/api/client-onboarding", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      let onboarding = await storage.getClientOnboarding(user.id);
+      
+      // Create onboarding record if doesn't exist
+      if (!onboarding) {
+        onboarding = await storage.createClientOnboarding({
+          userId: user.id,
+          hasSeenWelcome: false,
+          hasViewedCredits: false,
+          hasPlacedFirstOrder: false,
+          hasViewedBrandPacks: false,
+          hasViewedTransactionHistory: false,
+        });
+      }
+      
+      res.json(onboarding);
+    } catch (error) {
+      console.error("Error fetching client onboarding:", error);
+      res.status(500).json({ error: "Failed to fetch onboarding status" });
+    }
+  });
+
+  // Mark an onboarding step as complete
+  app.post("/api/client-onboarding/mark-step", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as User;
+      const { step } = req.body;
+      
+      const validSteps = ["hasSeenWelcome", "hasViewedCredits", "hasPlacedFirstOrder", "hasViewedBrandPacks", "hasViewedTransactionHistory"];
+      if (!validSteps.includes(step)) {
+        return res.status(400).json({ error: "Invalid onboarding step" });
+      }
+      
+      const updated = await storage.markClientOnboardingStep(user.id, step as any);
+      res.json(updated);
+    } catch (error: any) {
+      console.error("Error marking onboarding step:", error);
+      res.status(500).json({ error: error.message || "Failed to mark step" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

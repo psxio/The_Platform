@@ -1018,3 +1018,50 @@ export const insertMultiColumnTaskSchema = createInsertSchema(multiColumnTasks).
 
 export type InsertMultiColumnTask = z.infer<typeof insertMultiColumnTaskSchema>;
 export type MultiColumnTask = typeof multiColumnTasks.$inferSelect;
+
+// ==================== CLIENT CREDITS SYSTEM ====================
+
+// Transaction types for credit history
+export const creditTransactionTypes = ["credit_added", "credit_used", "credit_adjusted", "credit_refunded"] as const;
+export type CreditTransactionType = typeof creditTransactionTypes[number];
+
+// Client Credits - tracks available balance for each client/user
+export const clientCredits = pgTable("client_credits", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull().unique(),
+  balance: integer("balance").notNull().default(0), // Balance in cents (e.g., $250 = 25000)
+  currency: varchar("currency", { length: 10 }).notNull().default("USD"),
+  notes: text("notes"), // Admin notes about this client's credits
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertClientCreditSchema = createInsertSchema(clientCredits).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertClientCredit = z.infer<typeof insertClientCreditSchema>;
+export type ClientCredit = typeof clientCredits.$inferSelect;
+
+// Credit Transactions - history of all credit changes
+export const creditTransactions = pgTable("credit_transactions", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }).notNull(),
+  type: varchar("type", { length: 50 }).$type<CreditTransactionType>().notNull(),
+  amount: integer("amount").notNull(), // Amount in cents (positive for add, negative for deduct)
+  balanceAfter: integer("balance_after").notNull(), // Balance after this transaction
+  description: text("description"), // Description of the transaction
+  taskId: integer("task_id").references(() => contentTasks.id, { onDelete: "set null" }), // If credit was used for a task
+  performedBy: varchar("performed_by").references(() => users.id, { onDelete: "set null" }), // Admin who made the change
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertCreditTransactionSchema = createInsertSchema(creditTransactions).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertCreditTransaction = z.infer<typeof insertCreditTransactionSchema>;
+export type CreditTransaction = typeof creditTransactions.$inferSelect;

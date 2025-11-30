@@ -50,6 +50,9 @@ import {
   type PayrollRecord, type InsertPayrollRecord, payrollRecords,
   type SheetSyncLog, type InsertSheetSyncLog, sheetSyncLogs,
   type MultiColumnTask, type InsertMultiColumnTask, multiColumnTasks,
+  // Client Credits types
+  type ClientCredit, type InsertClientCredit, clientCredits,
+  type CreditTransaction, type InsertCreditTransaction, creditTransactions,
 } from "@shared/schema";
 import { db } from "./db";
 import { desc, eq, and, sql, or, isNull } from "drizzle-orm";
@@ -336,6 +339,20 @@ export interface IStorage {
   createMultiColumnTasksBulk(tasks: InsertMultiColumnTask[]): Promise<MultiColumnTask[]>;
   deleteMultiColumnTasksBySheet(sheetId: number): Promise<number>;
   getMultiColumnTasksByColumn(sheetId: number): Promise<{ columnName: string; tasks: MultiColumnTask[] }[]>;
+  
+  // ==================== CLIENT CREDITS METHODS ====================
+  
+  // Client Credit methods
+  getClientCredit(userId: string): Promise<ClientCredit | undefined>;
+  getClientCredits(): Promise<ClientCredit[]>;
+  createClientCredit(credit: InsertClientCredit): Promise<ClientCredit>;
+  updateClientCredit(userId: string, updates: Partial<InsertClientCredit>): Promise<ClientCredit | undefined>;
+  addClientCredit(userId: string, amount: number, description: string, performedBy: string): Promise<ClientCredit>;
+  deductClientCredit(userId: string, amount: number, description: string, taskId?: number, performedBy?: string): Promise<ClientCredit>;
+  
+  // Credit Transaction methods
+  getCreditTransactions(userId: string, limit?: number): Promise<CreditTransaction[]>;
+  createCreditTransaction(transaction: InsertCreditTransaction): Promise<CreditTransaction>;
 }
 
 export class DbStorage implements IStorage {
@@ -2036,6 +2053,113 @@ export class DbStorage implements IStorage {
       columnName,
       tasks,
     }));
+  }
+  
+  // ==================== CLIENT CREDITS METHODS ====================
+  
+  async getClientCredit(userId: string): Promise<ClientCredit | undefined> {
+    const [credit] = await db.select().from(clientCredits).where(eq(clientCredits.userId, userId));
+    return credit;
+  }
+  
+  async getClientCredits(): Promise<ClientCredit[]> {
+    return await db.select().from(clientCredits).orderBy(desc(clientCredits.updatedAt));
+  }
+  
+  async createClientCredit(credit: InsertClientCredit): Promise<ClientCredit> {
+    const [created] = await db.insert(clientCredits).values(credit).returning();
+    return created;
+  }
+  
+  async updateClientCredit(userId: string, updates: Partial<InsertClientCredit>): Promise<ClientCredit | undefined> {
+    const [updated] = await db
+      .update(clientCredits)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(clientCredits.userId, userId))
+      .returning();
+    return updated;
+  }
+  
+  async addClientCredit(userId: string, amount: number, description: string, performedBy: string): Promise<ClientCredit> {
+    // Get or create credit record
+    let credit = await this.getClientCredit(userId);
+    
+    if (!credit) {
+      credit = await this.createClientCredit({
+        userId,
+        balance: 0,
+        currency: "USD",
+      });
+    }
+    
+    const newBalance = credit.balance + amount;
+    
+    // Update the balance
+    const [updated] = await db
+      .update(clientCredits)
+      .set({ balance: newBalance, updatedAt: new Date() })
+      .where(eq(clientCredits.userId, userId))
+      .returning();
+    
+    // Record the transaction
+    await this.createCreditTransaction({
+      userId,
+      type: "credit_added",
+      amount,
+      balanceAfter: newBalance,
+      description,
+      performedBy,
+    });
+    
+    return updated;
+  }
+  
+  async deductClientCredit(userId: string, amount: number, description: string, taskId?: number, performedBy?: string): Promise<ClientCredit> {
+    const credit = await this.getClientCredit(userId);
+    
+    if (!credit) {
+      throw new Error("No credit record found for user");
+    }
+    
+    if (credit.balance < amount) {
+      throw new Error("Insufficient credit balance");
+    }
+    
+    const newBalance = credit.balance - amount;
+    
+    // Update the balance
+    const [updated] = await db
+      .update(clientCredits)
+      .set({ balance: newBalance, updatedAt: new Date() })
+      .where(eq(clientCredits.userId, userId))
+      .returning();
+    
+    // Record the transaction
+    await this.createCreditTransaction({
+      userId,
+      type: "credit_used",
+      amount: -amount, // Negative for deductions
+      balanceAfter: newBalance,
+      description,
+      taskId,
+      performedBy,
+    });
+    
+    return updated;
+  }
+  
+  async getCreditTransactions(userId: string, limit: number = 50): Promise<CreditTransaction[]> {
+    return await db
+      .select()
+      .from(creditTransactions)
+      .where(eq(creditTransactions.userId, userId))
+      .orderBy(desc(creditTransactions.createdAt))
+      .limit(limit);
+  }
+  
+  async createCreditTransaction(transaction: InsertCreditTransaction): Promise<CreditTransaction> {
+    const [created] = await db.insert(creditTransactions).values(transaction).returning();
+    return created;
   }
 }
 

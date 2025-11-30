@@ -65,7 +65,7 @@ export function CreditBalanceDisplay() {
               <Wallet className="h-5 w-5 text-primary" />
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Available Credit</p>
+              <p className="text-sm text-muted-foreground">Available Buy Power</p>
               <p className="text-2xl font-bold text-primary" data-testid="text-my-credit-balance">
                 {formatCurrency(data.balance, data.currency)}
               </p>

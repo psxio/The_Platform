@@ -68,8 +68,8 @@ function formatCurrency(cents: number, currency: string = "USD"): string {
 
 function getTransactionTypeLabel(type: string): string {
   switch (type) {
-    case "credit_added": return "Credit Added";
-    case "credit_used": return "Credit Used";
+    case "credit_added": return "Buy Power Added";
+    case "credit_used": return "Buy Power Used";
     case "credit_adjusted": return "Adjustment";
     case "credit_refunded": return "Refund";
     default: return type;
@@ -120,10 +120,10 @@ export default function AdminCredits() {
       }
       setIsAddCreditDialogOpen(false);
       setAddCreditData({ amount: "", description: "" });
-      toast({ title: "Credit Added", description: data.message || "Successfully added credit to account" });
+      toast({ title: "Buy Power Added", description: data.message || "Successfully added buy power to account" });
     },
     onError: (error: any) => {
-      toast({ title: "Error", description: error.message || "Failed to add credit", variant: "destructive" });
+      toast({ title: "Error", description: error.message || "Failed to add buy power", variant: "destructive" });
     },
   });
 
@@ -138,10 +138,10 @@ export default function AdminCredits() {
       }
       setIsDeductCreditDialogOpen(false);
       setDeductCreditData({ amount: "", description: "" });
-      toast({ title: "Credit Deducted", description: data.message || "Successfully deducted credit from account" });
+      toast({ title: "Buy Power Deducted", description: data.message || "Successfully deducted buy power from account" });
     },
     onError: (error: any) => {
-      toast({ title: "Error", description: error.message || "Failed to deduct credit", variant: "destructive" });
+      toast({ title: "Error", description: error.message || "Failed to deduct buy power", variant: "destructive" });
     },
   });
 
@@ -189,7 +189,7 @@ export default function AdminCredits() {
     addCreditMutation.mutate({
       userId: selectedUser.id,
       amount,
-      description: addCreditData.description || "Credit added by admin",
+      description: addCreditData.description || "Buy power added by admin",
     });
   };
 
@@ -207,7 +207,7 @@ export default function AdminCredits() {
     deductCreditMutation.mutate({
       userId: selectedUser.id,
       amount,
-      description: deductCreditData.description || "Credit deducted by admin",
+      description: deductCreditData.description || "Buy power deducted by admin",
     });
   };
 
@@ -223,16 +223,16 @@ export default function AdminCredits() {
         <div>
           <h1 className="text-2xl font-bold flex items-center gap-2" data-testid="text-page-title">
             <CreditCard className="h-6 w-6" />
-            Client Credits
+            Client Buy Power
           </h1>
-          <p className="text-sm text-muted-foreground">Manage client buy power and credit balances</p>
+          <p className="text-sm text-muted-foreground">Manage client buy power balances</p>
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total Credits Issued</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Total Buy Power Issued</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold" data-testid="text-total-credits">
@@ -242,7 +242,7 @@ export default function AdminCredits() {
         </Card>
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Users with Credits</CardTitle>
+            <CardTitle className="text-sm font-medium text-muted-foreground">Users with Buy Power</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold" data-testid="text-users-with-credits">
@@ -269,7 +269,7 @@ export default function AdminCredits() {
               <Users className="h-5 w-5" />
               Users
             </CardTitle>
-            <CardDescription>Select a user to manage their credits</CardDescription>
+            <CardDescription>Select a user to manage their buy power</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="relative">
@@ -341,7 +341,7 @@ export default function AdminCredits() {
                   )}
                 </CardTitle>
                 <CardDescription>
-                  {selectedUser ? selectedUser.email : "Choose a user from the list to view and manage their credits"}
+                  {selectedUser ? selectedUser.email : "Choose a user from the list to view and manage their buy power"}
                 </CardDescription>
               </div>
               {selectedUser && (
@@ -350,14 +350,14 @@ export default function AdminCredits() {
                     <DialogTrigger asChild>
                       <Button size="sm" data-testid="button-add-credit">
                         <Plus className="h-4 w-4 mr-2" />
-                        Add Credit
+                        Add Buy Power
                       </Button>
                     </DialogTrigger>
                     <DialogContent>
                       <DialogHeader>
-                        <DialogTitle>Add Credit</DialogTitle>
+                        <DialogTitle>Add Buy Power</DialogTitle>
                         <DialogDescription>
-                          Add credit to {[selectedUser.firstName, selectedUser.lastName].filter(Boolean).join(" ") || selectedUser.email}'s account
+                          Add buy power to {[selectedUser.firstName, selectedUser.lastName].filter(Boolean).join(" ") || selectedUser.email}'s account
                         </DialogDescription>
                       </DialogHeader>
                       <div className="space-y-4 py-4">
@@ -378,7 +378,7 @@ export default function AdminCredits() {
                           <Label htmlFor="add-description">Description (optional)</Label>
                           <Textarea
                             id="add-description"
-                            placeholder="Reason for adding credit..."
+                            placeholder="Reason for adding buy power..."
                             value={addCreditData.description}
                             onChange={(e) => setAddCreditData({ ...addCreditData, description: e.target.value })}
                             data-testid="input-add-description"
@@ -397,7 +397,7 @@ export default function AdminCredits() {
                           ) : (
                             <Plus className="h-4 w-4 mr-2" />
                           )}
-                          Add Credit
+                          Add Buy Power
                         </Button>
                       </DialogFooter>
                     </DialogContent>
@@ -407,14 +407,14 @@ export default function AdminCredits() {
                     <DialogTrigger asChild>
                       <Button size="sm" variant="outline" data-testid="button-deduct-credit">
                         <Minus className="h-4 w-4 mr-2" />
-                        Deduct Credit
+                        Deduct Buy Power
                       </Button>
                     </DialogTrigger>
                     <DialogContent>
                       <DialogHeader>
-                        <DialogTitle>Deduct Credit</DialogTitle>
+                        <DialogTitle>Deduct Buy Power</DialogTitle>
                         <DialogDescription>
-                          Deduct credit from {[selectedUser.firstName, selectedUser.lastName].filter(Boolean).join(" ") || selectedUser.email}'s account.
+                          Deduct buy power from {[selectedUser.firstName, selectedUser.lastName].filter(Boolean).join(" ") || selectedUser.email}'s account.
                           Current balance: {formatCurrency(selectedUser.balance, selectedUser.currency)}
                         </DialogDescription>
                       </DialogHeader>
@@ -437,7 +437,7 @@ export default function AdminCredits() {
                           <Label htmlFor="deduct-description">Description (optional)</Label>
                           <Textarea
                             id="deduct-description"
-                            placeholder="Reason for deducting credit..."
+                            placeholder="Reason for deducting buy power..."
                             value={deductCreditData.description}
                             onChange={(e) => setDeductCreditData({ ...deductCreditData, description: e.target.value })}
                             data-testid="input-deduct-description"
@@ -457,7 +457,7 @@ export default function AdminCredits() {
                           ) : (
                             <Minus className="h-4 w-4 mr-2" />
                           )}
-                          Deduct Credit
+                          Deduct Buy Power
                         </Button>
                       </DialogFooter>
                     </DialogContent>
@@ -471,7 +471,7 @@ export default function AdminCredits() {
               <div className="space-y-6">
                 <div className="flex items-center justify-between p-4 rounded-lg bg-muted/50">
                   <div>
-                    <p className="text-sm text-muted-foreground">Current Balance</p>
+                    <p className="text-sm text-muted-foreground">Current Buy Power Balance</p>
                     <p className="text-3xl font-bold" data-testid="text-current-balance">
                       {formatCurrency(selectedUser.balance, selectedUser.currency)}
                     </p>

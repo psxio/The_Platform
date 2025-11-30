@@ -100,7 +100,7 @@ function ApprovalDialog({
       toast({ 
         title: action === "approve" ? "Request approved" : "Request rejected",
         description: action === "approve" 
-          ? "Credits have been added to the client's account." 
+          ? "Buy power has been added to the client's account." 
           : "The client has been notified.",
       });
       setNote("");
@@ -119,7 +119,7 @@ function ApprovalDialog({
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>
-            {action === "approve" ? "Approve Credit Request" : "Reject Credit Request"}
+            {action === "approve" ? "Approve Buy Power Request" : "Reject Buy Power Request"}
           </DialogTitle>
           <DialogDescription>
             {action === "approve" 
@@ -198,7 +198,7 @@ function ApprovalDialog({
             data-testid={`button-confirm-${action}`}
           >
             {mutation.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-            {action === "approve" ? "Approve & Add Credits" : "Reject Request"}
+            {action === "approve" ? "Approve & Add Buy Power" : "Reject Request"}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -235,7 +235,7 @@ function PendingRequestsTable() {
         <CardContent className="py-8">
           <div className="text-center text-muted-foreground">
             <DollarSign className="w-12 h-12 mx-auto mb-3 opacity-50" />
-            <p>No pending credit requests</p>
+            <p>No pending buy power requests</p>
           </div>
         </CardContent>
       </Card>
@@ -363,10 +363,10 @@ export default function AdminCreditRequests() {
           </Link>
           <div>
             <h1 className="text-2xl font-bold tracking-tight" data-testid="heading-admin-credit-requests">
-              Credit Request Management
+              Buy Power Request Management
             </h1>
             <p className="text-muted-foreground">
-              Review and process credit requests from clients
+              Review and process buy power requests from clients
             </p>
           </div>
         </div>

@@ -129,7 +129,7 @@ export default function ContentProfileSetup() {
       queryClient.invalidateQueries({ queryKey: ["/api/content-access-status"] });
       toast({
         title: "Profile saved",
-        description: "Your profile is complete. Welcome to ContentFlowStudio!",
+        description: "Your profile is complete. Welcome to Content Studio!",
       });
       setLocation("/content");
     },

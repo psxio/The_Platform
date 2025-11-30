@@ -64,13 +64,13 @@ export function WelcomeModal() {
     if (isAdmin) {
       steps.push({
         icon: Sparkles,
-        title: "Welcome to ContentFlowStudio",
+        title: "Welcome to Content Studio",
         description: "Your team's content production hub. Manage tasks, coordinate your team, and track deliverables all in one place.",
       });
     } else {
       steps.push({
         icon: Sparkles,
-        title: "Welcome to ContentFlowStudio",
+        title: "Welcome to Content Studio",
         description: "Your content workspace is ready. View your assigned tasks, upload deliverables, and track your progress.",
       });
     }

@@ -123,7 +123,7 @@ export default function InvitePage() {
           <div className="mx-auto mb-4 h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
             <UserPlus className="h-6 w-6 text-primary" />
           </div>
-          <CardTitle>Welcome to ContentFlowStudio</CardTitle>
+          <CardTitle>Welcome to Content Studio</CardTitle>
           <CardDescription>
             You've been invited to join as a <strong>{inviteData.role}</strong> team member.
             <br />

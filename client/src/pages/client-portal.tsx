@@ -133,7 +133,7 @@ export default function ClientPortal() {
               Client Portal
             </h1>
             <p className="text-muted-foreground">
-              Manage your credits, orders, and content requests
+              Manage your buy power, orders, and content requests
             </p>
           </div>
         </div>
@@ -141,7 +141,7 @@ export default function ClientPortal() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
-              <CardTitle className="text-sm font-medium">Available Credits</CardTitle>
+              <CardTitle className="text-sm font-medium">Available Buy Power</CardTitle>
               <CreditCard className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
@@ -152,7 +152,7 @@ export default function ClientPortal() {
                   {formatCurrency(balance?.balance || 0, balance?.currency)}
                 </div>
               )}
-              <p className="text-xs text-muted-foreground mt-1">Use credits to order content</p>
+              <p className="text-xs text-muted-foreground mt-1">Use buy power to order content</p>
             </CardContent>
           </Card>
 
@@ -165,7 +165,7 @@ export default function ClientPortal() {
               <div className="text-2xl font-bold" data-testid="text-pending-requests">
                 {pendingRequests.length}
               </div>
-              <p className="text-xs text-muted-foreground mt-1">Credit requests awaiting approval</p>
+              <p className="text-xs text-muted-foreground mt-1">Buy power requests awaiting approval</p>
             </CardContent>
           </Card>
 
@@ -187,7 +187,7 @@ export default function ClientPortal() {
           <TabsList className="mb-4">
             <TabsTrigger value="overview" data-testid="tab-overview">Overview</TabsTrigger>
             <TabsTrigger value="orders" data-testid="tab-orders">My Orders</TabsTrigger>
-            <TabsTrigger value="requests" data-testid="tab-requests">Credit Requests</TabsTrigger>
+            <TabsTrigger value="requests" data-testid="tab-requests">Buy Power Requests</TabsTrigger>
             <TabsTrigger value="history" data-testid="tab-history">Transaction History</TabsTrigger>
           </TabsList>
 
@@ -215,7 +215,7 @@ export default function ClientPortal() {
                     data-testid="button-request-credits"
                   >
                     <Plus className="h-4 w-4 mr-2" />
-                    Request More Credits
+                    Request More Buy Power
                   </Button>
                 </CardContent>
               </Card>
@@ -486,10 +486,10 @@ function CreditRequestsSection({
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
-        <h3 className="text-lg font-semibold">Credit Requests</h3>
+        <h3 className="text-lg font-semibold">Buy Power Requests</h3>
         <Button onClick={onNewRequest} data-testid="button-new-credit-request">
           <Plus className="h-4 w-4 mr-2" />
-          Request Credits
+          Request Buy Power
         </Button>
       </div>
 
@@ -497,9 +497,9 @@ function CreditRequestsSection({
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-10">
             <CreditCard className="h-12 w-12 text-muted-foreground mb-4" />
-            <p className="text-muted-foreground">No credit requests</p>
+            <p className="text-muted-foreground">No buy power requests</p>
             <Button className="mt-4" onClick={onNewRequest}>
-              Request More Credits
+              Request More Buy Power
             </Button>
           </CardContent>
         </Card>
@@ -645,7 +645,7 @@ function NewCreditRequestDialog({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/credit-requests"] });
-      toast({ title: "Credit request submitted" });
+      toast({ title: "Buy power request submitted" });
       onOpenChange(false);
       setAmount("");
       setReason("");
@@ -660,9 +660,9 @@ function NewCreditRequestDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Request More Credits</DialogTitle>
+          <DialogTitle>Request More Buy Power</DialogTitle>
           <DialogDescription>
-            Submit a request for additional credits. An admin will review your request.
+            Submit a request for additional buy power. An admin will review your request.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
@@ -683,7 +683,7 @@ function NewCreditRequestDialog({
             <Label htmlFor="reason">Reason</Label>
             <Input
               id="reason"
-              placeholder="e.g., Need credits for upcoming project"
+              placeholder="e.g., Need buy power for upcoming project"
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               data-testid="input-request-reason"
@@ -777,7 +777,7 @@ function NewContentOrderDialog({
         <DialogHeader>
           <DialogTitle>Create Content Order</DialogTitle>
           <DialogDescription>
-            Create a new order to use your credits. Available: {formatCurrency(balance)}
+            Create a new order to use your buy power. Available: {formatCurrency(balance)}
           </DialogDescription>
         </DialogHeader>
         <ScrollArea className="max-h-[60vh]">
@@ -832,7 +832,7 @@ function NewContentOrderDialog({
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="creditCost">Credit Cost (USD)</Label>
+                <Label htmlFor="creditCost">Buy Power Cost (USD)</Label>
                 <Input
                   id="creditCost"
                   type="number"
@@ -844,7 +844,7 @@ function NewContentOrderDialog({
                   data-testid="input-order-cost"
                 />
                 {creditCost && !canAfford && (
-                  <p className="text-xs text-destructive">Insufficient credits</p>
+                  <p className="text-xs text-destructive">Insufficient buy power</p>
                 )}
               </div>
               <div className="space-y-2">

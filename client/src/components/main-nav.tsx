@@ -78,7 +78,7 @@ const contentItems: NavItem[] = [
 ];
 
 const clientItems: NavItem[] = [
-  { title: "My Portal", href: "/client-portal", icon: CreditCard, description: "Credits and orders" },
+  { title: "My Portal", href: "/client-portal", icon: CreditCard, description: "Buy power and orders" },
 ];
 
 const adminItems: NavItem[] = [
@@ -86,8 +86,8 @@ const adminItems: NavItem[] = [
   { title: "Pending Members", href: "/admin/pending-members", icon: UserPlus, description: "Approve new members" },
   { title: "Worker Monitoring", href: "/admin/monitoring", icon: Monitor, description: "View worker activity" },
   { title: "Payment Requests", href: "/admin/payments", icon: DollarSign, description: "Approve payments" },
-  { title: "Credit Requests", href: "/admin/credit-requests", icon: Receipt, description: "Approve credit requests" },
-  { title: "Client Credits", href: "/admin/credits", icon: CreditCard, description: "Manage client credits" },
+  { title: "Buy Power Requests", href: "/admin/credit-requests", icon: Receipt, description: "Approve buy power requests" },
+  { title: "Client Buy Power", href: "/admin/credits", icon: CreditCard, description: "Manage client buy power" },
   { title: "Brand Packs", href: "/admin/brand-packs", icon: Package, description: "Manage brand assets" },
   { title: "Sheets Hub", href: "/admin/sheets-hub", icon: FileSpreadsheet, description: "Google Sheets sync" },
   { title: "Invite Codes", href: "/admin/codes", icon: Key, description: "Generate invite codes" },
@@ -150,7 +150,7 @@ function DesktopNav({
               data-testid="nav-web3-trigger"
             >
               <Wallet className="h-4 w-4" />
-              Web3 Tools
+              Onchain Tools
             </NavigationMenuTrigger>
             <NavigationMenuContent>
               <div className="grid w-[400px] gap-1 p-2 md:w-[500px] md:grid-cols-2">
@@ -276,7 +276,7 @@ function MobileNav({
             <div className="space-y-2">
               <h4 className="flex items-center gap-2 text-sm font-semibold text-muted-foreground px-2">
                 <Wallet className="h-4 w-4" />
-                Web3 Tools
+                Onchain Tools
               </h4>
               <div className="space-y-1">
                 {web3Items.map((item) => (

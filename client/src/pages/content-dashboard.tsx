@@ -71,7 +71,7 @@ export default function ContentDashboard() {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <h1 className="text-2xl font-bold tracking-tight" data-testid="heading-content-dashboard">
-                ContentFlowStudio
+                Content Studio
               </h1>
               <p className="text-muted-foreground">
                 Manage tasks, track assignments, and collaborate with your team

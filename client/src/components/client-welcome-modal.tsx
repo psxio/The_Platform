@@ -55,18 +55,18 @@ export function ClientWelcomeModal() {
   const features = [
     {
       icon: CreditCard,
-      title: "View Your Credits",
-      description: "Check your available credit balance at any time. Credits are used to order content through the portal.",
+      title: "View Your Buy Power",
+      description: "Check your available buy power balance at any time. Buy power is used to order content through the portal.",
     },
     {
       icon: ShoppingCart,
       title: "Place Content Orders",
-      description: "Use your credits to order articles, blog posts, social media content, graphics, and more.",
+      description: "Use your buy power to order articles, blog posts, social media content, graphics, and more.",
     },
     {
       icon: Package,
-      title: "Request More Credits",
-      description: "Need more credits? Submit a request and our team will review it promptly.",
+      title: "Request More Buy Power",
+      description: "Need more buy power? Submit a request and our team will review it promptly.",
     },
     {
       icon: History,
@@ -81,7 +81,7 @@ export function ClientWelcomeModal() {
         <DialogHeader>
           <DialogTitle className="text-2xl">Welcome to the Client Portal</DialogTitle>
           <DialogDescription>
-            Your one-stop destination for managing credits and ordering content
+            Your one-stop destination for managing buy power and ordering content
           </DialogDescription>
         </DialogHeader>
 
@@ -122,13 +122,13 @@ export function ClientWelcomeModal() {
               <div>
                 <h3 className="text-lg font-semibold">You're All Set!</h3>
                 <p className="text-muted-foreground mt-1">
-                  Start exploring the portal to manage your credits and place orders.
+                  Start exploring the portal to manage your buy power and place orders.
                 </p>
               </div>
               <div className="text-sm text-muted-foreground bg-muted/50 rounded-lg p-3">
                 <p className="font-medium mb-1">Quick Tips:</p>
                 <ul className="text-left space-y-1">
-                  <li>- Check your credit balance in the Overview tab</li>
+                  <li>- Check your buy power balance in the Overview tab</li>
                   <li>- Create draft orders before submitting them</li>
                   <li>- View all your transactions in the History tab</li>
                 </ul>

@@ -293,7 +293,7 @@ export default function AuthPage() {
       </div>
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <CardTitle className="text-2xl">Web3 Tools & Content Studio</CardTitle>
+          <CardTitle className="text-2xl">Onchain Tools & Content Studio</CardTitle>
           <CardDescription>
             Sign in to access your workspace
           </CardDescription>

@@ -7,6 +7,7 @@ import { Loader2 } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { ThemeProvider } from "@/components/theme-provider";
 import { MainNav } from "@/components/main-nav";
+import { PageTransition } from "@/components/page-transition";
 
 import Home from "@/pages/home";
 import History from "@/pages/history";
@@ -229,7 +230,9 @@ function Router() {
     <>
       {!isLoading && isAuthenticated && <MainNav />}
       <main className="flex-1">
-        <AuthenticatedRouter />
+        <PageTransition>
+          <AuthenticatedRouter />
+        </PageTransition>
       </main>
       {!isLoading && isAuthenticated && user?.role === "web3" && <Web3WelcomeModal />}
       {!isLoading && isAuthenticated && (user?.role === "content" || user?.role === "admin") && <WelcomeModal />}

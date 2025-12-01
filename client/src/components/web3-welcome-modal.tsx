@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
+import { useToast } from "@/hooks/use-toast";
 import type { Web3Onboarding } from "@shared/schema";
 
 interface OnboardingStep {
@@ -83,6 +84,7 @@ export function Web3WelcomeModal() {
   const [open, setOpen] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const { user } = useAuth();
+  const { toast } = useToast();
 
   const { data: onboarding } = useQuery<Web3Onboarding>({
     queryKey: ["/api/web3-onboarding"],
@@ -93,6 +95,13 @@ export function Web3WelcomeModal() {
     mutationFn: (step: string) => apiRequest("POST", "/api/web3-onboarding/mark-step", { step }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/web3-onboarding"] });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to save onboarding progress.",
+        variant: "destructive",
+      });
     },
   });
 

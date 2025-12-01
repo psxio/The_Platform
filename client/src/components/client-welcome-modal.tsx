@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
+import { useToast } from "@/hooks/use-toast";
 import {
   Dialog,
   DialogContent,
@@ -26,6 +27,7 @@ export function ClientWelcomeModal() {
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState(0);
   const { user } = useAuth();
+  const { toast } = useToast();
 
   const { data: onboarding, isLoading } = useQuery<ClientOnboarding>({
     queryKey: ["/api/client-onboarding"],
@@ -38,6 +40,13 @@ export function ClientWelcomeModal() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/client-onboarding"] });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to save onboarding progress.",
+        variant: "destructive",
+      });
     },
   });
 

@@ -1204,3 +1204,42 @@ export const insertWeb3OnboardingSchema = createInsertSchema(web3Onboarding).omi
 
 export type InsertWeb3Onboarding = z.infer<typeof insertWeb3OnboardingSchema>;
 export type Web3Onboarding = typeof web3Onboarding.$inferSelect;
+
+// ==================== CLIENT WORK LIBRARY ====================
+
+// Categories for client work items
+export const clientWorkCategories = ["article", "blog_post", "social_media", "graphic", "video", "document", "presentation", "other"] as const;
+export type ClientWorkCategory = typeof clientWorkCategories[number];
+
+// Status for client work items
+export const clientWorkStatuses = ["draft", "in_review", "approved", "published"] as const;
+export type ClientWorkStatus = typeof clientWorkStatuses[number];
+
+// Client Work Items - completed work organized by client
+export const clientWorkItems = pgTable("client_work_items", {
+  id: serial("id").primaryKey(),
+  brandPackId: integer("brand_pack_id").notNull().references(() => clientBrandPacks.id, { onDelete: "cascade" }),
+  title: varchar("title", { length: 255 }).notNull(),
+  description: text("description"),
+  category: varchar("category", { length: 50 }).$type<ClientWorkCategory>().default("other"),
+  fileName: varchar("file_name", { length: 255 }).notNull(),
+  originalName: varchar("original_name", { length: 255 }).notNull(),
+  filePath: text("file_path").notNull(),
+  fileSize: varchar("file_size", { length: 50 }),
+  fileType: varchar("file_type", { length: 100 }),
+  status: varchar("status", { length: 20 }).$type<ClientWorkStatus>().default("draft"),
+  uploadedBy: varchar("uploaded_by").notNull().references(() => users.id, { onDelete: "cascade" }),
+  taskId: integer("task_id").references(() => contentTasks.id, { onDelete: "set null" }),
+  campaignId: integer("campaign_id").references(() => campaigns.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertClientWorkItemSchema = createInsertSchema(clientWorkItems).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertClientWorkItem = z.infer<typeof insertClientWorkItemSchema>;
+export type ClientWorkItem = typeof clientWorkItems.$inferSelect;

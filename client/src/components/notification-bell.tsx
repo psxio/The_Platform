@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import type { Notification } from "@shared/schema";
 import { queryClient, apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -108,6 +109,7 @@ function NotificationItem({ notification, onMarkRead }: NotificationItemProps) {
 
 export function NotificationBell() {
   const [open, setOpen] = useState(false);
+  const { toast } = useToast();
 
   const { data: notifications, isLoading } = useQuery<Notification[]>({
     queryKey: ["/api/notifications"],
@@ -126,6 +128,13 @@ export function NotificationBell() {
       queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
       queryClient.invalidateQueries({ queryKey: ["/api/notifications/unread-count"] });
     },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to mark notification as read.",
+        variant: "destructive",
+      });
+    },
   });
 
   const markAllReadMutation = useMutation({
@@ -135,6 +144,13 @@ export function NotificationBell() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/notifications"] });
       queryClient.invalidateQueries({ queryKey: ["/api/notifications/unread-count"] });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to mark all notifications as read.",
+        variant: "destructive",
+      });
     },
   });
 

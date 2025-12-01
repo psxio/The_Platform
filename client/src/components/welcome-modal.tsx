@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/useAuth";
+import { useToast } from "@/hooks/use-toast";
 
 interface OnboardingStatus {
   userId: string;
@@ -120,6 +121,7 @@ export function WelcomeModal() {
   const [open, setOpen] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const { user } = useAuth();
+  const { toast } = useToast();
 
   const { data: onboarding } = useQuery<OnboardingStatus>({
     queryKey: ["/api/onboarding"],
@@ -129,6 +131,13 @@ export function WelcomeModal() {
     mutationFn: () => apiRequest("POST", "/api/onboarding/hasSeenWelcome"),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/onboarding"] });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to save onboarding progress.",
+        variant: "destructive",
+      });
     },
   });
 

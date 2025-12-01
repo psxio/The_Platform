@@ -346,7 +346,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get comparison history
-  app.get("/api/comparisons", async (req, res) => {
+  app.get("/api/comparisons", requireRole("web3"), async (req, res) => {
     try {
       const limit = req.query.limit ? parseInt(req.query.limit as string) : 50;
       const comparisons = await storage.getComparisons(limit);
@@ -361,7 +361,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get single comparison
-  app.get("/api/comparisons/:id", async (req, res) => {
+  app.get("/api/comparisons/:id", requireRole("web3"), async (req, res) => {
     try {
       const id = parseInt(req.params.id);
       const comparison = await storage.getComparison(id);
@@ -383,6 +383,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Extract EVM addresses from any file(s) - supports single file or multiple files from folder
   app.post(
     "/api/extract",
+    requireRole("web3"),
     upload.array("files", 100),
     async (req, res) => {
       try {
@@ -446,7 +447,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   );
 
   // Extract EVM addresses from X (Twitter) tweets and their comments
-  app.post("/api/extract-tweets", async (req, res) => {
+  app.post("/api/extract-tweets", requireRole("web3"), async (req, res) => {
     try {
       const { tweetUrl } = req.body;
       
@@ -570,7 +571,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ================== COLLECTION MANAGEMENT ENDPOINTS ==================
 
   // Get all collections
-  app.get("/api/collections", async (req, res) => {
+  app.get("/api/collections", requireRole("web3"), async (req, res) => {
     try {
       const collections = await storage.getCollections();
       // Add address count for each collection
@@ -591,7 +592,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get single collection with addresses
-  app.get("/api/collections/:id", async (req, res) => {
+  app.get("/api/collections/:id", requireRole("web3"), async (req, res) => {
     try {
       const id = parseInt(req.params.id);
       const collection = await storage.getCollection(id);
@@ -616,7 +617,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Create new collection
-  app.post("/api/collections", async (req, res) => {
+  app.post("/api/collections", requireRole("web3"), async (req, res) => {
     try {
       const { name, description } = req.body;
       
@@ -644,7 +645,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Delete collection
-  app.delete("/api/collections/:id", async (req, res) => {
+  app.delete("/api/collections/:id", requireRole("web3"), async (req, res) => {
     try {
       const id = parseInt(req.params.id);
       const collection = await storage.getCollection(id);
@@ -665,7 +666,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Add addresses to collection (from text/paste)
-  app.post("/api/collections/:id/addresses", async (req, res) => {
+  app.post("/api/collections/:id/addresses", requireRole("web3"), async (req, res) => {
     try {
       const id = parseInt(req.params.id);
       const { addresses } = req.body;
@@ -717,6 +718,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Upload file to add addresses to collection
   app.post(
     "/api/collections/:id/upload",
+    requireRole("web3"),
     upload.single("file"),
     async (req, res) => {
       try {
@@ -758,7 +760,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   );
 
   // Remove address from collection
-  app.delete("/api/collections/:id/addresses/:address", async (req, res) => {
+  app.delete("/api/collections/:id/addresses/:address", requireRole("web3"), async (req, res) => {
     try {
       const id = parseInt(req.params.id);
       const address = req.params.address;
@@ -780,7 +782,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Download collection addresses as CSV
-  app.get("/api/collections/:id/download", async (req, res) => {
+  app.get("/api/collections/:id/download", requireRole("web3"), async (req, res) => {
     try {
       const id = parseInt(req.params.id);
       const collection = await storage.getCollection(id);
@@ -809,6 +811,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Compare eligible addresses against a stored collection
   app.post(
     "/api/compare-collection",
+    requireRole("web3"),
     upload.single("eligible"),
     async (req, res) => {
       try {
@@ -880,6 +883,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post(
     "/api/compare",
+    requireRole("web3"),
     upload.fields([
       { name: "minted", maxCount: 1 },
       { name: "eligible", maxCount: 1 },
@@ -1327,7 +1331,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // These require admin role
 
   // Generate new invite code (admins only)
-  app.post("/api/admin/invite-codes", isAuthenticated, async (req: any, res) => {
+  app.post("/api/admin/invite-codes", requireRole("admin"), async (req: any, res) => {
     try {
       const user = await storage.getUser(req.user.id);
       if (!user || user.role !== "admin") {
@@ -1367,7 +1371,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get admin's generated invite codes (admins only)
-  app.get("/api/admin/invite-codes", isAuthenticated, async (req: any, res) => {
+  app.get("/api/admin/invite-codes", requireRole("admin"), async (req: any, res) => {
     try {
       const user = await storage.getUser(req.user.id);
       if (!user || user.role !== "admin") {
@@ -1384,7 +1388,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Deactivate an invite code (admins only)
-  app.delete("/api/admin/invite-codes/:id", isAuthenticated, async (req: any, res) => {
+  app.delete("/api/admin/invite-codes/:id", requireRole("admin"), async (req: any, res) => {
     try {
       const user = await storage.getUser(req.user.id);
       if (!user || user.role !== "admin") {
@@ -1547,7 +1551,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Get all pending content members (admin only)
-  app.get("/api/admin/pending-content-members", isAuthenticated, async (req: any, res) => {
+  app.get("/api/admin/pending-content-members", requireRole("admin"), async (req: any, res) => {
     try {
       const user = await storage.getUser(req.user.id);
       if (!user || user.role !== "admin") {
@@ -1580,7 +1584,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Approve a pending content member (admin only)
-  app.post("/api/admin/pending-content-members/:userId/approve", isAuthenticated, async (req: any, res) => {
+  app.post("/api/admin/pending-content-members/:userId/approve", requireRole("admin"), async (req: any, res) => {
     try {
       const user = await storage.getUser(req.user.id);
       if (!user || user.role !== "admin") {
@@ -1636,7 +1640,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Reject a pending content member (admin only)
-  app.post("/api/admin/pending-content-members/:userId/reject", isAuthenticated, async (req: any, res) => {
+  app.post("/api/admin/pending-content-members/:userId/reject", requireRole("admin"), async (req: any, res) => {
     try {
       const user = await storage.getUser(req.user.id);
       if (!user || user.role !== "admin") {
@@ -1668,7 +1672,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Get ALL content users with their complete status (admin only)
   // This shows everyone with content role, including those who bypassed the pending system
-  app.get("/api/admin/content-users", isAuthenticated, async (req: any, res) => {
+  app.get("/api/admin/content-users", requireRole("admin"), async (req: any, res) => {
     try {
       const user = await storage.getUser(req.user.id);
       if (!user || user.role !== "admin") {
@@ -1727,7 +1731,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Backfill pending records for content users who bypassed the system (admin only)
-  app.post("/api/admin/content-users/backfill-pending", isAuthenticated, async (req: any, res) => {
+  app.post("/api/admin/content-users/backfill-pending", requireRole("admin"), async (req: any, res) => {
     try {
       const user = await storage.getUser(req.user.id);
       if (!user || user.role !== "admin") {
@@ -1771,7 +1775,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Add content user directly to directory (admin only) - for users who bypassed system
-  app.post("/api/admin/content-users/:userId/add-to-directory", isAuthenticated, async (req: any, res) => {
+  app.post("/api/admin/content-users/:userId/add-to-directory", requireRole("admin"), async (req: any, res) => {
     try {
       const user = await storage.getUser(req.user.id);
       if (!user || user.role !== "admin") {

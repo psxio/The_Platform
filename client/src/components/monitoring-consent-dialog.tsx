@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Camera, Clock, BarChart3, Database, ShieldCheck, AlertTriangle } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 interface MonitoringConsentDialogProps {
   open: boolean;
@@ -43,6 +44,7 @@ const consentItems = [
 
 export function MonitoringConsentDialog({ open, onClose, onSuccess }: MonitoringConsentDialogProps) {
   const queryClient = useQueryClient();
+  const { toast } = useToast();
   const [step, setStep] = useState(0);
   const [acknowledgements, setAcknowledgements] = useState<Record<string, boolean>>({
     screenCapture: false,
@@ -66,6 +68,13 @@ export function MonitoringConsentDialog({ open, onClose, onSuccess }: Monitoring
       queryClient.invalidateQueries({ queryKey: ["/api/monitoring/consent"] });
       onSuccess();
       resetAndClose();
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to submit consent. Please try again.",
+        variant: "destructive",
+      });
     },
   });
 

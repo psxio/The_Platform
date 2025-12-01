@@ -55,6 +55,7 @@ import {
   HelpCircle,
   FolderOpen,
   Radio,
+  Building2,
 } from "lucide-react";
 
 type NavSection = "web3" | "content" | "client" | "admin";
@@ -83,6 +84,10 @@ const contentItems: NavItem[] = [
 
 const clientItems: NavItem[] = [
   { title: "My Portal", href: "/client-portal", icon: CreditCard, description: "Buy power and orders" },
+];
+
+const sharedItems: NavItem[] = [
+  { title: "Client Directory", href: "/client-directory", icon: Building2, description: "All client & partner profiles" },
 ];
 
 const adminItems: NavItem[] = [
@@ -212,6 +217,21 @@ function DesktopNav({
           </NavigationMenuItem>
         )}
 
+        {/* Client Directory - visible to all authenticated users */}
+        <NavigationMenuItem>
+          <Link href="/client-directory">
+            <Button 
+              variant={location === "/client-directory" ? "secondary" : "ghost"}
+              size="sm"
+              className="gap-2"
+              data-testid="nav-client-directory"
+            >
+              <Building2 className="h-4 w-4" />
+              Clients
+            </Button>
+          </Link>
+        </NavigationMenuItem>
+
         {showAdmin && (
           <NavigationMenuItem>
             <NavigationMenuTrigger 
@@ -321,6 +341,19 @@ function MobileNav({
               </div>
             </div>
           )}
+
+          {/* Client Directory - visible to all authenticated users */}
+          <div className="space-y-2">
+            <h4 className="flex items-center gap-2 text-sm font-semibold text-muted-foreground px-2">
+              <Building2 className="h-4 w-4" />
+              Team Resources
+            </h4>
+            <div className="space-y-1">
+              {sharedItems.map((item) => (
+                <NavDropdownItem key={item.href} item={item} onClick={handleItemClick} />
+              ))}
+            </div>
+          </div>
 
           {showAdmin && (
             <div className="space-y-2">

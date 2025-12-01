@@ -18,10 +18,11 @@ Preferred communication style: Simple, everyday language.
 The frontend is built with React and TypeScript using Vite, Wouter for routing, and Shadcn UI (New York style) with Radix UI primitives for components. Design emphasizes modern aesthetics, utilizing task templates for Content Studio, multiple task views (Grid, Kanban, Calendar), visual indicators for task status, and an analytics dashboard. Task detail dialogs feature inline editing with role-based permissions and quick status workflow buttons.
 
 ### Navigation Structure
-The main navigation (MainNav component) organizes the application into four sections with role-based visibility:
+The main navigation (MainNav component) organizes the application into five sections with role-based visibility:
 -   **Onchain Tools** (`/web3/*`): Compare, Extract, Merge, Collections, History, To-Do - visible to web3/admin roles
 -   **Content Studio** (`/content-dashboard`): Dashboard, Monitoring - visible to content/admin roles
 -   **Client Portal** (`/client-portal`): Direct link for buy power self-service - visible to content/admin roles
+-   **Client Directory** (`/client-directory`): All client & partner profiles - visible to ALL authenticated users
 -   **Admin** (`/admin/*`): User management, payments, invite codes, settings - visible to admin role only
 
 Mobile navigation uses a responsive Sheet-based hamburger menu. Route guards (Web3RouteGuard, ContentRouteGuard, AdminRouteGuard) enforce access control and redirect unauthorized users to their default routes.
@@ -44,12 +45,17 @@ The backend is a Node.js application using Express, providing APIs for Onchain T
     -   **Client Buy Power & Self-Service Portal**: Comprehensive buy power system for clients including balance management, a self-service portal for account overview, buy power requests, content order submission, and onboarding.
     -   **Order Messaging**: Real-time client-team communication on content orders. Clients can message the team directly from order details, team members can reply with internal notes (hidden from clients) or client-facing messages. Notifications sync automatically. Messages appear in order detail dialogs with read receipts.
     -   **Deliverable Annotations**: Feedback and revision request system for deliverables. Team members can add comments, revision requests, approvals, or rejections on specific deliverables or versions. Annotations can be resolved and tracked. Revision requests trigger notifications to task assignees.
+-   **Client Directory**: Centralized database of all client and partner profiles accessible to all team members (web3, content, admin). Features include:
+    -   **Client Profiles**: Company name, industry, relationship status (active/partner/prospect/inactive/paused), key contacts with roles and emails, website and social links (X/Twitter, Discord, Telegram), project history, notes, and custom tags.
+    -   **Per-Client Calendar**: Schedule and track deadlines, milestones, meetings, deliverables, launches, and reviews for each client. Events can be linked to tasks and orders.
+    -   **Search & Filtering**: Find clients by name, filter by relationship status and industry.
+    -   **25+ Pre-seeded Clients**: Database initialized with partner data including betrmint, creatordao, district, DRVN, fireside, pizzadao, and more.
 -   **Admin Features**: Invite code generation and management, team invitation system, integration settings, payment request management, brand pack management, Sheets Hub access, client buy power management.
 -   **Onboarding System**: Role-specific welcome modals with 5-6 step guided walkthroughs. Web3 users see Onchain Tools tutorial (Compare, Extract, Collections, History, Merge); Content/Admin users see Content Studio tutorial (Tasks, Team, Deliverables, Analytics). Progress tracked in database (`userOnboarding` for content/admin, `web3Onboarding` for web3 users, `clientOnboarding` for clients).
 -   **Help Center** (`/help`): Role-specific documentation with Getting Started guides, feature documentation, and FAQ. Accessible from user menu (both mobile and desktop navigation).
 
 ### System Design Choices
-The system uses a PostgreSQL database managed with Drizzle ORM. Key tables support users, sessions, Onchain Tools data, Content Studio features (tasks, members, deliverables, templates, watchers, approvals, time entries, assets, recurring tasks, campaigns, versions), admin invite codes, team integrations, onboarding, worker monitoring data (consent, sessions, screenshots, hourly reports), payment requests, client brand packs, Google Sheets connections, payroll records, client buy power/transactions, buy power requests (with admin approval workflow), content orders (for spending buy power), and client onboarding tracking. Security is enforced via role-based access control, bcrypt hashing, and server-side middleware.
+The system uses a PostgreSQL database managed with Drizzle ORM. Key tables support users, sessions, Onchain Tools data, Content Studio features (tasks, members, deliverables, templates, watchers, approvals, time entries, assets, recurring tasks, campaigns, versions), admin invite codes, team integrations, onboarding, worker monitoring data (consent, sessions, screenshots, hourly reports), payment requests, client brand packs, Google Sheets connections, payroll records, client buy power/transactions, buy power requests (with admin approval workflow), content orders (for spending buy power), client onboarding tracking, client profiles (company info, contacts, relationship status, notes), and client calendar events (deadlines, milestones, meetings linked to client profiles). Security is enforced via role-based access control, bcrypt hashing, and server-side middleware.
 
 ## External Dependencies
 

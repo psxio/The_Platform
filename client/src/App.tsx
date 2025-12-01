@@ -34,6 +34,7 @@ import RoleSelect from "@/pages/role-select";
 import AuthPage from "@/pages/auth";
 import InvitePage from "@/pages/invite";
 import HelpPage from "@/pages/help";
+import ClientDirectory from "@/pages/client-directory";
 import NotFound from "@/pages/not-found";
 import { Web3WelcomeModal } from "@/components/web3-welcome-modal";
 import { WelcomeModal } from "@/components/welcome-modal";
@@ -176,6 +177,11 @@ function AuthenticatedRouter() {
       {/* Help - accessible to all authenticated users */}
       <Route path="/help">
         <HelpPage />
+      </Route>
+
+      {/* Client Directory - accessible to all team members */}
+      <Route path="/client-directory">
+        <ClientDirectory />
       </Route>
 
       {/* Admin Routes */}

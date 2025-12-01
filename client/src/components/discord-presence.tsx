@@ -36,8 +36,10 @@ export function DiscordPresenceIndicator({ userId, email }: { userId?: string; e
   });
 
   const userSession = sessions?.find(s => 
-    (userId && s.userId === userId) || 
-    (email && s.userEmail === email)
+    s.isScreenSharing && (
+      (userId && s.userId === userId) || 
+      (email && s.userEmail === email)
+    )
   );
 
   if (!userSession) {
@@ -80,7 +82,7 @@ export function DiscordPresenceBadge({ userId, showLabel = true }: { userId: str
     refetchInterval: 10000,
   });
 
-  const userSession = sessions?.find(s => s.userId === userId);
+  const userSession = sessions?.find(s => s.isScreenSharing && s.userId === userId);
 
   if (!userSession) {
     return null;
@@ -99,12 +101,13 @@ export function DiscordPresenceBadge({ userId, showLabel = true }: { userId: str
       </TooltipTrigger>
       <TooltipContent>
         <div className="text-sm">
-          <div className="font-medium">
-            {userSession.isScreenSharing ? "Screen Sharing" : "In Voice Channel"}
+          <div className="font-medium flex items-center gap-1">
+            <span className="h-2 w-2 rounded-full bg-green-500" />
+            Screen Sharing
           </div>
           {userSession.channelName && (
             <div className="text-muted-foreground">
-              #{userSession.channelName}
+              in #{userSession.channelName}
             </div>
           )}
         </div>
@@ -119,6 +122,8 @@ export function DiscordLiveList() {
     refetchInterval: 10000,
   });
 
+  const screenSharingSessions = sessions?.filter(s => s.isScreenSharing) || [];
+
   if (isLoading) {
     return (
       <div className="flex items-center gap-2 text-muted-foreground">
@@ -128,7 +133,7 @@ export function DiscordLiveList() {
     );
   }
 
-  if (!sessions || sessions.length === 0) {
+  if (screenSharingSessions.length === 0) {
     return (
       <div className="flex items-center gap-2 text-muted-foreground">
         <SiDiscord className="h-4 w-4" />
@@ -139,7 +144,7 @@ export function DiscordLiveList() {
 
   return (
     <div className="space-y-2">
-      {sessions.map((session) => (
+      {screenSharingSessions.map((session) => (
         <div
           key={session.id}
           className="flex items-center justify-between p-3 rounded-lg border bg-card"

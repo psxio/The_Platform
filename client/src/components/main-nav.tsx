@@ -52,6 +52,7 @@ import {
   ChevronDown,
   LayoutDashboard,
   Shield,
+  HelpCircle,
 } from "lucide-react";
 
 type NavSection = "web3" | "content" | "client" | "admin";
@@ -351,6 +352,12 @@ function MobileNav({
               </div>
             </div>
             <div className="mt-2 space-y-1">
+              <Link href="/help" onClick={handleItemClick}>
+                <div className="flex items-center gap-3 rounded-md p-3 hover-elevate cursor-pointer" data-testid="nav-help">
+                  <HelpCircle className="h-5 w-5 text-muted-foreground" />
+                  <span className="text-sm">Help &amp; Docs</span>
+                </div>
+              </Link>
               <Link href="/role-select" onClick={handleItemClick}>
                 <div className="flex items-center gap-3 rounded-md p-3 hover-elevate cursor-pointer">
                   <Settings className="h-5 w-5 text-muted-foreground" />
@@ -413,6 +420,12 @@ function UserMenu({ onLogout }: { onLogout: () => void }) {
           </div>
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
+        <DropdownMenuItem asChild>
+          <Link href="/help" data-testid="nav-help-desktop">
+            <HelpCircle className="mr-2 h-4 w-4" />
+            Help &amp; Docs
+          </Link>
+        </DropdownMenuItem>
         <DropdownMenuItem asChild>
           <Link href="/role-select">
             <Settings className="mr-2 h-4 w-4" />

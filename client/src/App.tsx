@@ -30,7 +30,11 @@ import AdminCreditRequests from "@/pages/admin-credit-requests";
 import RoleSelect from "@/pages/role-select";
 import AuthPage from "@/pages/auth";
 import InvitePage from "@/pages/invite";
+import HelpPage from "@/pages/help";
 import NotFound from "@/pages/not-found";
+import { Web3WelcomeModal } from "@/components/web3-welcome-modal";
+import { WelcomeModal } from "@/components/welcome-modal";
+import { ClientWelcomeModal } from "@/components/client-welcome-modal";
 
 function getDefaultRoute(role: string | null | undefined): string {
   switch (role) {
@@ -163,6 +167,11 @@ function AuthenticatedRouter() {
         <ContentRouteGuard><ClientPortal /></ContentRouteGuard>
       </Route>
 
+      {/* Help - accessible to all authenticated users */}
+      <Route path="/help">
+        <HelpPage />
+      </Route>
+
       {/* Admin Routes */}
       <Route path="/admin/codes">
         <AdminRouteGuard><AdminCodes /></AdminRouteGuard>
@@ -209,7 +218,7 @@ function AuthenticatedRouter() {
 }
 
 function Router() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, user } = useAuth();
   const [location] = useLocation();
 
   if (location.startsWith("/invite/")) {
@@ -222,6 +231,8 @@ function Router() {
       <main className="flex-1">
         <AuthenticatedRouter />
       </main>
+      {!isLoading && isAuthenticated && user?.role === "web3" && <Web3WelcomeModal />}
+      {!isLoading && isAuthenticated && (user?.role === "content" || user?.role === "admin") && <WelcomeModal />}
     </>
   );
 }

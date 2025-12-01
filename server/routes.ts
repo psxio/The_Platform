@@ -6203,6 +6203,53 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ==================== WEB3 ONBOARDING ROUTES ====================
+
+  // Get web3 onboarding status
+  app.get("/api/web3-onboarding", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      let onboarding = await storage.getWeb3Onboarding(user.id);
+      
+      // Create onboarding record if doesn't exist
+      if (!onboarding) {
+        onboarding = await storage.createWeb3Onboarding({
+          userId: user.id,
+          hasSeenWelcome: false,
+          hasComparedAddresses: false,
+          hasExtractedAddresses: false,
+          hasCreatedCollection: false,
+          hasViewedHistory: false,
+          hasUsedMerge: false,
+        });
+      }
+      
+      res.json(onboarding);
+    } catch (error) {
+      console.error("Error fetching web3 onboarding:", error);
+      res.status(500).json({ error: "Failed to fetch onboarding status" });
+    }
+  });
+
+  // Mark a web3 onboarding step as complete
+  app.post("/api/web3-onboarding/mark-step", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const { step } = req.body;
+      
+      const validSteps = ["hasSeenWelcome", "hasComparedAddresses", "hasExtractedAddresses", "hasCreatedCollection", "hasViewedHistory", "hasUsedMerge"];
+      if (!validSteps.includes(step)) {
+        return res.status(400).json({ error: "Invalid onboarding step" });
+      }
+      
+      const updated = await storage.markWeb3OnboardingStep(user.id, step as any);
+      res.json(updated);
+    } catch (error: any) {
+      console.error("Error marking web3 onboarding step:", error);
+      res.status(500).json({ error: error.message || "Failed to mark step" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

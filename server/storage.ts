@@ -59,6 +59,8 @@ import {
   type ContentOrder, type InsertContentOrder, contentOrders,
   // Client Onboarding types
   type ClientOnboarding, type InsertClientOnboarding, clientOnboarding,
+  // Web3 Onboarding types
+  type Web3Onboarding, type InsertWeb3Onboarding, web3Onboarding,
 } from "@shared/schema";
 import { db } from "./db";
 import { desc, eq, and, sql, or, isNull } from "drizzle-orm";
@@ -2465,6 +2467,59 @@ export class DbStorage implements IStorage {
     }
     
     return await this.updateClientOnboarding(userId, { [step]: true });
+  }
+  
+  // ==================== WEB3 ONBOARDING IMPLEMENTATION ====================
+  
+  async getWeb3Onboarding(userId: string): Promise<Web3Onboarding | undefined> {
+    const [onboarding] = await db
+      .select()
+      .from(web3Onboarding)
+      .where(eq(web3Onboarding.userId, userId));
+    return onboarding;
+  }
+  
+  async createWeb3Onboarding(onboarding: InsertWeb3Onboarding): Promise<Web3Onboarding> {
+    const [created] = await db.insert(web3Onboarding).values(onboarding).returning();
+    return created;
+  }
+  
+  async updateWeb3Onboarding(userId: string, updates: Partial<Web3Onboarding>): Promise<Web3Onboarding | undefined> {
+    // Check if all onboarding steps are complete
+    const current = await this.getWeb3Onboarding(userId);
+    if (!current) {
+      return undefined;
+    }
+    
+    const merged = { ...current, ...updates };
+    const allComplete = merged.hasSeenWelcome && 
+                        merged.hasComparedAddresses && 
+                        merged.hasExtractedAddresses && 
+                        merged.hasCreatedCollection && 
+                        merged.hasViewedHistory &&
+                        merged.hasUsedMerge;
+    
+    const [updated] = await db
+      .update(web3Onboarding)
+      .set({ 
+        ...updates, 
+        updatedAt: new Date(),
+        completedAt: allComplete && !current.completedAt ? new Date() : current.completedAt,
+      })
+      .where(eq(web3Onboarding.userId, userId))
+      .returning();
+    return updated;
+  }
+  
+  async markWeb3OnboardingStep(userId: string, step: keyof InsertWeb3Onboarding): Promise<Web3Onboarding | undefined> {
+    // Create onboarding record if doesn't exist
+    let onboarding = await this.getWeb3Onboarding(userId);
+    if (!onboarding) {
+      onboarding = await this.createWeb3Onboarding({ userId, [step]: true });
+      return onboarding;
+    }
+    
+    return await this.updateWeb3Onboarding(userId, { [step]: true });
   }
 }
 

@@ -1177,3 +1177,30 @@ export const insertClientOnboardingSchema = createInsertSchema(clientOnboarding)
 
 export type InsertClientOnboarding = z.infer<typeof insertClientOnboardingSchema>;
 export type ClientOnboarding = typeof clientOnboarding.$inferSelect;
+
+// ==================== WEB3 ONBOARDING ====================
+
+// Web3 Onboarding - track web3-specific onboarding progress
+export const web3Onboarding = pgTable("web3_onboarding", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }).unique(),
+  hasSeenWelcome: boolean("has_seen_welcome").notNull().default(false),
+  hasComparedAddresses: boolean("has_compared_addresses").notNull().default(false),
+  hasExtractedAddresses: boolean("has_extracted_addresses").notNull().default(false),
+  hasCreatedCollection: boolean("has_created_collection").notNull().default(false),
+  hasViewedHistory: boolean("has_viewed_history").notNull().default(false),
+  hasUsedMerge: boolean("has_used_merge").notNull().default(false),
+  completedAt: timestamp("completed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertWeb3OnboardingSchema = createInsertSchema(web3Onboarding).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+  completedAt: true,
+});
+
+export type InsertWeb3Onboarding = z.infer<typeof insertWeb3OnboardingSchema>;
+export type Web3Onboarding = typeof web3Onboarding.$inferSelect;

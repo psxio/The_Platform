@@ -38,10 +38,14 @@ export class GoogleSheetsService {
     let privateKey = process.env.GOOGLE_PRIVATE_KEY;
     this.spreadsheetId = process.env.GOOGLE_SHEET_ID || null;
 
-    if (!clientEmail || !privateKey || !this.spreadsheetId) {
+    if (!clientEmail || !privateKey) {
       console.log("Google Sheets integration not configured - missing credentials");
       return false;
     }
+
+    // For Sheets Hub, we allow initialization without a specific sheet ID
+    // The original task sync still requires GOOGLE_SHEET_ID
+    const requiresDefaultSheet = !!this.spreadsheetId;
 
     // Handle various private key formats
     // Replace literal \n with actual newlines
@@ -99,12 +103,16 @@ export class GoogleSheetsService {
       // Get optional Drive folder ID from env
       this.driveFolderId = process.env.GOOGLE_DRIVE_FOLDER_ID || null;
       
-      // Test connection by getting spreadsheet info
-      await this.sheets.spreadsheets.get({
-        spreadsheetId: this.spreadsheetId,
-      });
+      // Test connection by getting spreadsheet info (only if a default sheet is configured)
+      if (this.spreadsheetId) {
+        await this.sheets.spreadsheets.get({
+          spreadsheetId: this.spreadsheetId,
+        });
+        console.log("Google Sheets & Drive integration initialized with default sheet");
+      } else {
+        console.log("Google Sheets & Drive integration initialized (no default sheet - Sheets Hub mode)");
+      }
       
-      console.log("Google Sheets & Drive integration initialized successfully");
       return true;
     } catch (error: any) {
       console.error("Failed to initialize Google Sheets:", error);
@@ -128,6 +136,11 @@ export class GoogleSheetsService {
 
   isConfigured(): boolean {
     return this.sheets !== null && this.spreadsheetId !== null;
+  }
+  
+  // Check if the service has auth configured (for Sheets Hub which works with any sheet)
+  isAuthConfigured(): boolean {
+    return this.sheets !== null;
   }
 
   async getSheetData(): Promise<SheetRow[]> {

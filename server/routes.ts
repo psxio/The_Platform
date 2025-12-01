@@ -5655,6 +5655,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Name and sheet URL are required" });
       }
       
+      // Ensure Google Sheets service is initialized
+      if (!googleSheetsService.isAuthConfigured()) {
+        try {
+          await googleSheetsService.initialize();
+        } catch (initError) {
+          console.error("Failed to initialize Google Sheets:", initError);
+          return res.status(500).json({ error: "Google Sheets not configured. Please check service account credentials." });
+        }
+      }
+      
       // Extract sheet ID from URL
       const sheetId = googleSheetsService.extractSheetId(sheetUrl);
       
@@ -5742,6 +5752,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Sheet URL is required" });
       }
       
+      // Ensure Google Sheets service is initialized for Sheets Hub operations
+      if (!googleSheetsService.isAuthConfigured()) {
+        try {
+          await googleSheetsService.initialize();
+        } catch (initError) {
+          console.error("Failed to initialize Google Sheets:", initError);
+          return res.status(500).json({ error: "Google Sheets not configured. Please check service account credentials." });
+        }
+        
+        if (!googleSheetsService.isAuthConfigured()) {
+          return res.status(500).json({ error: "Google Sheets service could not be initialized. Check GOOGLE_SERVICE_ACCOUNT_EMAIL and GOOGLE_PRIVATE_KEY." });
+        }
+      }
+      
       const sheetId = googleSheetsService.extractSheetId(sheetUrl);
       const metadata = await googleSheetsService.getSheetMetadata(sheetId);
       
@@ -5761,6 +5785,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const sheet = await storage.getConnectedSheet(id);
       if (!sheet) {
         return res.status(404).json({ error: "Sheet not found" });
+      }
+      
+      // Ensure Google Sheets service is initialized for Sheets Hub operations
+      if (!googleSheetsService.isAuthConfigured()) {
+        try {
+          await googleSheetsService.initialize();
+        } catch (initError) {
+          console.error("Failed to initialize Google Sheets:", initError);
+          return res.status(500).json({ error: "Google Sheets not configured. Please check service account credentials." });
+        }
+        
+        if (!googleSheetsService.isAuthConfigured()) {
+          return res.status(500).json({ error: "Google Sheets service could not be initialized. Check GOOGLE_SERVICE_ACCOUNT_EMAIL and GOOGLE_PRIVATE_KEY." });
+        }
       }
       
       // Create sync log

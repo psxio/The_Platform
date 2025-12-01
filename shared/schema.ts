@@ -1426,3 +1426,56 @@ export const insertSavedOrderSchema = createInsertSchema(savedOrders).omit({
 
 export type InsertSavedOrder = z.infer<typeof insertSavedOrderSchema>;
 export type SavedOrder = typeof savedOrders.$inferSelect;
+
+// ==================== TASK MESSAGES ====================
+
+// Task messages - client-team communication on orders/tasks
+export const taskMessages = pgTable("task_messages", {
+  id: serial("id").primaryKey(),
+  taskId: integer("task_id").references(() => contentTasks.id, { onDelete: "cascade" }),
+  orderId: integer("order_id").references(() => contentOrders.id, { onDelete: "cascade" }),
+  senderId: varchar("sender_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  senderRole: varchar("sender_role", { length: 20 }).$type<UserRole>().notNull(), // who sent it: client, content, admin
+  content: text("content").notNull(),
+  attachmentUrl: text("attachment_url"), // optional file attachment
+  attachmentName: varchar("attachment_name", { length: 255 }),
+  isInternal: boolean("is_internal").default(false), // true = only visible to team, false = visible to client
+  readByClient: boolean("read_by_client").default(false),
+  readByTeam: boolean("read_by_team").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertTaskMessageSchema = createInsertSchema(taskMessages).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertTaskMessage = z.infer<typeof insertTaskMessageSchema>;
+export type TaskMessage = typeof taskMessages.$inferSelect;
+
+// ==================== DELIVERABLE ANNOTATIONS ====================
+
+// Deliverable annotations - comments and feedback on specific deliverables
+export const deliverableAnnotations = pgTable("deliverable_annotations", {
+  id: serial("id").primaryKey(),
+  deliverableId: integer("deliverable_id").notNull().references(() => deliverables.id, { onDelete: "cascade" }),
+  versionId: integer("version_id").references(() => deliverableVersions.id, { onDelete: "cascade" }), // optional, for version-specific annotations
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  content: text("content").notNull(),
+  annotationType: varchar("annotation_type", { length: 20 }).default("comment"), // comment, revision_request, approval, rejection
+  status: varchar("status", { length: 20 }).default("open"), // open, resolved, acknowledged
+  positionX: integer("position_x"), // optional for positional annotations (e.g., on images)
+  positionY: integer("position_y"),
+  resolvedBy: varchar("resolved_by").references(() => users.id, { onDelete: "set null" }),
+  resolvedAt: timestamp("resolved_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertDeliverableAnnotationSchema = createInsertSchema(deliverableAnnotations).omit({
+  id: true,
+  resolvedAt: true,
+  createdAt: true,
+});
+
+export type InsertDeliverableAnnotation = z.infer<typeof insertDeliverableAnnotationSchema>;
+export type DeliverableAnnotation = typeof deliverableAnnotations.$inferSelect;

@@ -46,6 +46,7 @@ import {
   Zap
 } from "lucide-react";
 import { ClientWelcomeModal } from "@/components/client-welcome-modal";
+import { OrderMessages } from "@/components/order-messages";
 import type { CreditRequest, ContentOrder, CreditTransaction, ClientOnboarding } from "@shared/schema";
 
 const formatCurrency = (cents: number, currency: string = "USD") => {
@@ -573,6 +574,7 @@ export default function ClientPortal() {
               balance={balance}
               selectedOrderId={selectedOrderId}
               onOrderSelect={setSelectedOrderId}
+              currentUserId={user?.id || ""}
             />
           </TabsContent>
 
@@ -732,7 +734,8 @@ function ContentOrdersSection({
   onNewOrder,
   balance,
   selectedOrderId,
-  onOrderSelect
+  onOrderSelect,
+  currentUserId
 }: { 
   orders: ContentOrder[]; 
   isLoading: boolean; 
@@ -740,6 +743,7 @@ function ContentOrdersSection({
   balance: number;
   selectedOrderId: number | null;
   onOrderSelect: (id: number | null) => void;
+  currentUserId: string;
 }) {
   const { toast } = useToast();
   const [viewingOrder, setViewingOrder] = useState<ContentOrder | null>(null);
@@ -895,30 +899,84 @@ function ContentOrdersSection({
         order={viewingOrder}
         open={!!viewingOrder}
         onOpenChange={(open) => !open && setViewingOrder(null)}
+        currentUserId={currentUserId}
       />
     </div>
   );
 }
 
+interface OrderProgress {
+  order: {
+    id: number;
+    title: string;
+    status: string;
+    createdAt: Date | null;
+    submittedAt: Date | null;
+    completedAt: Date | null;
+    priority: string | null;
+    deliverableUrl: string | null;
+  };
+  task: {
+    id: number;
+    status: string;
+    assignedTo: string | null;
+    dueDate: Date | null;
+    estimatedHours: number | null;
+    createdAt: Date | null;
+  } | null;
+  assignedWorker: {
+    id: string;
+    firstName: string | null;
+    lastName: string | null;
+  } | null;
+  workerPresence: {
+    isActive: boolean;
+    status: string;
+  } | null;
+  estimatedDelivery: Date | null;
+  timeline: { date: Date | null; event: string; status: string }[];
+}
+
 function OrderDetailsDialog({
   order,
   open,
-  onOpenChange
+  onOpenChange,
+  currentUserId
 }: {
   order: ContentOrder | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  currentUserId: string;
 }) {
-  const { data: progress } = useQuery({
-    queryKey: [`/api/client/order-progress/${order?.id}`],
+  const { data: progress, isLoading: progressLoading } = useQuery<OrderProgress>({
+    queryKey: ["/api/client/order-progress", order?.id],
     enabled: !!order?.id && open,
   });
 
   if (!order) return null;
 
+  const getWorkerName = () => {
+    if (!progress?.assignedWorker) return "Team Member";
+    const { firstName, lastName } = progress.assignedWorker;
+    const name = `${firstName || ""}${lastName ? ` ${lastName}.` : ""}`.trim();
+    return name || "Team Member";
+  };
+
+  const getWorkerInitials = () => {
+    if (!progress?.assignedWorker) return "T";
+    const { firstName, lastName } = progress.assignedWorker;
+    const first = firstName?.charAt(0) || "";
+    const last = lastName || "";
+    return (first + last) || "T";
+  };
+
+  const isOverdue = progress?.estimatedDelivery && 
+    new Date(progress.estimatedDelivery) < new Date() && 
+    order.status !== "completed";
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{order.title}</DialogTitle>
           <DialogDescription className="capitalize">
@@ -927,23 +985,80 @@ function OrderDetailsDialog({
         </DialogHeader>
         
         <div className="space-y-4">
-          {/* Status */}
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-muted-foreground">Status</span>
-            {getStatusBadge(order.status)}
-          </div>
+          {/* Status & Worker Info Card */}
+          <Card className="bg-muted/50">
+            <CardContent className="p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-muted-foreground">Status</span>
+                <div className="flex items-center gap-2">
+                  {getStatusBadge(order.status)}
+                  {progressLoading && <Loader2 className="h-3 w-3 animate-spin text-muted-foreground" />}
+                </div>
+              </div>
 
-          {/* Priority */}
-          {order.priority && (
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-muted-foreground">Priority</span>
-              {getPriorityBadge(order.priority)}
-            </div>
-          )}
+              {order.priority && (
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Priority</span>
+                  {getPriorityBadge(order.priority)}
+                </div>
+              )}
+
+              {/* Assigned Worker */}
+              {progress?.assignedWorker && (
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Assigned To</span>
+                  <div className="flex items-center gap-2">
+                    <Avatar className="h-6 w-6">
+                      <AvatarFallback className="text-xs">
+                        {getWorkerInitials()}
+                      </AvatarFallback>
+                    </Avatar>
+                    <span className="text-sm font-medium">{getWorkerName()}</span>
+                    {progress.workerPresence?.isActive && (
+                      <Badge variant="outline" className="bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/20 text-xs gap-1">
+                        <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                        Active
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Estimated Delivery */}
+              {progress?.estimatedDelivery && order.status !== "completed" && (
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Estimated Delivery</span>
+                  <div className="flex items-center gap-2">
+                    <Calendar className="h-4 w-4 text-muted-foreground" />
+                    <span className={`text-sm ${isOverdue ? "text-destructive font-medium" : ""}`}>
+                      {formatDate(progress.estimatedDelivery)}
+                    </span>
+                    {isOverdue && (
+                      <Badge variant="destructive" className="text-xs">Overdue</Badge>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Task Hours */}
+              {progress?.task?.estimatedHours && (
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Estimated Work</span>
+                  <div className="flex items-center gap-1">
+                    <Timer className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm">{progress.task.estimatedHours} hours</span>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
           {/* Timeline */}
           <div className="space-y-2">
-            <h4 className="text-sm font-medium">Timeline</h4>
+            <h4 className="text-sm font-medium flex items-center gap-2">
+              <Activity className="h-4 w-4" />
+              Progress Timeline
+            </h4>
             <div className="space-y-2 pl-4 border-l-2 border-muted">
               {order.createdAt && (
                 <div className="relative">
@@ -959,11 +1074,22 @@ function OrderDetailsDialog({
                   <p className="text-xs text-muted-foreground">{formatDateTime(order.submittedAt)}</p>
                 </div>
               )}
+              {progress?.assignedWorker && order.status !== "draft" && order.status !== "submitted" && (
+                <div className="relative">
+                  <div className="absolute -left-[1.35rem] w-2.5 h-2.5 rounded-full bg-primary" />
+                  <p className="text-sm">Assigned to {getWorkerName()}</p>
+                  <p className="text-xs text-muted-foreground">Work assigned to team member</p>
+                </div>
+              )}
               {order.status === "in_progress" && (
                 <div className="relative">
                   <div className="absolute -left-[1.35rem] w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse" />
                   <p className="text-sm">Work in progress</p>
-                  <p className="text-xs text-muted-foreground">Currently being worked on</p>
+                  <p className="text-xs text-muted-foreground">
+                    {progress?.workerPresence?.isActive 
+                      ? progress.workerPresence.status 
+                      : "Currently being worked on"}
+                  </p>
                 </div>
               )}
               {order.status === "review" && (
@@ -1007,6 +1133,18 @@ function OrderDetailsDialog({
                 </a>
               </Button>
             </div>
+          )}
+
+          {/* Messages */}
+          {order.status !== "draft" && (
+            <Separator className="my-4" />
+          )}
+          {order.status !== "draft" && (
+            <OrderMessages 
+              orderId={order.id} 
+              isTeamMember={false}
+              currentUserId={currentUserId}
+            />
           )}
         </div>
       </DialogContent>

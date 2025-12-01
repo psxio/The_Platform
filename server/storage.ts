@@ -73,6 +73,10 @@ import {
   // Approval Workflow types
   type ApprovalWorkflow, type InsertApprovalWorkflow, approvalWorkflows,
   type ApprovalWorkflowStage, type InsertApprovalWorkflowStage, approvalWorkflowStages,
+  // Task Messages types
+  type TaskMessage, type InsertTaskMessage, taskMessages,
+  // Deliverable Annotations types
+  type DeliverableAnnotation, type InsertDeliverableAnnotation, deliverableAnnotations,
 } from "@shared/schema";
 import { db } from "./db";
 import { desc, eq, and, sql, or, isNull } from "drizzle-orm";
@@ -478,6 +482,29 @@ export interface IStorage {
   updateSavedOrder(id: number, updates: Partial<InsertSavedOrder>): Promise<SavedOrder | undefined>;
   deleteSavedOrder(id: number): Promise<boolean>;
   incrementSavedOrderUsage(id: number): Promise<SavedOrder | undefined>;
+
+  // ==================== TASK MESSAGES METHODS ====================
+  
+  // Task Message methods for client-team communication
+  getTaskMessages(taskId?: number, orderId?: number, includeInternal?: boolean): Promise<TaskMessage[]>;
+  getTaskMessage(id: number): Promise<TaskMessage | undefined>;
+  createTaskMessage(message: InsertTaskMessage): Promise<TaskMessage>;
+  markMessageReadByClient(id: number): Promise<TaskMessage | undefined>;
+  markMessageReadByTeam(id: number): Promise<TaskMessage | undefined>;
+  markAllMessagesReadByClient(orderId: number): Promise<void>;
+  markAllMessagesReadByTeam(orderId: number): Promise<void>;
+  getUnreadClientMessageCount(orderId: number): Promise<number>;
+  getUnreadTeamMessageCount(orderId: number): Promise<number>;
+
+  // ==================== DELIVERABLE ANNOTATIONS METHODS ====================
+  
+  // Deliverable Annotation methods
+  getDeliverableAnnotations(deliverableId: number, versionId?: number): Promise<DeliverableAnnotation[]>;
+  getDeliverableAnnotation(id: number): Promise<DeliverableAnnotation | undefined>;
+  createDeliverableAnnotation(annotation: InsertDeliverableAnnotation): Promise<DeliverableAnnotation>;
+  updateDeliverableAnnotation(id: number, updates: Partial<InsertDeliverableAnnotation>): Promise<DeliverableAnnotation | undefined>;
+  resolveDeliverableAnnotation(id: number, resolvedBy: string): Promise<DeliverableAnnotation | undefined>;
+  deleteDeliverableAnnotation(id: number): Promise<boolean>;
 }
 
 export class DbStorage implements IStorage {
@@ -3031,6 +3058,168 @@ export class DbStorage implements IStorage {
       .where(eq(savedOrders.id, id))
       .returning();
     return updated;
+  }
+
+  // ==================== TASK MESSAGES METHODS ====================
+
+  async getTaskMessages(taskId?: number, orderId?: number, includeInternal: boolean = false): Promise<TaskMessage[]> {
+    const conditions = [];
+    
+    if (taskId !== undefined) {
+      conditions.push(eq(taskMessages.taskId, taskId));
+    }
+    if (orderId !== undefined) {
+      conditions.push(eq(taskMessages.orderId, orderId));
+    }
+    if (!includeInternal) {
+      conditions.push(eq(taskMessages.isInternal, false));
+    }
+    
+    if (conditions.length === 0) {
+      return [];
+    }
+    
+    return await db
+      .select()
+      .from(taskMessages)
+      .where(and(...conditions))
+      .orderBy(taskMessages.createdAt);
+  }
+
+  async getTaskMessage(id: number): Promise<TaskMessage | undefined> {
+    const [message] = await db
+      .select()
+      .from(taskMessages)
+      .where(eq(taskMessages.id, id));
+    return message;
+  }
+
+  async createTaskMessage(message: InsertTaskMessage): Promise<TaskMessage> {
+    const [created] = await db.insert(taskMessages).values(message).returning();
+    return created;
+  }
+
+  async markMessageReadByClient(id: number): Promise<TaskMessage | undefined> {
+    const [updated] = await db
+      .update(taskMessages)
+      .set({ readByClient: true })
+      .where(eq(taskMessages.id, id))
+      .returning();
+    return updated;
+  }
+
+  async markMessageReadByTeam(id: number): Promise<TaskMessage | undefined> {
+    const [updated] = await db
+      .update(taskMessages)
+      .set({ readByTeam: true })
+      .where(eq(taskMessages.id, id))
+      .returning();
+    return updated;
+  }
+
+  async markAllMessagesReadByClient(orderId: number): Promise<void> {
+    await db
+      .update(taskMessages)
+      .set({ readByClient: true })
+      .where(and(
+        eq(taskMessages.orderId, orderId),
+        eq(taskMessages.readByClient, false)
+      ));
+  }
+
+  async markAllMessagesReadByTeam(orderId: number): Promise<void> {
+    await db
+      .update(taskMessages)
+      .set({ readByTeam: true })
+      .where(and(
+        eq(taskMessages.orderId, orderId),
+        eq(taskMessages.readByTeam, false)
+      ));
+  }
+
+  async getUnreadClientMessageCount(orderId: number): Promise<number> {
+    const result = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(taskMessages)
+      .where(and(
+        eq(taskMessages.orderId, orderId),
+        eq(taskMessages.readByClient, false),
+        eq(taskMessages.isInternal, false),
+        eq(taskMessages.senderRole, "content")
+      ));
+    return Number(result[0]?.count || 0);
+  }
+
+  async getUnreadTeamMessageCount(orderId: number): Promise<number> {
+    const result = await db
+      .select({ count: sql<number>`count(*)` })
+      .from(taskMessages)
+      .where(and(
+        eq(taskMessages.orderId, orderId),
+        eq(taskMessages.readByTeam, false),
+        eq(taskMessages.senderRole, "content")
+      ));
+    return Number(result[0]?.count || 0);
+  }
+
+  // ==================== DELIVERABLE ANNOTATIONS METHODS ====================
+
+  async getDeliverableAnnotations(deliverableId: number, versionId?: number): Promise<DeliverableAnnotation[]> {
+    if (versionId !== undefined) {
+      return await db
+        .select()
+        .from(deliverableAnnotations)
+        .where(and(
+          eq(deliverableAnnotations.deliverableId, deliverableId),
+          eq(deliverableAnnotations.versionId, versionId)
+        ))
+        .orderBy(deliverableAnnotations.createdAt);
+    }
+    return await db
+      .select()
+      .from(deliverableAnnotations)
+      .where(eq(deliverableAnnotations.deliverableId, deliverableId))
+      .orderBy(deliverableAnnotations.createdAt);
+  }
+
+  async getDeliverableAnnotation(id: number): Promise<DeliverableAnnotation | undefined> {
+    const [annotation] = await db
+      .select()
+      .from(deliverableAnnotations)
+      .where(eq(deliverableAnnotations.id, id));
+    return annotation;
+  }
+
+  async createDeliverableAnnotation(annotation: InsertDeliverableAnnotation): Promise<DeliverableAnnotation> {
+    const [created] = await db.insert(deliverableAnnotations).values(annotation).returning();
+    return created;
+  }
+
+  async updateDeliverableAnnotation(id: number, updates: Partial<InsertDeliverableAnnotation>): Promise<DeliverableAnnotation | undefined> {
+    const [updated] = await db
+      .update(deliverableAnnotations)
+      .set(updates)
+      .where(eq(deliverableAnnotations.id, id))
+      .returning();
+    return updated;
+  }
+
+  async resolveDeliverableAnnotation(id: number, resolvedBy: string): Promise<DeliverableAnnotation | undefined> {
+    const [updated] = await db
+      .update(deliverableAnnotations)
+      .set({ 
+        status: "resolved", 
+        resolvedBy,
+        resolvedAt: new Date()
+      })
+      .where(eq(deliverableAnnotations.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteDeliverableAnnotation(id: number): Promise<boolean> {
+    await db.delete(deliverableAnnotations).where(eq(deliverableAnnotations.id, id));
+    return true;
   }
 }
 

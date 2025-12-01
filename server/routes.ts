@@ -6891,7 +6891,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Get client's order progress/timeline for visibility
+  // Get client's order progress/timeline for visibility with worker info and presence
   app.get("/api/client/order-progress/:id", isAuthenticated, async (req: any, res) => {
     try {
       const user = req.user;
@@ -6909,6 +6909,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       // Get related task if exists
       let taskInfo = null;
+      let assignedWorker = null;
+      let workerPresence = null;
+      
       if (order.relatedTaskId) {
         const task = await storage.getContentTask(order.relatedTaskId);
         if (task) {
@@ -6917,9 +6920,63 @@ export async function registerRoutes(app: Express): Promise<Server> {
             status: task.status,
             assignedTo: task.assignedTo || null,
             dueDate: task.dueDate,
+            estimatedHours: task.estimatedHours || null,
             createdAt: task.createdAt,
           };
+          
+          // Get assigned worker info (show limited, privacy-respecting info)
+          if (task.assignedTo) {
+            const worker = await storage.getUser(task.assignedTo);
+            if (worker) {
+              assignedWorker = {
+                id: worker.id,
+                firstName: worker.firstName,
+                lastName: worker.lastName?.charAt(0), // Only show first letter of last name
+              };
+              
+              // Check for Discord presence (screen sharing indicates active work)
+              try {
+                const members = await storage.getDirectoryMembers();
+                const member = members.find((m: any) => m.userId === task.assignedTo);
+                if (member?.discordUserId) {
+                  const discordSettings = await storage.getTeamIntegrationSettings();
+                  if (discordSettings?.discordBotToken && discordSettings?.discordGuildId) {
+                    const discordActivity = (global as any).discordPresence?.get(member.discordUserId);
+                    if (discordActivity?.isScreenSharing) {
+                      workerPresence = {
+                        isActive: true,
+                        status: "Currently working (screen sharing)",
+                      };
+                    }
+                  }
+                }
+              } catch (err) {
+                // Ignore presence errors - not critical
+              }
+            }
+          }
         }
+      }
+      
+      // Calculate estimated delivery if task has due date
+      let estimatedDelivery = null;
+      if (taskInfo?.dueDate) {
+        estimatedDelivery = taskInfo.dueDate;
+      } else if (order.submittedAt && order.status !== "completed") {
+        // Fallback: estimate based on order type (simplified SLA estimates in days)
+        const slaEstimates: Record<string, number> = {
+          social_post: 2,
+          blog_article: 5,
+          video: 7,
+          graphic_design: 3,
+          email_campaign: 3,
+          web_copy: 5,
+          other: 5,
+        };
+        const days = slaEstimates[order.orderType] || 5;
+        const estimated = new Date(order.submittedAt);
+        estimated.setDate(estimated.getDate() + days);
+        estimatedDelivery = estimated;
       }
       
       // Build timeline/progress
@@ -6935,6 +6992,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
           deliverableUrl: order.deliverableUrl,
         },
         task: taskInfo,
+        assignedWorker,
+        workerPresence,
+        estimatedDelivery,
         timeline: [] as { date: Date | null; event: string; status: string }[],
       };
       
@@ -7305,6 +7365,271 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error: any) {
       console.error("Error marking web3 onboarding step:", error);
       res.status(500).json({ error: error.message || "Failed to mark step" });
+    }
+  });
+
+  // ==================== DELIVERABLE ANNOTATIONS ROUTES ====================
+
+  // Get annotations for a deliverable
+  app.get("/api/deliverables/:id/annotations", requireRole("content"), async (req, res) => {
+    try {
+      const deliverableId = parseInt(req.params.id);
+      const versionId = req.query.versionId ? parseInt(req.query.versionId as string) : undefined;
+      const annotations = await storage.getDeliverableAnnotations(deliverableId, versionId);
+      res.json(annotations);
+    } catch (error) {
+      console.error("Error fetching annotations:", error);
+      res.status(500).json({ error: "Failed to fetch annotations" });
+    }
+  });
+
+  // Create a new annotation
+  app.post("/api/deliverables/:id/annotations", requireRole("content"), async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const deliverableId = parseInt(req.params.id);
+      const { content, annotationType, versionId, positionX, positionY } = req.body;
+      
+      if (!content || content.trim().length === 0) {
+        return res.status(400).json({ error: "Annotation content is required" });
+      }
+      
+      const annotation = await storage.createDeliverableAnnotation({
+        deliverableId,
+        versionId: versionId || null,
+        userId: user.id,
+        content: content.trim(),
+        annotationType: annotationType || "comment",
+        status: "open",
+        positionX: positionX || null,
+        positionY: positionY || null,
+        resolvedBy: null,
+      });
+      
+      // Create notification for task assignee if this is a revision request
+      if (annotationType === "revision_request") {
+        const deliverable = await storage.getDeliverable(deliverableId);
+        if (deliverable?.taskId) {
+          const task = await storage.getContentTask(deliverable.taskId);
+          if (task?.assignedTo && task.assignedTo !== user.id) {
+            await storage.createNotification({
+              userId: task.assignedTo,
+              type: "revision_request",
+              title: "Revision Requested",
+              message: `A revision was requested on ${deliverable.fileName}: "${content.substring(0, 50)}..."`,
+              taskId: deliverable.taskId,
+              read: false,
+            });
+          }
+        }
+      }
+      
+      res.json(annotation);
+    } catch (error) {
+      console.error("Error creating annotation:", error);
+      res.status(500).json({ error: "Failed to create annotation" });
+    }
+  });
+
+  // Update an annotation
+  app.patch("/api/annotations/:id", requireRole("content"), async (req, res) => {
+    try {
+      const annotationId = parseInt(req.params.id);
+      const { content, status } = req.body;
+      
+      const updated = await storage.updateDeliverableAnnotation(annotationId, {
+        ...(content && { content: content.trim() }),
+        ...(status && { status }),
+      });
+      
+      if (!updated) {
+        return res.status(404).json({ error: "Annotation not found" });
+      }
+      
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating annotation:", error);
+      res.status(500).json({ error: "Failed to update annotation" });
+    }
+  });
+
+  // Resolve an annotation
+  app.post("/api/annotations/:id/resolve", requireRole("content"), async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const annotationId = parseInt(req.params.id);
+      
+      const updated = await storage.resolveDeliverableAnnotation(annotationId, user.id);
+      
+      if (!updated) {
+        return res.status(404).json({ error: "Annotation not found" });
+      }
+      
+      res.json(updated);
+    } catch (error) {
+      console.error("Error resolving annotation:", error);
+      res.status(500).json({ error: "Failed to resolve annotation" });
+    }
+  });
+
+  // Delete an annotation
+  app.delete("/api/annotations/:id", requireRole("content"), async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const annotationId = parseInt(req.params.id);
+      
+      // Check if user owns the annotation or is admin
+      const annotation = await storage.getDeliverableAnnotation(annotationId);
+      if (!annotation) {
+        return res.status(404).json({ error: "Annotation not found" });
+      }
+      
+      if (annotation.userId !== user.id && user.role !== "admin") {
+        return res.status(403).json({ error: "Not authorized to delete this annotation" });
+      }
+      
+      await storage.deleteDeliverableAnnotation(annotationId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting annotation:", error);
+      res.status(500).json({ error: "Failed to delete annotation" });
+    }
+  });
+
+  // ==================== TASK MESSAGES ROUTES (Client-Team Communication) ====================
+
+  // Get messages for an order
+  app.get("/api/orders/:orderId/messages", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const orderId = parseInt(req.params.orderId);
+      
+      // Get the order to verify access
+      const order = await storage.getContentOrder(orderId);
+      if (!order) {
+        return res.status(404).json({ error: "Order not found" });
+      }
+      
+      // Determine if user should see internal messages
+      const isTeamMember = user.role === "content" || user.role === "admin";
+      const isClient = order.clientId === user.id;
+      
+      if (!isTeamMember && !isClient) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      
+      const messages = await storage.getTaskMessages(undefined, orderId, isTeamMember);
+      
+      // Mark messages as read based on role
+      if (isClient) {
+        await storage.markAllMessagesReadByClient(orderId);
+      } else {
+        await storage.markAllMessagesReadByTeam(orderId);
+      }
+      
+      res.json(messages);
+    } catch (error) {
+      console.error("Error fetching order messages:", error);
+      res.status(500).json({ error: "Failed to fetch messages" });
+    }
+  });
+
+  // Send a message on an order
+  app.post("/api/orders/:orderId/messages", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const orderId = parseInt(req.params.orderId);
+      const { content, isInternal, attachmentUrl, attachmentName } = req.body;
+      
+      if (!content || content.trim().length === 0) {
+        return res.status(400).json({ error: "Message content is required" });
+      }
+      
+      // Get the order to verify access
+      const order = await storage.getContentOrder(orderId);
+      if (!order) {
+        return res.status(404).json({ error: "Order not found" });
+      }
+      
+      const isTeamMember = user.role === "content" || user.role === "admin";
+      const isClient = order.clientId === user.id;
+      
+      if (!isTeamMember && !isClient) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      
+      // Clients cannot send internal messages
+      const messageIsInternal = isClient ? false : !!isInternal;
+      
+      const message = await storage.createTaskMessage({
+        orderId,
+        senderId: user.id,
+        senderRole: user.role as any,
+        content: content.trim(),
+        isInternal: messageIsInternal,
+        attachmentUrl: attachmentUrl || null,
+        attachmentName: attachmentName || null,
+        readByClient: isClient, // If client sent it, they've read it
+        readByTeam: isTeamMember, // If team sent it, they've read it
+      });
+      
+      // Create notification for the other party
+      if (isClient && order.assignedTo) {
+        // Notify the assigned team member
+        await storage.createNotification({
+          userId: order.assignedTo,
+          type: "order_message",
+          title: "New Client Message",
+          message: `Client sent a message on order #${orderId}: "${content.substring(0, 50)}..."`,
+          taskId: order.linkedTaskId || null,
+          read: false,
+        });
+      } else if (isTeamMember && !messageIsInternal) {
+        // Notify the client
+        await storage.createNotification({
+          userId: order.clientId,
+          type: "order_message",
+          title: "Team Response",
+          message: `Team replied on your order #${orderId}: "${content.substring(0, 50)}..."`,
+          taskId: order.linkedTaskId || null,
+          read: false,
+        });
+      }
+      
+      res.json(message);
+    } catch (error) {
+      console.error("Error sending message:", error);
+      res.status(500).json({ error: "Failed to send message" });
+    }
+  });
+
+  // Get unread message count for an order
+  app.get("/api/orders/:orderId/messages/unread-count", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const orderId = parseInt(req.params.orderId);
+      
+      // Get the order to verify access
+      const order = await storage.getContentOrder(orderId);
+      if (!order) {
+        return res.status(404).json({ error: "Order not found" });
+      }
+      
+      const isTeamMember = user.role === "content" || user.role === "admin";
+      const isClient = order.clientId === user.id;
+      
+      if (!isTeamMember && !isClient) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      
+      const count = isClient 
+        ? await storage.getUnreadClientMessageCount(orderId)
+        : await storage.getUnreadTeamMessageCount(orderId);
+      
+      res.json({ count });
+    } catch (error) {
+      console.error("Error fetching unread count:", error);
+      res.status(500).json({ error: "Failed to fetch unread count" });
     }
   });
 

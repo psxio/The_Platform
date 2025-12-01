@@ -1677,3 +1677,48 @@ export const insertTeamPaymentHistorySchema = createInsertSchema(teamPaymentHist
 
 export type InsertTeamPaymentHistory = z.infer<typeof insertTeamPaymentHistorySchema>;
 export type TeamPaymentHistory = typeof teamPaymentHistory.$inferSelect;
+
+// ==================== CONTENT IDEAS (Pre-Production Approval) ====================
+
+export const contentIdeaStatuses = ["pending", "approved", "denied", "in_production", "completed"] as const;
+export type ContentIdeaStatus = typeof contentIdeaStatuses[number];
+
+export const contentIdeas = pgTable("content_ideas", {
+  id: serial("id").primaryKey(),
+  clientId: varchar("client_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  createdBy: varchar("created_by").notNull().references(() => users.id, { onDelete: "cascade" }),
+  title: varchar("title", { length: 255 }).notNull(),
+  description: text("description").notNull(),
+  contentType: varchar("content_type", { length: 50 }).notNull(), // article, video, social_post, etc.
+  estimatedCost: integer("estimated_cost"), // Cost in cents
+  estimatedDays: integer("estimated_days"), // Estimated delivery time
+  status: varchar("status", { length: 20 }).$type<ContentIdeaStatus>().notNull().default("pending"),
+  clientNotes: text("client_notes"), // Feedback from client
+  teamNotes: text("team_notes"), // Internal notes
+  priority: varchar("priority", { length: 20 }).default("normal"), // low, normal, high, urgent
+  attachmentUrls: text("attachment_urls"), // JSON array of reference URLs/images
+  relatedTaskId: integer("related_task_id").references(() => contentTasks.id, { onDelete: "set null" }),
+  relatedOrderId: integer("related_order_id").references(() => contentOrders.id, { onDelete: "set null" }),
+  approvedAt: timestamp("approved_at"),
+  approvedBy: varchar("approved_by").references(() => users.id, { onDelete: "set null" }),
+  deniedAt: timestamp("denied_at"),
+  deniedBy: varchar("denied_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertContentIdeaSchema = createInsertSchema(contentIdeas).omit({
+  id: true,
+  status: true,
+  relatedTaskId: true,
+  relatedOrderId: true,
+  approvedAt: true,
+  approvedBy: true,
+  deniedAt: true,
+  deniedBy: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertContentIdea = z.infer<typeof insertContentIdeaSchema>;
+export type ContentIdea = typeof contentIdeas.$inferSelect;

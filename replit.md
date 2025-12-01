@@ -36,6 +36,7 @@ The backend is a Node.js application using Express, providing APIs for Onchain T
 -   **Onchain Tools**: Address comparison, EVM address extraction (from various file types), NFT collection management, comparison history, CSV merge with deduplication.
 -   **Content Studio**: Comprehensive task management (CRUD, filtering, bulk actions, subtasks, comments, activity, multiple views), team directory, deliverable management (uploads, versioning, Google Drive integration), email and in-app notifications, task templates, watchers, approval workflows, time tracking, analytics, asset library, recurring tasks, saved filters, time reports, campaign management, external integrations (Telegram, Discord), data export, welcome onboarding.
     -   **Worker Monitoring**: Screen capture-based activity monitoring with multi-step consent, random screenshot capture, local OCR (Tesseract.js) for app detection, enhanced app categorization, hourly reports, and an admin dashboard for real-time activity and analytics.
+    -   **Discord Presence Monitoring**: Real-time tracking of content team members' Discord screen sharing activity. Team members can link their Discord accounts, and the system monitors when they are actively screen sharing in designated voice channels. Live green indicators appear next to names in Worker Monitoring and Team Directory views. Requires Discord bot configuration (Bot Token, Guild ID, Channel IDs) in Admin > Discord Monitor settings.
     -   **Payment Requests**: System for content team members to submit and track payment requests, with admin approval workflows and multi-channel notifications.
     -   **Brand Packs**: Centralized client brand asset management with categorized file uploads (via Google Drive) for content teams.
     -   **Sheets Hub**: Google Sheets integration for multi-sheet data synchronization, supporting Payroll and Multi-Column Task sheets, with sync logging and entity aggregations.
@@ -55,4 +56,5 @@ The system uses a PostgreSQL database managed with Drizzle ORM. Key tables suppo
 -   **Database**: `Drizzle ORM`, `PostgreSQL` (`@neondatabase/serverless`)
 -   **Email**: `Nodemailer`
 -   **Google Integration**: Google APIs for Sheets (`google-auth-library`, `googleapis`) and Drive
+-   **Discord Integration**: `discord.js` for gateway connection and voice state monitoring
 -   **OCR**: `tesseract.js`

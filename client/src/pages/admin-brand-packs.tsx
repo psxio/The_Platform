@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Link } from "wouter";
-import { ArrowLeft, Shield, Loader2, Plus, Package, Upload, Trash2, Pencil, Globe, FileText, Image, FileType, Download, ExternalLink, Palette } from "lucide-react";
+import { ArrowLeft, Shield, Loader2, Plus, Package, Upload, Trash2, Pencil, Globe, FileText, Image, FileType, Download, ExternalLink, Palette, FolderOpen } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { useState, useRef } from "react";
@@ -235,13 +235,20 @@ export default function AdminBrandPacks() {
             </div>
           </div>
 
-          <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-            <DialogTrigger asChild>
-              <Button data-testid="button-create-brand-pack">
-                <Plus className="h-4 w-4 mr-2" />
-                Add Brand Pack
+          <div className="flex items-center gap-2">
+            <Link href="/content/work-library">
+              <Button variant="outline" data-testid="button-work-library">
+                <FolderOpen className="h-4 w-4 mr-2" />
+                Work Library
               </Button>
-            </DialogTrigger>
+            </Link>
+            <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+              <DialogTrigger asChild>
+                <Button data-testid="button-create-brand-pack">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Brand Pack
+                </Button>
+              </DialogTrigger>
             <DialogContent className="max-w-md">
               <DialogHeader>
                 <DialogTitle>Create Brand Pack</DialogTitle>
@@ -344,6 +351,7 @@ export default function AdminBrandPacks() {
               </DialogFooter>
             </DialogContent>
           </Dialog>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

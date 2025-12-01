@@ -53,6 +53,7 @@ import {
   LayoutDashboard,
   Shield,
   HelpCircle,
+  FolderOpen,
 } from "lucide-react";
 
 type NavSection = "web3" | "content" | "client" | "admin";
@@ -75,6 +76,7 @@ const web3Items: NavItem[] = [
 
 const contentItems: NavItem[] = [
   { title: "Dashboard", href: "/content-dashboard", icon: LayoutDashboard, description: "Tasks, campaigns, and team" },
+  { title: "Work Library", href: "/content/work-library", icon: FolderOpen, description: "Client work uploads" },
   { title: "Monitoring", href: "/content/monitoring", icon: Camera, description: "Activity tracking" },
 ];
 

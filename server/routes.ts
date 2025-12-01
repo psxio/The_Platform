@@ -5418,6 +5418,30 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Get work stats (activity visibility)
+  app.get("/api/client-work/stats", requireRole("content"), async (req, res) => {
+    try {
+      const stats = await storage.getClientWorkStats();
+      
+      // Enrich with user and brand pack info
+      const enrichedStats = await Promise.all(stats.map(async (stat) => {
+        const user = await storage.getUser(stat.uploaderId);
+        const brandPack = await storage.getClientBrandPack(stat.brandPackId);
+        return {
+          ...stat,
+          uploaderName: user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email : 'Unknown',
+          uploaderEmail: user?.email,
+          clientName: brandPack?.clientName || 'Unknown Client',
+        };
+      }));
+      
+      res.json(enrichedStats);
+    } catch (error) {
+      console.error("Error fetching work stats:", error);
+      res.status(500).json({ error: "Failed to fetch work stats" });
+    }
+  });
+
   // ================== SHEETS HUB ENDPOINTS ==================
 
   // Get all connected sheets (admin only)

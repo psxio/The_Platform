@@ -28,6 +28,7 @@ import ContentProfileSetup from "@/pages/content-profile-setup";
 import WorkerMonitoring from "@/pages/worker-monitoring";
 import ClientPortal from "@/pages/client-portal";
 import AdminCreditRequests from "@/pages/admin-credit-requests";
+import ClientWorkLibrary from "@/pages/client-work-library";
 import RoleSelect from "@/pages/role-select";
 import AuthPage from "@/pages/auth";
 import InvitePage from "@/pages/invite";
@@ -158,6 +159,9 @@ function AuthenticatedRouter() {
       </Route>
       <Route path="/content/monitoring">
         <ContentRouteGuard><WorkerMonitoring /></ContentRouteGuard>
+      </Route>
+      <Route path="/content/work-library">
+        <ContentRouteGuard><ClientWorkLibrary /></ContentRouteGuard>
       </Route>
       <Route path="/content">
         <Redirect to="/content-dashboard" />

@@ -408,6 +408,7 @@ export interface IStorage {
   deleteClientWorkItem(id: number): Promise<boolean>;
   getClientWorkItemsByTask(taskId: number): Promise<ClientWorkItem[]>;
   getClientWorkItemsByCampaign(campaignId: number): Promise<ClientWorkItem[]>;
+  getClientWorkStats(): Promise<{ uploaderId: string; brandPackId: number; count: number; latestUpload: Date | null }[]>;
 }
 
 export class DbStorage implements IStorage {
@@ -2601,6 +2602,19 @@ export class DbStorage implements IStorage {
       .from(clientWorkItems)
       .where(eq(clientWorkItems.campaignId, campaignId))
       .orderBy(desc(clientWorkItems.createdAt));
+  }
+  
+  async getClientWorkStats(): Promise<{ uploaderId: string; brandPackId: number; count: number; latestUpload: Date | null }[]> {
+    const result = await db
+      .select({
+        uploaderId: clientWorkItems.uploadedBy,
+        brandPackId: clientWorkItems.brandPackId,
+        count: sql<number>`count(*)::int`,
+        latestUpload: sql<Date | null>`max(${clientWorkItems.createdAt})`,
+      })
+      .from(clientWorkItems)
+      .groupBy(clientWorkItems.uploadedBy, clientWorkItems.brandPackId);
+    return result;
   }
 }
 

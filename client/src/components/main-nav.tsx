@@ -56,6 +56,7 @@ import {
   FolderOpen,
   Radio,
   Building2,
+  Network,
 } from "lucide-react";
 
 type NavSection = "web3" | "content" | "client" | "admin";
@@ -92,6 +93,7 @@ const sharedItems: NavItem[] = [
 
 const adminItems: NavItem[] = [
   { title: "Internal Team", href: "/admin/internal-team", icon: Users, description: "Team roster and payroll" },
+  { title: "Team Structure", href: "/admin/team-structure", icon: Network, description: "Org chart and hierarchy" },
   { title: "Manage Users", href: "/admin/content-users", icon: Shield, description: "View and manage all users" },
   { title: "Pending Members", href: "/admin/pending-members", icon: UserPlus, description: "Approve new members" },
   { title: "Worker Monitoring", href: "/admin/monitoring", icon: Monitor, description: "View worker activity" },

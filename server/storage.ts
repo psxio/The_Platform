@@ -84,6 +84,8 @@ import {
   // Internal Team Member types
   type InternalTeamMember, type InsertInternalTeamMember, internalTeamMembers,
   type TeamPaymentHistory, type InsertTeamPaymentHistory, teamPaymentHistory,
+  // Content Ideas (Pre-Production Approval) types
+  type ContentIdea, type InsertContentIdea, contentIdeas,
 } from "@shared/schema";
 import { db } from "./db";
 import { desc, eq, and, sql, or, isNull } from "drizzle-orm";
@@ -558,6 +560,20 @@ export interface IStorage {
   createTeamPayment(payment: InsertTeamPaymentHistory): Promise<TeamPaymentHistory>;
   updateTeamPayment(id: number, updates: Partial<InsertTeamPaymentHistory>): Promise<TeamPaymentHistory | undefined>;
   deleteTeamPayment(id: number): Promise<boolean>;
+  
+  // ==================== CONTENT IDEAS (PRE-PRODUCTION APPROVAL) ====================
+  
+  // Content Ideas methods
+  getContentIdeas(): Promise<ContentIdea[]>;
+  getContentIdea(id: number): Promise<ContentIdea | undefined>;
+  getContentIdeasForClient(clientId: string): Promise<ContentIdea[]>;
+  getContentIdeasByStatus(status: string): Promise<ContentIdea[]>;
+  getPendingIdeasForClient(clientId: string): Promise<ContentIdea[]>;
+  createContentIdea(idea: InsertContentIdea): Promise<ContentIdea>;
+  updateContentIdea(id: number, updates: Partial<InsertContentIdea>): Promise<ContentIdea | undefined>;
+  deleteContentIdea(id: number): Promise<boolean>;
+  approveContentIdea(id: number, approvedBy: string, clientNotes?: string): Promise<ContentIdea | undefined>;
+  denyContentIdea(id: number, deniedBy: string, clientNotes?: string): Promise<ContentIdea | undefined>;
 }
 
 export class DbStorage implements IStorage {
@@ -3580,6 +3596,101 @@ export class DbStorage implements IStorage {
   async deleteTeamPayment(id: number): Promise<boolean> {
     await db.delete(teamPaymentHistory).where(eq(teamPaymentHistory.id, id));
     return true;
+  }
+
+  // ==================== CONTENT IDEAS (PRE-PRODUCTION APPROVAL) METHODS ====================
+
+  async getContentIdeas(): Promise<ContentIdea[]> {
+    return await db
+      .select()
+      .from(contentIdeas)
+      .orderBy(desc(contentIdeas.createdAt));
+  }
+
+  async getContentIdea(id: number): Promise<ContentIdea | undefined> {
+    const [idea] = await db
+      .select()
+      .from(contentIdeas)
+      .where(eq(contentIdeas.id, id));
+    return idea;
+  }
+
+  async getContentIdeasForClient(clientId: string): Promise<ContentIdea[]> {
+    return await db
+      .select()
+      .from(contentIdeas)
+      .where(eq(contentIdeas.clientId, clientId))
+      .orderBy(desc(contentIdeas.createdAt));
+  }
+
+  async getContentIdeasByStatus(status: string): Promise<ContentIdea[]> {
+    return await db
+      .select()
+      .from(contentIdeas)
+      .where(eq(contentIdeas.status, status))
+      .orderBy(desc(contentIdeas.createdAt));
+  }
+
+  async getPendingIdeasForClient(clientId: string): Promise<ContentIdea[]> {
+    return await db
+      .select()
+      .from(contentIdeas)
+      .where(
+        and(
+          eq(contentIdeas.clientId, clientId),
+          eq(contentIdeas.status, "pending")
+        )
+      )
+      .orderBy(desc(contentIdeas.createdAt));
+  }
+
+  async createContentIdea(idea: InsertContentIdea): Promise<ContentIdea> {
+    const [created] = await db.insert(contentIdeas).values(idea).returning();
+    return created;
+  }
+
+  async updateContentIdea(id: number, updates: Partial<InsertContentIdea>): Promise<ContentIdea | undefined> {
+    const [updated] = await db
+      .update(contentIdeas)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(contentIdeas.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteContentIdea(id: number): Promise<boolean> {
+    await db.delete(contentIdeas).where(eq(contentIdeas.id, id));
+    return true;
+  }
+
+  async approveContentIdea(id: number, approvedBy: string, clientNotes?: string): Promise<ContentIdea | undefined> {
+    const [updated] = await db
+      .update(contentIdeas)
+      .set({
+        status: "approved",
+        approvedAt: new Date(),
+        approvedBy,
+        clientNotes: clientNotes || null,
+        updatedAt: new Date(),
+      })
+      .where(eq(contentIdeas.id, id))
+      .returning();
+    return updated;
+  }
+
+  async denyContentIdea(id: number, deniedBy: string, clientNotes?: string): Promise<ContentIdea | undefined> {
+    const [updated] = await db
+      .update(contentIdeas)
+      .set({
+        status: "denied",
+        deniedAt: new Date(),
+        deniedBy,
+        clientNotes: clientNotes || null,
+        updatedAt: new Date(),
+      })
+      .where(eq(contentIdeas.id, id))
+      .returning();
+    return updated;
   }
 }
 

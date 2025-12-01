@@ -8041,6 +8041,174 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ==================== CONTENT IDEAS (PRE-PRODUCTION APPROVAL) ROUTES ====================
+
+  // Get all content ideas - content/admin only
+  app.get("/api/content-ideas", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      if (user.role === "content" || user.role === "admin") {
+        const ideas = await storage.getContentIdeas();
+        res.json(ideas);
+      } else {
+        // Clients only see their own ideas
+        const ideas = await storage.getContentIdeasForClient(user.id);
+        res.json(ideas);
+      }
+    } catch (error) {
+      console.error("Error fetching content ideas:", error);
+      res.status(500).json({ error: "Failed to fetch content ideas" });
+    }
+  });
+
+  // Get pending ideas for current client
+  app.get("/api/content-ideas/pending", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const ideas = await storage.getPendingIdeasForClient(user.id);
+      res.json(ideas);
+    } catch (error) {
+      console.error("Error fetching pending ideas:", error);
+      res.status(500).json({ error: "Failed to fetch pending ideas" });
+    }
+  });
+
+  // Get ideas by status - content/admin only
+  app.get("/api/content-ideas/status/:status", requireRole("content", "admin"), async (req: any, res) => {
+    try {
+      const status = req.params.status;
+      const ideas = await storage.getContentIdeasByStatus(status);
+      res.json(ideas);
+    } catch (error) {
+      console.error("Error fetching ideas by status:", error);
+      res.status(500).json({ error: "Failed to fetch ideas" });
+    }
+  });
+
+  // Get single content idea
+  app.get("/api/content-ideas/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const idea = await storage.getContentIdea(id);
+      if (!idea) {
+        return res.status(404).json({ error: "Idea not found" });
+      }
+      const user = req.user as User;
+      // Only allow access if user is content/admin or the client
+      if (user.role !== "content" && user.role !== "admin" && idea.clientId !== user.id) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      res.json(idea);
+    } catch (error) {
+      console.error("Error fetching content idea:", error);
+      res.status(500).json({ error: "Failed to fetch idea" });
+    }
+  });
+
+  // Create content idea - content/admin only
+  app.post("/api/content-ideas", requireRole("content", "admin"), async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const idea = await storage.createContentIdea({
+        ...req.body,
+        createdBy: user.id,
+      });
+      res.status(201).json(idea);
+    } catch (error) {
+      console.error("Error creating content idea:", error);
+      res.status(500).json({ error: "Failed to create idea" });
+    }
+  });
+
+  // Update content idea - content/admin only
+  app.patch("/api/content-ideas/:id", requireRole("content", "admin"), async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const idea = await storage.updateContentIdea(id, req.body);
+      if (!idea) {
+        return res.status(404).json({ error: "Idea not found" });
+      }
+      res.json(idea);
+    } catch (error) {
+      console.error("Error updating content idea:", error);
+      res.status(500).json({ error: "Failed to update idea" });
+    }
+  });
+
+  // Delete content idea - content/admin only
+  app.delete("/api/content-ideas/:id", requireRole("content", "admin"), async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      await storage.deleteContentIdea(id);
+      res.status(204).end();
+    } catch (error) {
+      console.error("Error deleting content idea:", error);
+      res.status(500).json({ error: "Failed to delete idea" });
+    }
+  });
+
+  // Approve content idea - client only (for their own ideas)
+  app.post("/api/content-ideas/:id/approve", isAuthenticated, async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const user = req.user as User;
+      
+      // Get the idea first
+      const existingIdea = await storage.getContentIdea(id);
+      if (!existingIdea) {
+        return res.status(404).json({ error: "Idea not found" });
+      }
+      
+      // Only allow the client to approve their own ideas
+      if (existingIdea.clientId !== user.id) {
+        return res.status(403).json({ error: "You can only approve ideas assigned to you" });
+      }
+      
+      const idea = await storage.approveContentIdea(id, user.id, req.body.clientNotes);
+      res.json(idea);
+    } catch (error) {
+      console.error("Error approving content idea:", error);
+      res.status(500).json({ error: "Failed to approve idea" });
+    }
+  });
+
+  // Deny content idea - client only (for their own ideas)
+  app.post("/api/content-ideas/:id/deny", isAuthenticated, async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const user = req.user as User;
+      
+      // Get the idea first
+      const existingIdea = await storage.getContentIdea(id);
+      if (!existingIdea) {
+        return res.status(404).json({ error: "Idea not found" });
+      }
+      
+      // Only allow the client to deny their own ideas
+      if (existingIdea.clientId !== user.id) {
+        return res.status(403).json({ error: "You can only deny ideas assigned to you" });
+      }
+      
+      const idea = await storage.denyContentIdea(id, user.id, req.body.clientNotes);
+      res.json(idea);
+    } catch (error) {
+      console.error("Error denying content idea:", error);
+      res.status(500).json({ error: "Failed to deny idea" });
+    }
+  });
+
+  // Get ideas for a specific client - content/admin only
+  app.get("/api/content-ideas/client/:clientId", requireRole("content", "admin"), async (req: any, res) => {
+    try {
+      const clientId = req.params.clientId;
+      const ideas = await storage.getContentIdeasForClient(clientId);
+      res.json(ideas);
+    } catch (error) {
+      console.error("Error fetching client ideas:", error);
+      res.status(500).json({ error: "Failed to fetch client ideas" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

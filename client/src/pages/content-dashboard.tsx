@@ -13,6 +13,7 @@ import { RecurringTasksView } from "@/components/recurring-tasks-view";
 import { TimeReportsView } from "@/components/time-reports-view";
 import { PaymentRequestsView } from "@/components/payment-requests-view";
 import { BrandPacksView } from "@/components/brand-packs-view";
+import { ContentIdeasManageView } from "@/components/content-ideas-manage-view";
 import { CreditBalanceDisplay } from "@/components/credit-balance-display";
 import { AddContentTaskDialog } from "@/components/add-content-task-dialog";
 import { AddCampaignDialog } from "@/components/add-campaign-dialog";
@@ -26,7 +27,7 @@ import { Button } from "@/components/ui/button";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Plus, ClipboardList, Users, Upload, Settings, FolderKanban, BarChart3, LayoutGrid, Columns3, Calendar, FileText, Image, Repeat, Clock, Download, Camera, DollarSign, Package, MoreHorizontal, ChevronDown, Rocket } from "lucide-react";
+import { Plus, ClipboardList, Users, Upload, Settings, FolderKanban, BarChart3, LayoutGrid, Columns3, Calendar, FileText, Image, Repeat, Clock, Download, Camera, DollarSign, Package, MoreHorizontal, ChevronDown, Rocket, Lightbulb } from "lucide-react";
 import { Link } from "wouter";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/hooks/useAuth";
@@ -149,7 +150,7 @@ export default function ContentDashboard() {
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button 
-                  variant={["templates", "recurring", "assets", "brand-packs", "time-reports", "payments", "analytics", "settings"].includes(activeTab) ? "secondary" : "outline"} 
+                  variant={["templates", "recurring", "assets", "brand-packs", "time-reports", "payments", "analytics", "settings", "ideas"].includes(activeTab) ? "secondary" : "outline"} 
                   size="sm" 
                   className="gap-1"
                   data-testid="button-more-tabs"
@@ -160,6 +161,11 @@ export default function ContentDashboard() {
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="w-48">
+                <DropdownMenuItem onClick={() => setActiveTab("ideas")} data-testid="menu-ideas">
+                  <Lightbulb className="h-4 w-4 mr-2" />
+                  Ideas
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => setActiveTab("templates")} data-testid="menu-templates">
                   <FileText className="h-4 w-4 mr-2" />
                   Templates
@@ -247,6 +253,10 @@ export default function ContentDashboard() {
 
           <TabsContent value="analytics" className="mt-6">
             <AnalyticsDashboard />
+          </TabsContent>
+
+          <TabsContent value="ideas" className="mt-6">
+            <ContentIdeasManageView />
           </TabsContent>
 
           <TabsContent value="settings" className="mt-6">

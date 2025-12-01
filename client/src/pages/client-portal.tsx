@@ -43,11 +43,15 @@ import {
   User,
   Activity,
   BarChart3,
-  Zap
+  Zap,
+  Lightbulb,
+  ThumbsUp,
+  ThumbsDown,
+  MessageSquare
 } from "lucide-react";
 import { ClientWelcomeModal } from "@/components/client-welcome-modal";
 import { OrderMessages } from "@/components/order-messages";
-import type { CreditRequest, ContentOrder, CreditTransaction, ClientOnboarding } from "@shared/schema";
+import type { CreditRequest, ContentOrder, CreditTransaction, ClientOnboarding, ContentIdea } from "@shared/schema";
 
 const formatCurrency = (cents: number, currency: string = "USD") => {
   return new Intl.NumberFormat("en-US", {
@@ -176,6 +180,10 @@ export default function ClientPortal() {
 
   const { data: onboarding } = useQuery<ClientOnboarding>({
     queryKey: ["/api/client-onboarding"],
+  });
+
+  const { data: contentIdeas, isLoading: ideasLoading } = useQuery<ContentIdea[]>({
+    queryKey: ["/api/content-ideas"],
   });
 
   const markOnboardingStep = useMutation({
@@ -317,6 +325,15 @@ export default function ClientPortal() {
             <TabsTrigger value="history" data-testid="tab-history">
               <History className="h-4 w-4 mr-2" />
               History
+            </TabsTrigger>
+            <TabsTrigger value="ideas" data-testid="tab-ideas" className="relative">
+              <Lightbulb className="h-4 w-4 mr-2" />
+              Ideas
+              {contentIdeas && contentIdeas.filter(i => i.status === "pending").length > 0 && (
+                <span className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                  {contentIdeas.filter(i => i.status === "pending").length}
+                </span>
+              )}
             </TabsTrigger>
           </TabsList>
 
@@ -600,6 +617,14 @@ export default function ClientPortal() {
             <TransactionHistorySection 
               transactions={transactions || []} 
               isLoading={transactionsLoading}
+            />
+          </TabsContent>
+
+          {/* Ideas Tab - Content Ideas Awaiting Approval */}
+          <TabsContent value="ideas">
+            <ContentIdeasSection 
+              ideas={contentIdeas || []} 
+              isLoading={ideasLoading}
             />
           </TabsContent>
         </Tabs>
@@ -1857,5 +1882,325 @@ function NewContentOrderDialog({
         )}
       </DialogContent>
     </Dialog>
+  );
+}
+
+// Content Ideas Section Component - For clients to approve/deny ideas
+function ContentIdeasSection({ 
+  ideas, 
+  isLoading 
+}: { 
+  ideas: ContentIdea[]; 
+  isLoading: boolean;
+}) {
+  const { toast } = useToast();
+  const [selectedIdea, setSelectedIdea] = useState<ContentIdea | null>(null);
+  const [feedback, setFeedback] = useState("");
+  const [filter, setFilter] = useState<"all" | "pending" | "approved" | "denied">("all");
+
+  const approveMutation = useMutation({
+    mutationFn: async ({ id, clientNotes }: { id: number; clientNotes?: string }) => {
+      return await apiRequest("POST", `/api/content-ideas/${id}/approve`, { clientNotes });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/content-ideas"] });
+      toast({ title: "Idea approved!", description: "The content team will start working on it." });
+      setSelectedIdea(null);
+      setFeedback("");
+    },
+    onError: () => {
+      toast({ title: "Failed to approve idea", variant: "destructive" });
+    },
+  });
+
+  const denyMutation = useMutation({
+    mutationFn: async ({ id, clientNotes }: { id: number; clientNotes?: string }) => {
+      return await apiRequest("POST", `/api/content-ideas/${id}/deny`, { clientNotes });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/content-ideas"] });
+      toast({ title: "Idea declined", description: "Your feedback has been sent to the team." });
+      setSelectedIdea(null);
+      setFeedback("");
+    },
+    onError: () => {
+      toast({ title: "Failed to decline idea", variant: "destructive" });
+    },
+  });
+
+  const filteredIdeas = filter === "all" 
+    ? ideas 
+    : ideas.filter(i => i.status === filter);
+
+  const pendingCount = ideas.filter(i => i.status === "pending").length;
+
+  if (isLoading) {
+    return (
+      <div className="space-y-4">
+        <Skeleton className="h-10 w-48" />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {[1, 2, 3, 4].map((i) => (
+            <Skeleton key={i} className="h-48 w-full" />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h3 className="text-lg font-semibold flex items-center gap-2">
+            <Lightbulb className="h-5 w-5" />
+            Content Ideas
+          </h3>
+          <p className="text-sm text-muted-foreground">
+            Review and approve content ideas from our team
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Select value={filter} onValueChange={(v) => setFilter(v as any)}>
+            <SelectTrigger className="w-[150px]" data-testid="select-ideas-filter">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Ideas</SelectItem>
+              <SelectItem value="pending">
+                Pending {pendingCount > 0 && `(${pendingCount})`}
+              </SelectItem>
+              <SelectItem value="approved">Approved</SelectItem>
+              <SelectItem value="denied">Declined</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {filteredIdeas.length === 0 ? (
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center py-12">
+            <Lightbulb className="h-16 w-16 text-muted-foreground mb-4 opacity-50" />
+            <h3 className="font-medium text-lg mb-1">No content ideas yet</h3>
+            <p className="text-muted-foreground text-center max-w-md">
+              {filter === "pending" 
+                ? "You're all caught up! No ideas awaiting your approval."
+                : "Our team will share content ideas here for your review."
+              }
+            </p>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {filteredIdeas.map((idea) => (
+            <Card 
+              key={idea.id} 
+              className={`hover-elevate ${idea.status === "pending" ? "border-primary/50" : ""}`} 
+              data-testid={`idea-card-${idea.id}`}
+            >
+              <CardHeader className="pb-2">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1 min-w-0">
+                    <CardTitle className="text-base">{idea.title}</CardTitle>
+                    <CardDescription className="capitalize mt-1">
+                      {idea.contentType.replace("_", " ")}
+                    </CardDescription>
+                  </div>
+                  {getIdeaStatusBadge(idea.status)}
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <p className="text-sm text-muted-foreground line-clamp-3">
+                  {idea.description}
+                </p>
+                <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+                  {idea.estimatedCost && (
+                    <span className="flex items-center gap-1">
+                      <CreditCard className="h-3 w-3" />
+                      Est. {formatCurrency(idea.estimatedCost)}
+                    </span>
+                  )}
+                  {idea.estimatedDays && (
+                    <span className="flex items-center gap-1">
+                      <Calendar className="h-3 w-3" />
+                      ~{idea.estimatedDays} days
+                    </span>
+                  )}
+                  {idea.priority && idea.priority !== "normal" && (
+                    <span>{getPriorityBadge(idea.priority)}</span>
+                  )}
+                </div>
+                {idea.clientNotes && idea.status !== "pending" && (
+                  <div className="p-2 bg-muted rounded-md text-sm">
+                    <span className="text-muted-foreground">Your feedback: </span>
+                    {idea.clientNotes}
+                  </div>
+                )}
+              </CardContent>
+              <CardFooter className="pt-0 gap-2">
+                {idea.status === "pending" ? (
+                  <>
+                    <Button 
+                      size="sm" 
+                      onClick={() => setSelectedIdea(idea)}
+                      data-testid={`button-review-idea-${idea.id}`}
+                    >
+                      <Eye className="h-4 w-4 mr-2" />
+                      Review
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => approveMutation.mutate({ id: idea.id })}
+                      disabled={approveMutation.isPending}
+                      data-testid={`button-quick-approve-${idea.id}`}
+                    >
+                      <ThumbsUp className="h-4 w-4 mr-2" />
+                      Approve
+                    </Button>
+                  </>
+                ) : (
+                  <Button 
+                    variant="ghost" 
+                    size="sm"
+                    onClick={() => setSelectedIdea(idea)}
+                    data-testid={`button-view-idea-${idea.id}`}
+                  >
+                    <Eye className="h-4 w-4 mr-2" />
+                    View Details
+                  </Button>
+                )}
+              </CardFooter>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {/* Idea Detail Dialog */}
+      <Dialog open={!!selectedIdea} onOpenChange={(open) => !open && setSelectedIdea(null)}>
+        <DialogContent className="max-w-lg">
+          {selectedIdea && (
+            <>
+              <DialogHeader>
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <DialogTitle>{selectedIdea.title}</DialogTitle>
+                    <DialogDescription className="capitalize mt-1">
+                      {selectedIdea.contentType.replace("_", " ")}
+                    </DialogDescription>
+                  </div>
+                  {getIdeaStatusBadge(selectedIdea.status)}
+                </div>
+              </DialogHeader>
+              
+              <div className="space-y-4">
+                <div>
+                  <h4 className="text-sm font-medium mb-2">Description</h4>
+                  <p className="text-sm text-muted-foreground">{selectedIdea.description}</p>
+                </div>
+
+                <div className="flex flex-wrap gap-4 text-sm">
+                  {selectedIdea.estimatedCost && (
+                    <div>
+                      <span className="text-muted-foreground">Estimated Cost:</span>
+                      <span className="font-medium ml-1">{formatCurrency(selectedIdea.estimatedCost)}</span>
+                    </div>
+                  )}
+                  {selectedIdea.estimatedDays && (
+                    <div>
+                      <span className="text-muted-foreground">Timeline:</span>
+                      <span className="font-medium ml-1">~{selectedIdea.estimatedDays} days</span>
+                    </div>
+                  )}
+                </div>
+
+                {selectedIdea.teamNotes && (
+                  <div className="p-3 bg-muted rounded-md">
+                    <h4 className="text-sm font-medium mb-1 flex items-center gap-1">
+                      <MessageSquare className="h-3 w-3" />
+                      Team Notes
+                    </h4>
+                    <p className="text-sm text-muted-foreground">{selectedIdea.teamNotes}</p>
+                  </div>
+                )}
+
+                {selectedIdea.status === "pending" && (
+                  <div className="space-y-2">
+                    <Label htmlFor="feedback">Your Feedback (Optional)</Label>
+                    <Textarea
+                      id="feedback"
+                      placeholder="Share any thoughts, requests, or concerns..."
+                      value={feedback}
+                      onChange={(e) => setFeedback(e.target.value)}
+                      rows={3}
+                      data-testid="input-idea-feedback"
+                    />
+                  </div>
+                )}
+
+                {selectedIdea.clientNotes && selectedIdea.status !== "pending" && (
+                  <div className="p-3 border rounded-md">
+                    <h4 className="text-sm font-medium mb-1">Your Feedback</h4>
+                    <p className="text-sm text-muted-foreground">{selectedIdea.clientNotes}</p>
+                  </div>
+                )}
+              </div>
+
+              <DialogFooter className="gap-2">
+                {selectedIdea.status === "pending" ? (
+                  <>
+                    <Button
+                      variant="destructive"
+                      onClick={() => denyMutation.mutate({ id: selectedIdea.id, clientNotes: feedback })}
+                      disabled={denyMutation.isPending || approveMutation.isPending}
+                      data-testid="button-deny-idea"
+                    >
+                      {denyMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      ) : (
+                        <ThumbsDown className="h-4 w-4 mr-2" />
+                      )}
+                      Decline
+                    </Button>
+                    <Button
+                      onClick={() => approveMutation.mutate({ id: selectedIdea.id, clientNotes: feedback })}
+                      disabled={approveMutation.isPending || denyMutation.isPending}
+                      data-testid="button-approve-idea"
+                    >
+                      {approveMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                      ) : (
+                        <ThumbsUp className="h-4 w-4 mr-2" />
+                      )}
+                      Approve
+                    </Button>
+                  </>
+                ) : (
+                  <Button variant="outline" onClick={() => setSelectedIdea(null)}>
+                    Close
+                  </Button>
+                )}
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function getIdeaStatusBadge(status: string) {
+  const config: Record<string, { variant: "default" | "secondary" | "destructive" | "outline"; icon: React.ReactNode }> = {
+    pending: { variant: "secondary", icon: <Clock className="h-3 w-3" /> },
+    approved: { variant: "default", icon: <CheckCircle className="h-3 w-3" /> },
+    denied: { variant: "destructive", icon: <XCircle className="h-3 w-3" /> },
+    in_production: { variant: "default", icon: <Loader2 className="h-3 w-3 animate-spin" /> },
+    completed: { variant: "default", icon: <CheckCircle className="h-3 w-3" /> },
+  };
+  const c = config[status] || config.pending;
+  return (
+    <Badge variant={c.variant} className="gap-1">
+      {c.icon}
+      {status === "denied" ? "Declined" : status.replace("_", " ").replace(/\b\w/g, l => l.toUpperCase())}
+    </Badge>
   );
 }

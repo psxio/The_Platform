@@ -1616,12 +1616,26 @@ export const paymentMethods = [
   "other"
 ] as const;
 
+export const employmentTypes = [
+  "full_time",
+  "part_time",
+  "contractor",
+  "intern",
+  "shadow",
+  "advisor",
+  "volunteer"
+] as const;
+export type EmploymentType = typeof employmentTypes[number];
+
 export const internalTeamMembers = pgTable("internal_team_members", {
   id: serial("id").primaryKey(),
   name: varchar("name", { length: 255 }).notNull(),
   nickname: varchar("nickname", { length: 100 }), // Display name / alias
   role: varchar("role", { length: 50 }).default("contributor"),
   department: varchar("department", { length: 50 }).default("general"),
+  employmentType: varchar("employment_type", { length: 20 }).$type<EmploymentType>().default("full_time"),
+  supervisorId: integer("supervisor_id"), // Self-reference to another team member
+  currentFocus: text("current_focus"), // What interns/shadows are working on
   walletAddress: varchar("wallet_address", { length: 255 }),
   walletChain: varchar("wallet_chain", { length: 20 }).default("base"), // base, eth, sol
   payRate: real("pay_rate").default(0), // Weekly/monthly rate in USD
@@ -1677,6 +1691,27 @@ export const insertTeamPaymentHistorySchema = createInsertSchema(teamPaymentHist
 
 export type InsertTeamPaymentHistory = z.infer<typeof insertTeamPaymentHistorySchema>;
 export type TeamPaymentHistory = typeof teamPaymentHistory.$inferSelect;
+
+// ==================== TEAM MEMBER CLIENT ASSIGNMENTS ====================
+
+export const teamMemberClientAssignments = pgTable("team_member_client_assignments", {
+  id: serial("id").primaryKey(),
+  memberId: integer("member_id").notNull().references(() => internalTeamMembers.id, { onDelete: "cascade" }),
+  clientProfileId: integer("client_profile_id").references(() => clientProfiles.id, { onDelete: "cascade" }),
+  clientUserId: varchar("client_user_id").references(() => users.id, { onDelete: "cascade" }),
+  role: varchar("role", { length: 50 }), // account_manager, lead, support, etc.
+  isPrimary: boolean("is_primary").default(false), // Primary contact for this client
+  notes: text("notes"),
+  assignedAt: timestamp("assigned_at").defaultNow(),
+});
+
+export const insertTeamMemberClientAssignmentSchema = createInsertSchema(teamMemberClientAssignments).omit({
+  id: true,
+  assignedAt: true,
+});
+
+export type InsertTeamMemberClientAssignment = z.infer<typeof insertTeamMemberClientAssignmentSchema>;
+export type TeamMemberClientAssignment = typeof teamMemberClientAssignments.$inferSelect;
 
 // ==================== CONTENT IDEAS (Pre-Production Approval) ====================
 

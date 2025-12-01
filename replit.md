@@ -50,12 +50,18 @@ The backend is a Node.js application using Express, providing APIs for Onchain T
     -   **Per-Client Calendar**: Schedule and track deadlines, milestones, meetings, deliverables, launches, and reviews for each client. Events can be linked to tasks and orders.
     -   **Search & Filtering**: Find clients by name, filter by relationship status and industry.
     -   **25+ Pre-seeded Clients**: Database initialized with partner data including betrmint, creatordao, district, DRVN, fireside, pizzadao, and more.
+-   **Internal Team Management** (`/admin/internal-team`): Centralized roster for all internal team members with pay tracking, wallet addresses, and contact information. Admin-only access with features:
+    -   **Team Roster**: View all 19+ team members with name, role, department, pay rate, wallet address, and payment method
+    -   **Payment History**: Track all payments made to team members with transaction details
+    -   **Multi-payment Support**: Crypto (Base, ETH, SOL), Venmo, PayPal, bank transfers
+    -   **Search & Filter**: Find team members by name or filter by department/role/status
+    -   **CRUD Operations**: Add, edit, and remove team members with full data validation
 -   **Admin Features**: Invite code generation and management, team invitation system, integration settings, payment request management, brand pack management, Sheets Hub access, client buy power management.
 -   **Onboarding System**: Role-specific welcome modals with 5-6 step guided walkthroughs. Web3 users see Onchain Tools tutorial (Compare, Extract, Collections, History, Merge); Content/Admin users see Content Studio tutorial (Tasks, Team, Deliverables, Analytics). Progress tracked in database (`userOnboarding` for content/admin, `web3Onboarding` for web3 users, `clientOnboarding` for clients).
 -   **Help Center** (`/help`): Role-specific documentation with Getting Started guides, feature documentation, and FAQ. Accessible from user menu (both mobile and desktop navigation).
 
 ### System Design Choices
-The system uses a PostgreSQL database managed with Drizzle ORM. Key tables support users, sessions, Onchain Tools data, Content Studio features (tasks, members, deliverables, templates, watchers, approvals, time entries, assets, recurring tasks, campaigns, versions), admin invite codes, team integrations, onboarding, worker monitoring data (consent, sessions, screenshots, hourly reports), payment requests, client brand packs, Google Sheets connections, payroll records, client buy power/transactions, buy power requests (with admin approval workflow), content orders (for spending buy power), client onboarding tracking, client profiles (company info, contacts, relationship status, notes), and client calendar events (deadlines, milestones, meetings linked to client profiles). Security is enforced via role-based access control, bcrypt hashing, and server-side middleware.
+The system uses a PostgreSQL database managed with Drizzle ORM. Key tables support users, sessions, Onchain Tools data, Content Studio features (tasks, members, deliverables, templates, watchers, approvals, time entries, assets, recurring tasks, campaigns, versions), admin invite codes, team integrations, onboarding, worker monitoring data (consent, sessions, screenshots, hourly reports), payment requests, client brand packs, Google Sheets connections, payroll records, client buy power/transactions, buy power requests (with admin approval workflow), content orders (for spending buy power), client onboarding tracking, client profiles (company info, contacts, relationship status, notes), client calendar events (deadlines, milestones, meetings linked to client profiles), internal team members (name, role, wallet, pay rate, payment method), and team payment history (audit trail for payments). Security is enforced via role-based access control, bcrypt hashing, and server-side middleware.
 
 ## External Dependencies
 

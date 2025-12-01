@@ -1243,3 +1243,75 @@ export const insertClientWorkItemSchema = createInsertSchema(clientWorkItems).om
 
 export type InsertClientWorkItem = z.infer<typeof insertClientWorkItemSchema>;
 export type ClientWorkItem = typeof clientWorkItems.$inferSelect;
+
+// ==================== DISCORD INTEGRATION ====================
+
+// Discord connections - links platform users to their Discord accounts
+export const discordConnections = pgTable("discord_connections", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  discordUserId: varchar("discord_user_id").notNull(),
+  discordUsername: varchar("discord_username"),
+  discordAvatar: varchar("discord_avatar"),
+  guildId: varchar("guild_id"), // The monitored server ID
+  accessToken: text("access_token"),
+  refreshToken: text("refresh_token"),
+  tokenExpiresAt: timestamp("token_expires_at"),
+  scopes: text("scopes"), // Comma-separated OAuth scopes
+  linkedAt: timestamp("linked_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertDiscordConnectionSchema = createInsertSchema(discordConnections).omit({
+  id: true,
+  linkedAt: true,
+  updatedAt: true,
+});
+
+export type InsertDiscordConnection = z.infer<typeof insertDiscordConnectionSchema>;
+export type DiscordConnection = typeof discordConnections.$inferSelect;
+
+// Discord presence sessions - tracks when users are screen sharing
+export const discordPresenceSessions = pgTable("discord_presence_sessions", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  discordUserId: varchar("discord_user_id").notNull(),
+  guildId: varchar("guild_id").notNull(),
+  channelId: varchar("channel_id").notNull(),
+  channelName: varchar("channel_name"),
+  isScreenSharing: boolean("is_screen_sharing").default(false),
+  isStreaming: boolean("is_streaming").default(false),
+  startedAt: timestamp("started_at").defaultNow(),
+  endedAt: timestamp("ended_at"),
+  lastHeartbeatAt: timestamp("last_heartbeat_at").defaultNow(),
+});
+
+export const insertDiscordPresenceSessionSchema = createInsertSchema(discordPresenceSessions).omit({
+  id: true,
+  startedAt: true,
+  lastHeartbeatAt: true,
+});
+
+export type InsertDiscordPresenceSession = z.infer<typeof insertDiscordPresenceSessionSchema>;
+export type DiscordPresenceSession = typeof discordPresenceSessions.$inferSelect;
+
+// Discord settings - admin configuration for the Discord integration
+export const discordSettings = pgTable("discord_settings", {
+  id: serial("id").primaryKey(),
+  guildId: varchar("guild_id").notNull(),
+  guildName: varchar("guild_name"),
+  monitoredChannelIds: text("monitored_channel_ids"), // Comma-separated channel IDs
+  botConnected: boolean("bot_connected").default(false),
+  lastBotHeartbeat: timestamp("last_bot_heartbeat"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertDiscordSettingsSchema = createInsertSchema(discordSettings).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertDiscordSettings = z.infer<typeof insertDiscordSettingsSchema>;
+export type DiscordSettings = typeof discordSettings.$inferSelect;

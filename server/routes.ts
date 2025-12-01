@@ -5442,6 +5442,167 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ================== DISCORD INTEGRATION ENDPOINTS ==================
+
+  // Get current user's Discord connection
+  app.get("/api/discord/connection", requireRole("content"), async (req, res) => {
+    try {
+      const user = (req as any).user;
+      const connection = await storage.getDiscordConnection(user.id);
+      res.json(connection || null);
+    } catch (error) {
+      console.error("Error fetching Discord connection:", error);
+      res.status(500).json({ error: "Failed to fetch Discord connection" });
+    }
+  });
+
+  // Link Discord account (manual linking for now)
+  app.post("/api/discord/link", requireRole("content"), async (req, res) => {
+    try {
+      const user = (req as any).user;
+      const { discordUserId, discordUsername } = req.body;
+
+      if (!discordUserId) {
+        return res.status(400).json({ error: "Discord user ID is required" });
+      }
+
+      // Check if already linked
+      const existing = await storage.getDiscordConnection(user.id);
+      if (existing) {
+        // Update existing connection
+        const updated = await storage.updateDiscordConnection(user.id, {
+          discordUserId,
+          discordUsername,
+        });
+        return res.json(updated);
+      }
+
+      // Create new connection
+      const connection = await storage.createDiscordConnection({
+        userId: user.id,
+        discordUserId,
+        discordUsername,
+      });
+      res.json(connection);
+    } catch (error) {
+      console.error("Error linking Discord account:", error);
+      res.status(500).json({ error: "Failed to link Discord account" });
+    }
+  });
+
+  // Unlink Discord account
+  app.delete("/api/discord/connection", requireRole("content"), async (req, res) => {
+    try {
+      const user = (req as any).user;
+      await storage.deleteDiscordConnection(user.id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error unlinking Discord account:", error);
+      res.status(500).json({ error: "Failed to unlink Discord account" });
+    }
+  });
+
+  // Get all Discord connections (admin only)
+  app.get("/api/discord/connections", requireRole("admin"), async (req, res) => {
+    try {
+      const connections = await storage.getAllDiscordConnections();
+      
+      // Enrich with user info
+      const enriched = await Promise.all(connections.map(async (conn) => {
+        const user = await storage.getUser(conn.userId);
+        return {
+          ...conn,
+          userName: user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email : 'Unknown',
+          userEmail: user?.email,
+        };
+      }));
+      
+      res.json(enriched);
+    } catch (error) {
+      console.error("Error fetching Discord connections:", error);
+      res.status(500).json({ error: "Failed to fetch Discord connections" });
+    }
+  });
+
+  // Get active presence sessions (who is screen sharing now)
+  app.get("/api/discord/presence", requireRole("content"), async (req, res) => {
+    try {
+      const sessions = await storage.getActivePresenceSessions();
+      
+      // Enrich with user info
+      const enriched = await Promise.all(sessions.map(async (session) => {
+        const user = await storage.getUser(session.userId);
+        const connection = await storage.getDiscordConnection(session.userId);
+        return {
+          ...session,
+          userName: user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email : 'Unknown',
+          userEmail: user?.email,
+          discordUsername: connection?.discordUsername,
+        };
+      }));
+      
+      res.json(enriched);
+    } catch (error) {
+      console.error("Error fetching presence sessions:", error);
+      res.status(500).json({ error: "Failed to fetch presence sessions" });
+    }
+  });
+
+  // Get current user's presence history
+  app.get("/api/discord/presence/history", requireRole("content"), async (req, res) => {
+    try {
+      const user = (req as any).user;
+      const limit = parseInt(req.query.limit as string) || 50;
+      const history = await storage.getUserPresenceHistory(user.id, limit);
+      res.json(history);
+    } catch (error) {
+      console.error("Error fetching presence history:", error);
+      res.status(500).json({ error: "Failed to fetch presence history" });
+    }
+  });
+
+  // Get Discord settings (admin only)
+  app.get("/api/discord/settings", requireRole("admin"), async (req, res) => {
+    try {
+      const settings = await storage.getDiscordSettings();
+      res.json(settings || null);
+    } catch (error) {
+      console.error("Error fetching Discord settings:", error);
+      res.status(500).json({ error: "Failed to fetch Discord settings" });
+    }
+  });
+
+  // Update Discord settings (admin only)
+  app.post("/api/discord/settings", requireRole("admin"), async (req, res) => {
+    try {
+      const { guildId, guildName, monitoredChannelIds } = req.body;
+
+      if (!guildId) {
+        return res.status(400).json({ error: "Guild ID is required" });
+      }
+
+      const existing = await storage.getDiscordSettings();
+      if (existing) {
+        const updated = await storage.updateDiscordSettings(existing.id, {
+          guildId,
+          guildName,
+          monitoredChannelIds,
+        });
+        return res.json(updated);
+      }
+
+      const settings = await storage.createDiscordSettings({
+        guildId,
+        guildName,
+        monitoredChannelIds,
+      });
+      res.json(settings);
+    } catch (error) {
+      console.error("Error updating Discord settings:", error);
+      res.status(500).json({ error: "Failed to update Discord settings" });
+    }
+  });
+
   // ================== SHEETS HUB ENDPOINTS ==================
 
   // Get all connected sheets (admin only)

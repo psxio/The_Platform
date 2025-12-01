@@ -63,6 +63,10 @@ import {
   type Web3Onboarding, type InsertWeb3Onboarding, web3Onboarding,
   // Client Work Library types
   type ClientWorkItem, type InsertClientWorkItem, clientWorkItems,
+  // Discord Integration types
+  type DiscordConnection, type InsertDiscordConnection, discordConnections,
+  type DiscordPresenceSession, type InsertDiscordPresenceSession, discordPresenceSessions,
+  type DiscordSettings, type InsertDiscordSettings, discordSettings,
 } from "@shared/schema";
 import { db } from "./db";
 import { desc, eq, and, sql, or, isNull } from "drizzle-orm";
@@ -409,6 +413,31 @@ export interface IStorage {
   getClientWorkItemsByTask(taskId: number): Promise<ClientWorkItem[]>;
   getClientWorkItemsByCampaign(campaignId: number): Promise<ClientWorkItem[]>;
   getClientWorkStats(): Promise<{ uploaderId: string; brandPackId: number; count: number; latestUpload: Date | null }[]>;
+  
+  // ==================== DISCORD INTEGRATION METHODS ====================
+  
+  // Discord Connection methods
+  getDiscordConnection(userId: string): Promise<DiscordConnection | undefined>;
+  getDiscordConnectionByDiscordId(discordUserId: string): Promise<DiscordConnection | undefined>;
+  getAllDiscordConnections(): Promise<DiscordConnection[]>;
+  createDiscordConnection(connection: InsertDiscordConnection): Promise<DiscordConnection>;
+  updateDiscordConnection(userId: string, updates: Partial<InsertDiscordConnection>): Promise<DiscordConnection | undefined>;
+  deleteDiscordConnection(userId: string): Promise<boolean>;
+  
+  // Discord Presence Session methods
+  getActivePresenceSessions(): Promise<DiscordPresenceSession[]>;
+  getPresenceSession(userId: string): Promise<DiscordPresenceSession | undefined>;
+  getActivePresenceByDiscordId(discordUserId: string): Promise<DiscordPresenceSession | undefined>;
+  createPresenceSession(session: InsertDiscordPresenceSession): Promise<DiscordPresenceSession>;
+  updatePresenceSession(id: number, updates: Partial<DiscordPresenceSession>): Promise<DiscordPresenceSession | undefined>;
+  endPresenceSession(discordUserId: string): Promise<DiscordPresenceSession | undefined>;
+  getUserPresenceHistory(userId: string, limit?: number): Promise<DiscordPresenceSession[]>;
+  
+  // Discord Settings methods
+  getDiscordSettings(): Promise<DiscordSettings | undefined>;
+  createDiscordSettings(settings: InsertDiscordSettings): Promise<DiscordSettings>;
+  updateDiscordSettings(id: number, updates: Partial<InsertDiscordSettings>): Promise<DiscordSettings | undefined>;
+  updateBotHeartbeat(): Promise<void>;
 }
 
 export class DbStorage implements IStorage {
@@ -2615,6 +2644,139 @@ export class DbStorage implements IStorage {
       .from(clientWorkItems)
       .groupBy(clientWorkItems.uploadedBy, clientWorkItems.brandPackId);
     return result;
+  }
+  
+  // ==================== DISCORD INTEGRATION METHODS ====================
+  
+  async getDiscordConnection(userId: string): Promise<DiscordConnection | undefined> {
+    const [connection] = await db
+      .select()
+      .from(discordConnections)
+      .where(eq(discordConnections.userId, userId));
+    return connection;
+  }
+  
+  async getDiscordConnectionByDiscordId(discordUserId: string): Promise<DiscordConnection | undefined> {
+    const [connection] = await db
+      .select()
+      .from(discordConnections)
+      .where(eq(discordConnections.discordUserId, discordUserId));
+    return connection;
+  }
+  
+  async getAllDiscordConnections(): Promise<DiscordConnection[]> {
+    return await db.select().from(discordConnections);
+  }
+  
+  async createDiscordConnection(connection: InsertDiscordConnection): Promise<DiscordConnection> {
+    const [created] = await db.insert(discordConnections).values(connection).returning();
+    return created;
+  }
+  
+  async updateDiscordConnection(userId: string, updates: Partial<InsertDiscordConnection>): Promise<DiscordConnection | undefined> {
+    const [updated] = await db
+      .update(discordConnections)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(discordConnections.userId, userId))
+      .returning();
+    return updated;
+  }
+  
+  async deleteDiscordConnection(userId: string): Promise<boolean> {
+    const result = await db.delete(discordConnections).where(eq(discordConnections.userId, userId));
+    return result.rowCount > 0;
+  }
+  
+  // Discord Presence Session methods
+  async getActivePresenceSessions(): Promise<DiscordPresenceSession[]> {
+    return await db
+      .select()
+      .from(discordPresenceSessions)
+      .where(isNull(discordPresenceSessions.endedAt))
+      .orderBy(desc(discordPresenceSessions.startedAt));
+  }
+  
+  async getPresenceSession(userId: string): Promise<DiscordPresenceSession | undefined> {
+    const [session] = await db
+      .select()
+      .from(discordPresenceSessions)
+      .where(and(
+        eq(discordPresenceSessions.userId, userId),
+        isNull(discordPresenceSessions.endedAt)
+      ));
+    return session;
+  }
+  
+  async getActivePresenceByDiscordId(discordUserId: string): Promise<DiscordPresenceSession | undefined> {
+    const [session] = await db
+      .select()
+      .from(discordPresenceSessions)
+      .where(and(
+        eq(discordPresenceSessions.discordUserId, discordUserId),
+        isNull(discordPresenceSessions.endedAt)
+      ));
+    return session;
+  }
+  
+  async createPresenceSession(session: InsertDiscordPresenceSession): Promise<DiscordPresenceSession> {
+    const [created] = await db.insert(discordPresenceSessions).values(session).returning();
+    return created;
+  }
+  
+  async updatePresenceSession(id: number, updates: Partial<DiscordPresenceSession>): Promise<DiscordPresenceSession | undefined> {
+    const [updated] = await db
+      .update(discordPresenceSessions)
+      .set(updates)
+      .where(eq(discordPresenceSessions.id, id))
+      .returning();
+    return updated;
+  }
+  
+  async endPresenceSession(discordUserId: string): Promise<DiscordPresenceSession | undefined> {
+    const [ended] = await db
+      .update(discordPresenceSessions)
+      .set({ endedAt: new Date() })
+      .where(and(
+        eq(discordPresenceSessions.discordUserId, discordUserId),
+        isNull(discordPresenceSessions.endedAt)
+      ))
+      .returning();
+    return ended;
+  }
+  
+  async getUserPresenceHistory(userId: string, limit: number = 50): Promise<DiscordPresenceSession[]> {
+    return await db
+      .select()
+      .from(discordPresenceSessions)
+      .where(eq(discordPresenceSessions.userId, userId))
+      .orderBy(desc(discordPresenceSessions.startedAt))
+      .limit(limit);
+  }
+  
+  // Discord Settings methods
+  async getDiscordSettings(): Promise<DiscordSettings | undefined> {
+    const [settings] = await db.select().from(discordSettings).limit(1);
+    return settings;
+  }
+  
+  async createDiscordSettings(settings: InsertDiscordSettings): Promise<DiscordSettings> {
+    const [created] = await db.insert(discordSettings).values(settings).returning();
+    return created;
+  }
+  
+  async updateDiscordSettings(id: number, updates: Partial<InsertDiscordSettings>): Promise<DiscordSettings | undefined> {
+    const [updated] = await db
+      .update(discordSettings)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(discordSettings.id, id))
+      .returning();
+    return updated;
+  }
+  
+  async updateBotHeartbeat(): Promise<void> {
+    await db
+      .update(discordSettings)
+      .set({ lastBotHeartbeat: new Date(), botConnected: true });
   }
 }
 

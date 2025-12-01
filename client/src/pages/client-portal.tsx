@@ -1295,6 +1295,33 @@ function NewCreditRequestDialog({
   );
 }
 
+interface OrderTemplate {
+  id: number;
+  name: string;
+  description: string | null;
+  orderType: string;
+  defaultTitle: string | null;
+  defaultDescription: string | null;
+  defaultSpecifications: string | null;
+  estimatedCost: number | null;
+  estimatedDays: number | null;
+  priority: string | null;
+}
+
+interface SavedOrderItem {
+  id: number;
+  name: string;
+  orderType: string;
+  title: string | null;
+  description: string | null;
+  specifications: string | null;
+  creditCost: number | null;
+  priority: string | null;
+  clientNotes: string | null;
+  usageCount: number | null;
+  lastUsedAt: Date | null;
+}
+
 function NewContentOrderDialog({ 
   open, 
   onOpenChange,
@@ -1304,6 +1331,8 @@ function NewContentOrderDialog({
   onOpenChange: (open: boolean) => void;
   balance: number;
 }) {
+  const [step, setStep] = useState<"select" | "customize">("select");
+  const [selectedTemplate, setSelectedTemplate] = useState<OrderTemplate | null>(null);
   const [orderType, setOrderType] = useState<string>("");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -1311,11 +1340,23 @@ function NewContentOrderDialog({
   const [creditCost, setCreditCost] = useState("");
   const [priority, setPriority] = useState("normal");
   const [clientNotes, setClientNotes] = useState("");
+  const [saveAsTemplate, setSaveAsTemplate] = useState(false);
+  const [templateName, setTemplateName] = useState("");
   const { toast } = useToast();
+
+  const { data: templates } = useQuery<OrderTemplate[]>({
+    queryKey: ["/api/order-templates"],
+    enabled: open,
+  });
+
+  const { data: savedOrders } = useQuery<SavedOrderItem[]>({
+    queryKey: ["/api/saved-orders"],
+    enabled: open,
+  });
 
   const createMutation = useMutation({
     mutationFn: async () => {
-      return await apiRequest("POST", "/api/content-orders", {
+      const order = await apiRequest("POST", "/api/content-orders", {
         orderType,
         title,
         description,
@@ -1324,19 +1365,41 @@ function NewContentOrderDialog({
         priority,
         clientNotes,
       });
+      
+      if (saveAsTemplate && templateName.trim()) {
+        await apiRequest("POST", "/api/saved-orders", {
+          name: templateName.trim(),
+          orderType,
+          title,
+          description,
+          specifications,
+          creditCost: Math.round(parseFloat(creditCost) * 100),
+          priority,
+          clientNotes,
+        });
+      }
+      
+      return order;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/content-orders"] });
       queryClient.invalidateQueries({ queryKey: ["/api/client/dashboard-summary"] });
       queryClient.invalidateQueries({ queryKey: ["/api/client/work-library"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/saved-orders"] });
       toast({ title: "Order created as draft" });
-      onOpenChange(false);
-      resetForm();
+      handleClose();
     },
     onError: () => {
       toast({ title: "Failed to create order", variant: "destructive" });
     },
   });
+
+  const handleClose = () => {
+    onOpenChange(false);
+    setStep("select");
+    setSelectedTemplate(null);
+    resetForm();
+  };
 
   const resetForm = () => {
     setOrderType("");
@@ -1346,127 +1409,314 @@ function NewContentOrderDialog({
     setCreditCost("");
     setPriority("normal");
     setClientNotes("");
+    setSaveAsTemplate(false);
+    setTemplateName("");
+  };
+
+  const applyTemplate = (template: OrderTemplate) => {
+    setSelectedTemplate(template);
+    setOrderType(template.orderType);
+    setTitle(template.defaultTitle || "");
+    setDescription(template.defaultDescription || "");
+    setSpecifications(template.defaultSpecifications || "");
+    setCreditCost(template.estimatedCost ? (template.estimatedCost / 100).toString() : "");
+    setPriority(template.priority || "normal");
+    setStep("customize");
+  };
+
+  const applySavedOrder = (saved: SavedOrderItem) => {
+    setOrderType(saved.orderType);
+    setTitle(saved.title || "");
+    setDescription(saved.description || "");
+    setSpecifications(saved.specifications || "");
+    setCreditCost(saved.creditCost ? (saved.creditCost / 100).toString() : "");
+    setPriority(saved.priority || "normal");
+    setClientNotes(saved.clientNotes || "");
+    setStep("customize");
+  };
+
+  const startBlank = () => {
+    resetForm();
+    setStep("customize");
   };
 
   const costInCents = parseFloat(creditCost || "0") * 100;
   const canAfford = costInCents <= balance;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+    <Dialog open={open} onOpenChange={handleClose}>
+      <DialogContent className="max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Create Content Order</DialogTitle>
+          <DialogTitle>
+            {step === "select" ? "Choose Order Type" : "Create Content Order"}
+          </DialogTitle>
           <DialogDescription>
-            Create a new order to use your buy power. Available: {formatCurrency(balance)}
+            {step === "select" 
+              ? "Start from a template for faster ordering, or create a blank order"
+              : `Available buy power: ${formatCurrency(balance)}`
+            }
           </DialogDescription>
         </DialogHeader>
-        <ScrollArea className="max-h-[60vh]">
-          <div className="space-y-4 pr-4">
-            <div className="space-y-2">
-              <Label htmlFor="orderType">Content Type</Label>
-              <Select value={orderType} onValueChange={setOrderType}>
-                <SelectTrigger data-testid="select-order-type">
-                  <SelectValue placeholder="Select content type" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="article">Article</SelectItem>
-                  <SelectItem value="blog_post">Blog Post</SelectItem>
-                  <SelectItem value="social_media">Social Media Content</SelectItem>
-                  <SelectItem value="video_script">Video Script</SelectItem>
-                  <SelectItem value="graphics">Graphics/Design</SelectItem>
-                  <SelectItem value="other">Other</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="title">Title</Label>
-              <Input
-                id="title"
-                placeholder="Brief title for your order"
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                data-testid="input-order-title"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="description">Description</Label>
-              <Textarea
-                id="description"
-                placeholder="Describe what you need..."
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                rows={3}
-                data-testid="input-order-description"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="specifications">Specifications (Optional)</Label>
-              <Textarea
-                id="specifications"
-                placeholder="Technical specs, dimensions, word count, etc."
-                value={specifications}
-                onChange={(e) => setSpecifications(e.target.value)}
-                rows={2}
-                data-testid="input-order-specs"
-              />
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="creditCost">Buy Power Cost (USD)</Label>
-                <Input
-                  id="creditCost"
-                  type="number"
-                  min="1"
-                  step="0.01"
-                  placeholder="50.00"
-                  value={creditCost}
-                  onChange={(e) => setCreditCost(e.target.value)}
-                  data-testid="input-order-cost"
-                />
-                {creditCost && !canAfford && (
-                  <p className="text-xs text-destructive">Insufficient buy power</p>
-                )}
+        
+        {step === "select" && (
+          <div className="space-y-6">
+            {/* Templates Section */}
+            {templates && templates.length > 0 && (
+              <div className="space-y-3">
+                <h4 className="text-sm font-medium flex items-center gap-2">
+                  <Zap className="h-4 w-4 text-primary" />
+                  Quick Start Templates
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {templates.map((template) => (
+                    <div
+                      key={template.id}
+                      onClick={() => applyTemplate(template)}
+                      className="p-4 border rounded-lg hover-elevate cursor-pointer"
+                      data-testid={`template-${template.id}`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <h5 className="font-medium">{template.name}</h5>
+                          <p className="text-sm text-muted-foreground line-clamp-2">
+                            {template.description}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3 mt-3 text-xs text-muted-foreground">
+                        {template.estimatedCost && (
+                          <span className="flex items-center gap-1">
+                            <CreditCard className="h-3 w-3" />
+                            ~{formatCurrency(template.estimatedCost)}
+                          </span>
+                        )}
+                        {template.estimatedDays && (
+                          <span className="flex items-center gap-1">
+                            <Clock className="h-3 w-3" />
+                            ~{template.estimatedDays} days
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="priority">Priority</Label>
-                <Select value={priority} onValueChange={setPriority}>
-                  <SelectTrigger data-testid="select-order-priority">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="low">Low</SelectItem>
-                    <SelectItem value="normal">Normal</SelectItem>
-                    <SelectItem value="high">High</SelectItem>
-                    <SelectItem value="urgent">Urgent</SelectItem>
-                  </SelectContent>
-                </Select>
+            )}
+
+            {/* Saved Orders Section */}
+            {savedOrders && savedOrders.length > 0 && (
+              <div className="space-y-3">
+                <h4 className="text-sm font-medium flex items-center gap-2">
+                  <History className="h-4 w-4" />
+                  Your Saved Orders
+                </h4>
+                <div className="space-y-2">
+                  {savedOrders.slice(0, 3).map((saved) => (
+                    <div
+                      key={saved.id}
+                      onClick={() => applySavedOrder(saved)}
+                      className="p-3 border rounded-lg hover-elevate cursor-pointer flex items-center justify-between"
+                      data-testid={`saved-order-${saved.id}`}
+                    >
+                      <div>
+                        <span className="font-medium">{saved.name}</span>
+                        <span className="text-xs text-muted-foreground ml-2">
+                          Used {saved.usageCount || 0} times
+                        </span>
+                      </div>
+                      {saved.creditCost && (
+                        <span className="text-sm text-muted-foreground">
+                          {formatCurrency(saved.creditCost)}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
               </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="clientNotes">Additional Notes (Optional)</Label>
-              <Textarea
-                id="clientNotes"
-                placeholder="Any other notes for the team..."
-                value={clientNotes}
-                onChange={(e) => setClientNotes(e.target.value)}
-                rows={2}
-                data-testid="input-order-notes"
-              />
-            </div>
+            )}
+
+            <Separator />
+
+            {/* Blank Order Option */}
+            <Button 
+              variant="outline" 
+              className="w-full justify-start gap-2"
+              onClick={startBlank}
+              data-testid="button-blank-order"
+            >
+              <Plus className="h-4 w-4" />
+              Start from Blank
+            </Button>
           </div>
-        </ScrollArea>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button 
-            onClick={() => createMutation.mutate()}
-            disabled={!orderType || !title || !description || !creditCost || !canAfford || createMutation.isPending}
-            data-testid="button-create-order"
-          >
-            {createMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create Draft"}
-          </Button>
-        </DialogFooter>
+        )}
+
+        {step === "customize" && (
+          <>
+            <ScrollArea className="max-h-[50vh]">
+              <div className="space-y-4 pr-4">
+                {selectedTemplate && (
+                  <div className="p-3 bg-primary/5 rounded-lg flex items-center gap-3 mb-2">
+                    <Zap className="h-4 w-4 text-primary" />
+                    <div className="flex-1">
+                      <span className="text-sm font-medium">Using template: {selectedTemplate.name}</span>
+                      {selectedTemplate.estimatedDays && (
+                        <p className="text-xs text-muted-foreground">
+                          Estimated delivery: ~{selectedTemplate.estimatedDays} days
+                        </p>
+                      )}
+                    </div>
+                    <Button 
+                      variant="ghost" 
+                      size="sm"
+                      onClick={() => { setStep("select"); setSelectedTemplate(null); }}
+                    >
+                      Change
+                    </Button>
+                  </div>
+                )}
+                
+                <div className="space-y-2">
+                  <Label htmlFor="orderType">Content Type</Label>
+                  <Select value={orderType} onValueChange={setOrderType}>
+                    <SelectTrigger data-testid="select-order-type">
+                      <SelectValue placeholder="Select content type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="article">Article</SelectItem>
+                      <SelectItem value="blog_post">Blog Post</SelectItem>
+                      <SelectItem value="social_media">Social Media Content</SelectItem>
+                      <SelectItem value="video_script">Video Script</SelectItem>
+                      <SelectItem value="graphics">Graphics/Design</SelectItem>
+                      <SelectItem value="other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="title">Title</Label>
+                  <Input
+                    id="title"
+                    placeholder="Brief title for your order"
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    data-testid="input-order-title"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="description">Description</Label>
+                  <Textarea
+                    id="description"
+                    placeholder="Describe what you need..."
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    rows={3}
+                    data-testid="input-order-description"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="specifications">Specifications (Optional)</Label>
+                  <Textarea
+                    id="specifications"
+                    placeholder="Technical specs, dimensions, word count, etc."
+                    value={specifications}
+                    onChange={(e) => setSpecifications(e.target.value)}
+                    rows={2}
+                    data-testid="input-order-specs"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="creditCost">Buy Power Cost (USD)</Label>
+                    <Input
+                      id="creditCost"
+                      type="number"
+                      min="1"
+                      step="0.01"
+                      placeholder="50.00"
+                      value={creditCost}
+                      onChange={(e) => setCreditCost(e.target.value)}
+                      data-testid="input-order-cost"
+                    />
+                    {creditCost && !canAfford && (
+                      <p className="text-xs text-destructive">Insufficient buy power</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="priority">Priority</Label>
+                    <Select value={priority} onValueChange={setPriority}>
+                      <SelectTrigger data-testid="select-order-priority">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="low">Low</SelectItem>
+                        <SelectItem value="normal">Normal</SelectItem>
+                        <SelectItem value="high">High</SelectItem>
+                        <SelectItem value="urgent">Urgent</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="clientNotes">Additional Notes (Optional)</Label>
+                  <Textarea
+                    id="clientNotes"
+                    placeholder="Any other notes for the team..."
+                    value={clientNotes}
+                    onChange={(e) => setClientNotes(e.target.value)}
+                    rows={2}
+                    data-testid="input-order-notes"
+                  />
+                </div>
+                
+                <Separator />
+                
+                {/* Save as template option */}
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="saveTemplate"
+                      checked={saveAsTemplate}
+                      onChange={(e) => setSaveAsTemplate(e.target.checked)}
+                      className="h-4 w-4 rounded border-gray-300"
+                      data-testid="checkbox-save-template"
+                    />
+                    <Label htmlFor="saveTemplate" className="text-sm font-normal cursor-pointer">
+                      Save this as a reusable order template
+                    </Label>
+                  </div>
+                  {saveAsTemplate && (
+                    <Input
+                      placeholder="Template name (e.g., Weekly Blog Post)"
+                      value={templateName}
+                      onChange={(e) => setTemplateName(e.target.value)}
+                      data-testid="input-template-name"
+                    />
+                  )}
+                </div>
+              </div>
+            </ScrollArea>
+            <DialogFooter className="gap-2">
+              <Button variant="outline" onClick={() => setStep("select")}>
+                Back
+              </Button>
+              <Button 
+                onClick={() => createMutation.mutate()}
+                disabled={!orderType || !title || !description || !creditCost || !canAfford || createMutation.isPending || (saveAsTemplate && !templateName.trim())}
+                data-testid="button-create-order"
+              >
+                {createMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create Draft"}
+              </Button>
+            </DialogFooter>
+          </>
+        )}
+
+        {step === "select" && (
+          <DialogFooter>
+            <Button variant="outline" onClick={handleClose}>
+              Cancel
+            </Button>
+          </DialogFooter>
+        )}
       </DialogContent>
     </Dialog>
   );

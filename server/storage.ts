@@ -67,6 +67,9 @@ import {
   type DiscordConnection, type InsertDiscordConnection, discordConnections,
   type DiscordPresenceSession, type InsertDiscordPresenceSession, discordPresenceSessions,
   type DiscordSettings, type InsertDiscordSettings, discordSettings,
+  // Order Templates types
+  type OrderTemplate, type InsertOrderTemplate, orderTemplates,
+  type SavedOrder, type InsertSavedOrder, savedOrders,
 } from "@shared/schema";
 import { db } from "./db";
 import { desc, eq, and, sql, or, isNull } from "drizzle-orm";
@@ -438,6 +441,23 @@ export interface IStorage {
   createDiscordSettings(settings: InsertDiscordSettings): Promise<DiscordSettings>;
   updateDiscordSettings(id: number, updates: Partial<InsertDiscordSettings>): Promise<DiscordSettings | undefined>;
   updateBotHeartbeat(): Promise<void>;
+  
+  // ==================== ORDER TEMPLATES METHODS ====================
+  
+  // Order Templates methods
+  getOrderTemplates(activeOnly?: boolean): Promise<OrderTemplate[]>;
+  getOrderTemplate(id: number): Promise<OrderTemplate | undefined>;
+  createOrderTemplate(template: InsertOrderTemplate): Promise<OrderTemplate>;
+  updateOrderTemplate(id: number, updates: Partial<InsertOrderTemplate>): Promise<OrderTemplate | undefined>;
+  deleteOrderTemplate(id: number): Promise<boolean>;
+  
+  // Saved Orders methods
+  getSavedOrders(clientId: string): Promise<SavedOrder[]>;
+  getSavedOrder(id: number): Promise<SavedOrder | undefined>;
+  createSavedOrder(order: InsertSavedOrder): Promise<SavedOrder>;
+  updateSavedOrder(id: number, updates: Partial<InsertSavedOrder>): Promise<SavedOrder | undefined>;
+  deleteSavedOrder(id: number): Promise<boolean>;
+  incrementSavedOrderUsage(id: number): Promise<SavedOrder | undefined>;
 }
 
 export class DbStorage implements IStorage {
@@ -2777,6 +2797,101 @@ export class DbStorage implements IStorage {
     await db
       .update(discordSettings)
       .set({ lastBotHeartbeat: new Date(), botConnected: true });
+  }
+  
+  // ==================== ORDER TEMPLATES METHODS ====================
+  
+  async getOrderTemplates(activeOnly: boolean = false): Promise<OrderTemplate[]> {
+    if (activeOnly) {
+      return await db
+        .select()
+        .from(orderTemplates)
+        .where(eq(orderTemplates.isActive, true))
+        .orderBy(orderTemplates.sortOrder);
+    }
+    return await db
+      .select()
+      .from(orderTemplates)
+      .orderBy(orderTemplates.sortOrder);
+  }
+  
+  async getOrderTemplate(id: number): Promise<OrderTemplate | undefined> {
+    const [template] = await db
+      .select()
+      .from(orderTemplates)
+      .where(eq(orderTemplates.id, id));
+    return template;
+  }
+  
+  async createOrderTemplate(template: InsertOrderTemplate): Promise<OrderTemplate> {
+    const [created] = await db.insert(orderTemplates).values(template).returning();
+    return created;
+  }
+  
+  async updateOrderTemplate(id: number, updates: Partial<InsertOrderTemplate>): Promise<OrderTemplate | undefined> {
+    const [updated] = await db
+      .update(orderTemplates)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(orderTemplates.id, id))
+      .returning();
+    return updated;
+  }
+  
+  async deleteOrderTemplate(id: number): Promise<boolean> {
+    const result = await db.delete(orderTemplates).where(eq(orderTemplates.id, id));
+    return true;
+  }
+  
+  // Saved Orders methods
+  async getSavedOrders(clientId: string): Promise<SavedOrder[]> {
+    return await db
+      .select()
+      .from(savedOrders)
+      .where(eq(savedOrders.clientId, clientId))
+      .orderBy(desc(savedOrders.lastUsedAt));
+  }
+  
+  async getSavedOrder(id: number): Promise<SavedOrder | undefined> {
+    const [order] = await db
+      .select()
+      .from(savedOrders)
+      .where(eq(savedOrders.id, id));
+    return order;
+  }
+  
+  async createSavedOrder(order: InsertSavedOrder): Promise<SavedOrder> {
+    const [created] = await db.insert(savedOrders).values(order).returning();
+    return created;
+  }
+  
+  async updateSavedOrder(id: number, updates: Partial<InsertSavedOrder>): Promise<SavedOrder | undefined> {
+    const [updated] = await db
+      .update(savedOrders)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(savedOrders.id, id))
+      .returning();
+    return updated;
+  }
+  
+  async deleteSavedOrder(id: number): Promise<boolean> {
+    await db.delete(savedOrders).where(eq(savedOrders.id, id));
+    return true;
+  }
+  
+  async incrementSavedOrderUsage(id: number): Promise<SavedOrder | undefined> {
+    const order = await this.getSavedOrder(id);
+    if (!order) return undefined;
+    
+    const [updated] = await db
+      .update(savedOrders)
+      .set({ 
+        usageCount: (order.usageCount || 0) + 1,
+        lastUsedAt: new Date(),
+        updatedAt: new Date()
+      })
+      .where(eq(savedOrders.id, id))
+      .returning();
+    return updated;
   }
 }
 

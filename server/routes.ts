@@ -5439,7 +5439,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Enrich with user and brand pack info
       const enrichedStats = await Promise.all(stats.map(async (stat) => {
         const user = await storage.getUser(stat.uploaderId);
-        const brandPack = await storage.getClientBrandPack(stat.brandPackId);
+        const brandPack = stat.brandPackId ? await storage.getClientBrandPack(stat.brandPackId) : null;
         return {
           ...stat,
           uploaderName: user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email : 'Unknown',
@@ -6746,6 +6746,194 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error fetching dashboard summary:", error);
       res.status(500).json({ error: "Failed to fetch dashboard summary" });
+    }
+  });
+
+  // ==================== ORDER TEMPLATES & SAVED ORDERS ====================
+
+  // Get order templates (client can see active ones only)
+  app.get("/api/order-templates", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user;
+      const activeOnly = user.role !== "admin";
+      const templates = await storage.getOrderTemplates(activeOnly);
+      res.json(templates);
+    } catch (error) {
+      console.error("Error fetching order templates:", error);
+      res.status(500).json({ error: "Failed to fetch order templates" });
+    }
+  });
+
+  // Get single order template
+  app.get("/api/order-templates/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const template = await storage.getOrderTemplate(parseInt(req.params.id));
+      if (!template) {
+        return res.status(404).json({ error: "Template not found" });
+      }
+      res.json(template);
+    } catch (error) {
+      console.error("Error fetching order template:", error);
+      res.status(500).json({ error: "Failed to fetch order template" });
+    }
+  });
+
+  // Create order template (admin only)
+  app.post("/api/order-templates", requireRole("admin"), async (req: any, res) => {
+    try {
+      const user = req.user;
+      const template = await storage.createOrderTemplate({
+        ...req.body,
+        createdBy: user.id,
+      });
+      res.json(template);
+    } catch (error) {
+      console.error("Error creating order template:", error);
+      res.status(500).json({ error: "Failed to create order template" });
+    }
+  });
+
+  // Update order template (admin only)
+  app.patch("/api/order-templates/:id", requireRole("admin"), async (req, res) => {
+    try {
+      const updated = await storage.updateOrderTemplate(parseInt(req.params.id), req.body);
+      if (!updated) {
+        return res.status(404).json({ error: "Template not found" });
+      }
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating order template:", error);
+      res.status(500).json({ error: "Failed to update order template" });
+    }
+  });
+
+  // Delete order template (admin only)
+  app.delete("/api/order-templates/:id", requireRole("admin"), async (req, res) => {
+    try {
+      await storage.deleteOrderTemplate(parseInt(req.params.id));
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting order template:", error);
+      res.status(500).json({ error: "Failed to delete order template" });
+    }
+  });
+
+  // Get saved orders for current user
+  app.get("/api/saved-orders", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user;
+      const savedOrders = await storage.getSavedOrders(user.id);
+      res.json(savedOrders);
+    } catch (error) {
+      console.error("Error fetching saved orders:", error);
+      res.status(500).json({ error: "Failed to fetch saved orders" });
+    }
+  });
+
+  // Get single saved order
+  app.get("/api/saved-orders/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user;
+      const savedOrder = await storage.getSavedOrder(parseInt(req.params.id));
+      if (!savedOrder) {
+        return res.status(404).json({ error: "Saved order not found" });
+      }
+      // Ensure user owns this saved order
+      if (savedOrder.clientId !== user.id) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      res.json(savedOrder);
+    } catch (error) {
+      console.error("Error fetching saved order:", error);
+      res.status(500).json({ error: "Failed to fetch saved order" });
+    }
+  });
+
+  // Create saved order
+  app.post("/api/saved-orders", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user;
+      const savedOrder = await storage.createSavedOrder({
+        ...req.body,
+        clientId: user.id,
+      });
+      res.json(savedOrder);
+    } catch (error) {
+      console.error("Error creating saved order:", error);
+      res.status(500).json({ error: "Failed to create saved order" });
+    }
+  });
+
+  // Update saved order
+  app.patch("/api/saved-orders/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user;
+      const savedOrder = await storage.getSavedOrder(parseInt(req.params.id));
+      if (!savedOrder) {
+        return res.status(404).json({ error: "Saved order not found" });
+      }
+      if (savedOrder.clientId !== user.id) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      const updated = await storage.updateSavedOrder(parseInt(req.params.id), req.body);
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating saved order:", error);
+      res.status(500).json({ error: "Failed to update saved order" });
+    }
+  });
+
+  // Delete saved order
+  app.delete("/api/saved-orders/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user;
+      const savedOrder = await storage.getSavedOrder(parseInt(req.params.id));
+      if (!savedOrder) {
+        return res.status(404).json({ error: "Saved order not found" });
+      }
+      if (savedOrder.clientId !== user.id) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      await storage.deleteSavedOrder(parseInt(req.params.id));
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting saved order:", error);
+      res.status(500).json({ error: "Failed to delete saved order" });
+    }
+  });
+
+  // Use saved order (increment usage and create order from it)
+  app.post("/api/saved-orders/:id/use", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user;
+      const savedOrder = await storage.getSavedOrder(parseInt(req.params.id));
+      if (!savedOrder) {
+        return res.status(404).json({ error: "Saved order not found" });
+      }
+      if (savedOrder.clientId !== user.id) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      
+      // Increment usage
+      await storage.incrementSavedOrderUsage(savedOrder.id);
+      
+      // Create a new content order based on saved order
+      const newOrder = await storage.createContentOrder({
+        clientId: user.id,
+        orderType: savedOrder.orderType,
+        title: savedOrder.title || "",
+        description: savedOrder.description || "",
+        specifications: savedOrder.specifications || null,
+        creditCost: savedOrder.creditCost || 0,
+        priority: savedOrder.priority || "normal",
+        clientNotes: savedOrder.clientNotes || null,
+        dueDate: null,
+      });
+      
+      res.json(newOrder);
+    } catch (error) {
+      console.error("Error using saved order:", error);
+      res.status(500).json({ error: "Failed to create order from saved template" });
     }
   });
 

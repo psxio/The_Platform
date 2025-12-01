@@ -1323,3 +1323,62 @@ export const insertDiscordSettingsSchema = createInsertSchema(discordSettings).o
 
 export type InsertDiscordSettings = z.infer<typeof insertDiscordSettingsSchema>;
 export type DiscordSettings = typeof discordSettings.$inferSelect;
+
+// ==================== ORDER TEMPLATES ====================
+
+// Order templates - pre-defined order configurations for clients
+export const orderTemplates = pgTable("order_templates", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  description: text("description"),
+  orderType: varchar("order_type", { length: 50 }).$type<ContentOrderType>().notNull(),
+  defaultTitle: varchar("default_title", { length: 255 }),
+  defaultDescription: text("default_description"),
+  defaultSpecifications: text("default_specifications"),
+  estimatedCost: integer("estimated_cost"), // Suggested cost in cents
+  estimatedDays: integer("estimated_days"), // Estimated delivery time
+  priority: varchar("priority", { length: 20 }).default("normal"),
+  isActive: boolean("is_active").notNull().default(true),
+  sortOrder: integer("sort_order").default(0),
+  createdBy: varchar("created_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertOrderTemplateSchema = createInsertSchema(orderTemplates).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertOrderTemplate = z.infer<typeof insertOrderTemplateSchema>;
+export type OrderTemplate = typeof orderTemplates.$inferSelect;
+
+// Saved orders - client's saved/favorite order configurations
+export const savedOrders = pgTable("saved_orders", {
+  id: serial("id").primaryKey(),
+  clientId: varchar("client_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  name: varchar("name", { length: 255 }).notNull(),
+  orderType: varchar("order_type", { length: 50 }).$type<ContentOrderType>().notNull(),
+  title: varchar("title", { length: 255 }),
+  description: text("description"),
+  specifications: text("specifications"),
+  creditCost: integer("credit_cost"),
+  priority: varchar("priority", { length: 20 }).default("normal"),
+  clientNotes: text("client_notes"),
+  usageCount: integer("usage_count").default(0),
+  lastUsedAt: timestamp("last_used_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertSavedOrderSchema = createInsertSchema(savedOrders).omit({
+  id: true,
+  usageCount: true,
+  lastUsedAt: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertSavedOrder = z.infer<typeof insertSavedOrderSchema>;
+export type SavedOrder = typeof savedOrders.$inferSelect;

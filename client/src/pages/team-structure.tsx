@@ -63,8 +63,8 @@ import {
 import type { InternalTeamMember, ClientProfile } from "@shared/schema";
 
 const employmentTypeOptions = [
-  { value: "full-time", label: "Full-Time", color: "bg-green-500/20 text-green-700 dark:text-green-400" },
-  { value: "part-time", label: "Part-Time", color: "bg-blue-500/20 text-blue-700 dark:text-blue-400" },
+  { value: "full_time", label: "Full-Time", color: "bg-green-500/20 text-green-700 dark:text-green-400" },
+  { value: "part_time", label: "Part-Time", color: "bg-blue-500/20 text-blue-700 dark:text-blue-400" },
   { value: "contractor", label: "Contractor", color: "bg-purple-500/20 text-purple-700 dark:text-purple-400" },
   { value: "intern", label: "Intern", color: "bg-orange-500/20 text-orange-700 dark:text-orange-400" },
   { value: "shadow", label: "Shadow", color: "bg-gray-500/20 text-gray-700 dark:text-gray-400" },
@@ -451,7 +451,7 @@ export default function TeamStructure() {
                 <Briefcase className="h-5 w-5 text-green-500" />
               </div>
               <div>
-                <p className="text-2xl font-bold">{typeStats["full-time"] || 0}</p>
+                <p className="text-2xl font-bold">{typeStats["full_time"] || 0}</p>
                 <p className="text-xs text-muted-foreground">Full-Time</p>
               </div>
             </div>

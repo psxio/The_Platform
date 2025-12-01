@@ -115,11 +115,22 @@ const paymentMethodOptions = [
   { value: "other", label: "Other" },
 ];
 
+const employmentTypeOptions = [
+  { value: "full_time", label: "Full-Time" },
+  { value: "part_time", label: "Part-Time" },
+  { value: "contractor", label: "Contractor" },
+  { value: "intern", label: "Intern" },
+  { value: "shadow", label: "Shadow" },
+];
+
 const teamMemberSchema = z.object({
   name: z.string().min(1, "Name is required"),
   nickname: z.string().optional(),
   role: z.string().default("contributor"),
   department: z.string().default("general"),
+  employmentType: z.string().default("full_time"),
+  supervisorId: z.coerce.number().nullable().optional(),
+  currentFocus: z.string().optional(),
   walletAddress: z.string().optional(),
   walletChain: z.string().default("base"),
   payRate: z.coerce.number().min(0).default(0),
@@ -196,6 +207,9 @@ export default function InternalTeam() {
       nickname: "",
       role: "contributor",
       department: "general",
+      employmentType: "full_time",
+      supervisorId: null,
+      currentFocus: "",
       walletAddress: "",
       walletChain: "base",
       payRate: 0,
@@ -292,6 +306,9 @@ export default function InternalTeam() {
       nickname: member.nickname || "",
       role: member.role || "contributor",
       department: member.department || "general",
+      employmentType: member.employmentType || "full_time",
+      supervisorId: member.supervisorId || null,
+      currentFocus: member.currentFocus || "",
       walletAddress: member.walletAddress || "",
       walletChain: member.walletChain || "base",
       payRate: member.payRate || 0,
@@ -418,6 +435,69 @@ export default function InternalTeam() {
                       )}
                     />
                   </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <FormField
+                      control={form.control}
+                      name="employmentType"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Employment Type</FormLabel>
+                          <Select onValueChange={field.onChange} defaultValue={field.value}>
+                            <FormControl>
+                              <SelectTrigger data-testid="select-employment-type">
+                                <SelectValue placeholder="Select type" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              {employmentTypeOptions.map(type => (
+                                <SelectItem key={type.value} value={type.value}>{type.label}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name="supervisorId"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Reports To</FormLabel>
+                          <Select 
+                            onValueChange={(val) => field.onChange(val === "none" ? null : parseInt(val))} 
+                            value={field.value ? String(field.value) : "none"}
+                          >
+                            <FormControl>
+                              <SelectTrigger data-testid="select-supervisor">
+                                <SelectValue placeholder="Select supervisor" />
+                              </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                              <SelectItem value="none">No Supervisor</SelectItem>
+                              {members.map(m => (
+                                <SelectItem key={m.id} value={String(m.id)}>{m.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                  <FormField
+                    control={form.control}
+                    name="currentFocus"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Current Focus</FormLabel>
+                        <FormControl>
+                          <Input placeholder="Current project or area of focus" {...field} data-testid="input-current-focus" />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
                   <div className="grid grid-cols-2 gap-4">
                     <FormField
                       control={form.control}
@@ -894,6 +974,69 @@ export default function InternalTeam() {
                     )}
                   />
                 </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField
+                    control={form.control}
+                    name="employmentType"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Employment Type</FormLabel>
+                        <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select type" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {employmentTypeOptions.map(type => (
+                              <SelectItem key={type.value} value={type.value}>{type.label}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name="supervisorId"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Reports To</FormLabel>
+                        <Select 
+                          onValueChange={(val) => field.onChange(val === "none" ? null : parseInt(val))} 
+                          value={field.value ? String(field.value) : "none"}
+                        >
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select supervisor" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="none">No Supervisor</SelectItem>
+                            {members.filter(m => m.id !== selectedMember?.id).map(m => (
+                              <SelectItem key={m.id} value={String(m.id)}>{m.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+                <FormField
+                  control={form.control}
+                  name="currentFocus"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Current Focus</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Current project or area of focus" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
                 <div className="grid grid-cols-2 gap-4">
                   <FormField
                     control={form.control}

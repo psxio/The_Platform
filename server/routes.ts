@@ -7633,6 +7633,229 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ==================== CLIENT PROFILE ROUTES ====================
+
+  // Get all client profiles - accessible to all authenticated team members
+  app.get("/api/client-profiles", isAuthenticated, async (req: any, res) => {
+    try {
+      const profiles = await storage.getClientProfiles();
+      res.json(profiles);
+    } catch (error) {
+      console.error("Error fetching client profiles:", error);
+      res.status(500).json({ error: "Failed to fetch client profiles" });
+    }
+  });
+
+  // Search client profiles
+  app.get("/api/client-profiles/search", isAuthenticated, async (req: any, res) => {
+    try {
+      const query = req.query.q as string || "";
+      const profiles = await storage.searchClientProfiles(query);
+      res.json(profiles);
+    } catch (error) {
+      console.error("Error searching client profiles:", error);
+      res.status(500).json({ error: "Failed to search client profiles" });
+    }
+  });
+
+  // Get a single client profile
+  app.get("/api/client-profiles/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const profile = await storage.getClientProfile(id);
+      if (!profile) {
+        return res.status(404).json({ error: "Client profile not found" });
+      }
+      res.json(profile);
+    } catch (error) {
+      console.error("Error fetching client profile:", error);
+      res.status(500).json({ error: "Failed to fetch client profile" });
+    }
+  });
+
+  // Get client profile by slug
+  app.get("/api/client-profiles/slug/:slug", isAuthenticated, async (req: any, res) => {
+    try {
+      const profile = await storage.getClientProfileBySlug(req.params.slug);
+      if (!profile) {
+        return res.status(404).json({ error: "Client profile not found" });
+      }
+      res.json(profile);
+    } catch (error) {
+      console.error("Error fetching client profile:", error);
+      res.status(500).json({ error: "Failed to fetch client profile" });
+    }
+  });
+
+  // Create client profile - content/admin only
+  app.post("/api/client-profiles", requireRole("content"), async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const profile = await storage.createClientProfile({
+        ...req.body,
+        createdBy: user.id,
+      });
+      res.status(201).json(profile);
+    } catch (error) {
+      console.error("Error creating client profile:", error);
+      res.status(500).json({ error: "Failed to create client profile" });
+    }
+  });
+
+  // Update client profile - content/admin only
+  app.patch("/api/client-profiles/:id", requireRole("content"), async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const profile = await storage.updateClientProfile(id, req.body);
+      if (!profile) {
+        return res.status(404).json({ error: "Client profile not found" });
+      }
+      res.json(profile);
+    } catch (error) {
+      console.error("Error updating client profile:", error);
+      res.status(500).json({ error: "Failed to update client profile" });
+    }
+  });
+
+  // Delete client profile - admin only
+  app.delete("/api/client-profiles/:id", requireRole("admin"), async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      await storage.deleteClientProfile(id);
+      res.status(204).end();
+    } catch (error) {
+      console.error("Error deleting client profile:", error);
+      res.status(500).json({ error: "Failed to delete client profile" });
+    }
+  });
+
+  // Get tasks/orders linked to a client profile
+  app.get("/api/client-profiles/:id/links", isAuthenticated, async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const links = await storage.getClientTaskLinks(id);
+      res.json(links);
+    } catch (error) {
+      console.error("Error fetching client links:", error);
+      res.status(500).json({ error: "Failed to fetch client links" });
+    }
+  });
+
+  // Link a task or order to a client profile
+  app.post("/api/client-profiles/:id/links", requireRole("content"), async (req: any, res) => {
+    try {
+      const clientProfileId = parseInt(req.params.id);
+      const { taskId, orderId } = req.body;
+      const link = await storage.linkTaskToClient(clientProfileId, taskId, orderId);
+      res.status(201).json(link);
+    } catch (error) {
+      console.error("Error linking to client:", error);
+      res.status(500).json({ error: "Failed to link to client" });
+    }
+  });
+
+  // Unlink from client profile
+  app.delete("/api/client-links/:id", requireRole("content"), async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      await storage.unlinkTaskFromClient(id);
+      res.status(204).end();
+    } catch (error) {
+      console.error("Error unlinking from client:", error);
+      res.status(500).json({ error: "Failed to unlink from client" });
+    }
+  });
+
+  // ==================== CLIENT CALENDAR ROUTES ====================
+
+  // Get all calendar events (optionally filtered by date range)
+  app.get("/api/calendar-events", isAuthenticated, async (req: any, res) => {
+    try {
+      const startDate = req.query.start ? new Date(req.query.start) : undefined;
+      const endDate = req.query.end ? new Date(req.query.end) : undefined;
+      const events = await storage.getAllCalendarEvents(startDate, endDate);
+      res.json(events);
+    } catch (error) {
+      console.error("Error fetching calendar events:", error);
+      res.status(500).json({ error: "Failed to fetch calendar events" });
+    }
+  });
+
+  // Get calendar events for a specific client
+  app.get("/api/client-profiles/:id/calendar", isAuthenticated, async (req: any, res) => {
+    try {
+      const clientProfileId = parseInt(req.params.id);
+      const events = await storage.getClientCalendarEvents(clientProfileId);
+      res.json(events);
+    } catch (error) {
+      console.error("Error fetching client calendar events:", error);
+      res.status(500).json({ error: "Failed to fetch client calendar events" });
+    }
+  });
+
+  // Get a single calendar event
+  app.get("/api/calendar-events/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const event = await storage.getClientCalendarEvent(id);
+      if (!event) {
+        return res.status(404).json({ error: "Calendar event not found" });
+      }
+      res.json(event);
+    } catch (error) {
+      console.error("Error fetching calendar event:", error);
+      res.status(500).json({ error: "Failed to fetch calendar event" });
+    }
+  });
+
+  // Create calendar event - content/admin only
+  app.post("/api/calendar-events", requireRole("content"), async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const event = await storage.createClientCalendarEvent({
+        ...req.body,
+        startDate: new Date(req.body.startDate),
+        endDate: req.body.endDate ? new Date(req.body.endDate) : null,
+        createdBy: user.id,
+      });
+      res.status(201).json(event);
+    } catch (error) {
+      console.error("Error creating calendar event:", error);
+      res.status(500).json({ error: "Failed to create calendar event" });
+    }
+  });
+
+  // Update calendar event - content/admin only
+  app.patch("/api/calendar-events/:id", requireRole("content"), async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const updates = { ...req.body };
+      if (updates.startDate) updates.startDate = new Date(updates.startDate);
+      if (updates.endDate) updates.endDate = new Date(updates.endDate);
+      
+      const event = await storage.updateClientCalendarEvent(id, updates);
+      if (!event) {
+        return res.status(404).json({ error: "Calendar event not found" });
+      }
+      res.json(event);
+    } catch (error) {
+      console.error("Error updating calendar event:", error);
+      res.status(500).json({ error: "Failed to update calendar event" });
+    }
+  });
+
+  // Delete calendar event - content/admin only
+  app.delete("/api/calendar-events/:id", requireRole("content"), async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      await storage.deleteClientCalendarEvent(id);
+      res.status(204).end();
+    } catch (error) {
+      console.error("Error deleting calendar event:", error);
+      res.status(500).json({ error: "Failed to delete calendar event" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

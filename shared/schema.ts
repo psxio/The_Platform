@@ -1479,3 +1479,96 @@ export const insertDeliverableAnnotationSchema = createInsertSchema(deliverableA
 
 export type InsertDeliverableAnnotation = z.infer<typeof insertDeliverableAnnotationSchema>;
 export type DeliverableAnnotation = typeof deliverableAnnotations.$inferSelect;
+
+// ==================== CLIENT PROFILES ====================
+
+// Relationship statuses for clients/partners
+export const clientRelationshipStatuses = ["active", "prospect", "partner", "inactive", "paused"] as const;
+export type ClientRelationshipStatus = typeof clientRelationshipStatuses[number];
+
+// Client profiles - central directory for all clients/partners
+export const clientProfiles = pgTable("client_profiles", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  slug: varchar("slug", { length: 255 }).unique().notNull(), // URL-friendly identifier
+  description: text("description"),
+  industry: varchar("industry", { length: 100 }), // e.g., "NFT", "DeFi", "Gaming", "Media"
+  relationshipStatus: varchar("relationship_status", { length: 50 }).$type<ClientRelationshipStatus>().default("active"),
+  keyContacts: jsonb("key_contacts").$type<Array<{name: string; role?: string; email?: string; telegram?: string; discord?: string}>>().default([]),
+  projectHistory: text("project_history"), // Notes about past work and projects
+  notes: text("notes"), // General notes
+  logoUrl: text("logo_url"),
+  website: text("website"),
+  socialLinks: jsonb("social_links").$type<{twitter?: string; discord?: string; telegram?: string; farcaster?: string}>(),
+  tags: text("tags").array(), // For categorization
+  color: varchar("color", { length: 20 }).default("#6366F1"), // Brand color for UI
+  createdBy: varchar("created_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertClientProfileSchema = createInsertSchema(clientProfiles).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertClientProfile = z.infer<typeof insertClientProfileSchema>;
+export type ClientProfile = typeof clientProfiles.$inferSelect;
+
+// ==================== CLIENT CALENDAR EVENTS ====================
+
+// Calendar event types
+export const calendarEventTypes = ["deadline", "milestone", "meeting", "deliverable", "launch", "review", "other"] as const;
+export type CalendarEventType = typeof calendarEventTypes[number];
+
+// Client calendar events - per-client content calendars
+export const clientCalendarEvents = pgTable("client_calendar_events", {
+  id: serial("id").primaryKey(),
+  clientProfileId: integer("client_profile_id").notNull().references(() => clientProfiles.id, { onDelete: "cascade" }),
+  title: varchar("title", { length: 255 }).notNull(),
+  description: text("description"),
+  eventType: varchar("event_type", { length: 50 }).$type<CalendarEventType>().default("other"),
+  startDate: timestamp("start_date").notNull(),
+  endDate: timestamp("end_date"),
+  allDay: boolean("all_day").default(false),
+  color: varchar("color", { length: 20 }), // Override client's default color
+  googleCalendarEventId: varchar("google_calendar_event_id", { length: 255 }), // For bidirectional sync
+  googleCalendarId: varchar("google_calendar_id", { length: 255 }), // Which Google Calendar this syncs to
+  syncStatus: varchar("sync_status", { length: 20 }).default("pending"), // pending, synced, error
+  lastSyncedAt: timestamp("last_synced_at"),
+  relatedTaskId: integer("related_task_id").references(() => contentTasks.id, { onDelete: "set null" }),
+  relatedOrderId: integer("related_order_id").references(() => contentOrders.id, { onDelete: "set null" }),
+  createdBy: varchar("created_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertClientCalendarEventSchema = createInsertSchema(clientCalendarEvents).omit({
+  id: true,
+  lastSyncedAt: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertClientCalendarEvent = z.infer<typeof insertClientCalendarEventSchema>;
+export type ClientCalendarEvent = typeof clientCalendarEvents.$inferSelect;
+
+// ==================== CLIENT PROFILE LINKS ====================
+
+// Link content tasks and orders to client profiles
+export const clientTaskLinks = pgTable("client_task_links", {
+  id: serial("id").primaryKey(),
+  clientProfileId: integer("client_profile_id").notNull().references(() => clientProfiles.id, { onDelete: "cascade" }),
+  taskId: integer("task_id").references(() => contentTasks.id, { onDelete: "cascade" }),
+  orderId: integer("order_id").references(() => contentOrders.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertClientTaskLinkSchema = createInsertSchema(clientTaskLinks).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertClientTaskLink = z.infer<typeof insertClientTaskLinkSchema>;
+export type ClientTaskLink = typeof clientTaskLinks.$inferSelect;

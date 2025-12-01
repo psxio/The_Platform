@@ -77,6 +77,10 @@ import {
   type TaskMessage, type InsertTaskMessage, taskMessages,
   // Deliverable Annotations types
   type DeliverableAnnotation, type InsertDeliverableAnnotation, deliverableAnnotations,
+  // Client Profile types
+  type ClientProfile, type InsertClientProfile, clientProfiles,
+  type ClientCalendarEvent, type InsertClientCalendarEvent, clientCalendarEvents,
+  type ClientTaskLink, type InsertClientTaskLink, clientTaskLinks,
 } from "@shared/schema";
 import { db } from "./db";
 import { desc, eq, and, sql, or, isNull } from "drizzle-orm";
@@ -505,6 +509,32 @@ export interface IStorage {
   updateDeliverableAnnotation(id: number, updates: Partial<InsertDeliverableAnnotation>): Promise<DeliverableAnnotation | undefined>;
   resolveDeliverableAnnotation(id: number, resolvedBy: string): Promise<DeliverableAnnotation | undefined>;
   deleteDeliverableAnnotation(id: number): Promise<boolean>;
+  
+  // Client Profile methods
+  getClientProfiles(): Promise<ClientProfile[]>;
+  getClientProfile(id: number): Promise<ClientProfile | undefined>;
+  getClientProfileBySlug(slug: string): Promise<ClientProfile | undefined>;
+  createClientProfile(profile: InsertClientProfile): Promise<ClientProfile>;
+  updateClientProfile(id: number, profile: Partial<InsertClientProfile>): Promise<ClientProfile | undefined>;
+  deleteClientProfile(id: number): Promise<boolean>;
+  searchClientProfiles(query: string): Promise<ClientProfile[]>;
+  
+  // Client Calendar Event methods
+  getClientCalendarEvents(clientProfileId: number): Promise<ClientCalendarEvent[]>;
+  getClientCalendarEvent(id: number): Promise<ClientCalendarEvent | undefined>;
+  getAllCalendarEvents(startDate?: Date, endDate?: Date): Promise<ClientCalendarEvent[]>;
+  createClientCalendarEvent(event: InsertClientCalendarEvent): Promise<ClientCalendarEvent>;
+  updateClientCalendarEvent(id: number, event: Partial<InsertClientCalendarEvent>): Promise<ClientCalendarEvent | undefined>;
+  deleteClientCalendarEvent(id: number): Promise<boolean>;
+  getCalendarEventsByGoogleId(googleEventId: string): Promise<ClientCalendarEvent | undefined>;
+  updateCalendarEventSyncStatus(id: number, status: string, googleEventId?: string): Promise<ClientCalendarEvent | undefined>;
+  
+  // Client Task Link methods
+  linkTaskToClient(clientProfileId: number, taskId?: number, orderId?: number): Promise<ClientTaskLink>;
+  getClientTaskLinks(clientProfileId: number): Promise<ClientTaskLink[]>;
+  getClientForTask(taskId: number): Promise<ClientProfile | undefined>;
+  getClientForOrder(orderId: number): Promise<ClientProfile | undefined>;
+  unlinkTaskFromClient(id: number): Promise<boolean>;
 }
 
 export class DbStorage implements IStorage {
@@ -3219,6 +3249,190 @@ export class DbStorage implements IStorage {
 
   async deleteDeliverableAnnotation(id: number): Promise<boolean> {
     await db.delete(deliverableAnnotations).where(eq(deliverableAnnotations.id, id));
+    return true;
+  }
+
+  // ==================== CLIENT PROFILE METHODS ====================
+
+  async getClientProfiles(): Promise<ClientProfile[]> {
+    return await db
+      .select()
+      .from(clientProfiles)
+      .orderBy(clientProfiles.name);
+  }
+
+  async getClientProfile(id: number): Promise<ClientProfile | undefined> {
+    const [profile] = await db
+      .select()
+      .from(clientProfiles)
+      .where(eq(clientProfiles.id, id));
+    return profile;
+  }
+
+  async getClientProfileBySlug(slug: string): Promise<ClientProfile | undefined> {
+    const [profile] = await db
+      .select()
+      .from(clientProfiles)
+      .where(eq(clientProfiles.slug, slug));
+    return profile;
+  }
+
+  async createClientProfile(profile: InsertClientProfile): Promise<ClientProfile> {
+    const [created] = await db.insert(clientProfiles).values(profile).returning();
+    return created;
+  }
+
+  async updateClientProfile(id: number, profile: Partial<InsertClientProfile>): Promise<ClientProfile | undefined> {
+    const [updated] = await db
+      .update(clientProfiles)
+      .set({ ...profile, updatedAt: new Date() })
+      .where(eq(clientProfiles.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteClientProfile(id: number): Promise<boolean> {
+    await db.delete(clientProfiles).where(eq(clientProfiles.id, id));
+    return true;
+  }
+
+  async searchClientProfiles(query: string): Promise<ClientProfile[]> {
+    const lowercaseQuery = `%${query.toLowerCase()}%`;
+    return await db
+      .select()
+      .from(clientProfiles)
+      .where(
+        or(
+          sql`LOWER(${clientProfiles.name}) LIKE ${lowercaseQuery}`,
+          sql`LOWER(${clientProfiles.description}) LIKE ${lowercaseQuery}`,
+          sql`LOWER(${clientProfiles.industry}) LIKE ${lowercaseQuery}`
+        )
+      )
+      .orderBy(clientProfiles.name);
+  }
+
+  // ==================== CLIENT CALENDAR EVENT METHODS ====================
+
+  async getClientCalendarEvents(clientProfileId: number): Promise<ClientCalendarEvent[]> {
+    return await db
+      .select()
+      .from(clientCalendarEvents)
+      .where(eq(clientCalendarEvents.clientProfileId, clientProfileId))
+      .orderBy(clientCalendarEvents.startDate);
+  }
+
+  async getClientCalendarEvent(id: number): Promise<ClientCalendarEvent | undefined> {
+    const [event] = await db
+      .select()
+      .from(clientCalendarEvents)
+      .where(eq(clientCalendarEvents.id, id));
+    return event;
+  }
+
+  async getAllCalendarEvents(startDate?: Date, endDate?: Date): Promise<ClientCalendarEvent[]> {
+    let query = db.select().from(clientCalendarEvents);
+    
+    if (startDate && endDate) {
+      return await db
+        .select()
+        .from(clientCalendarEvents)
+        .where(
+          and(
+            sql`${clientCalendarEvents.startDate} >= ${startDate}`,
+            sql`${clientCalendarEvents.startDate} <= ${endDate}`
+          )
+        )
+        .orderBy(clientCalendarEvents.startDate);
+    }
+    
+    return await db
+      .select()
+      .from(clientCalendarEvents)
+      .orderBy(clientCalendarEvents.startDate);
+  }
+
+  async createClientCalendarEvent(event: InsertClientCalendarEvent): Promise<ClientCalendarEvent> {
+    const [created] = await db.insert(clientCalendarEvents).values(event).returning();
+    return created;
+  }
+
+  async updateClientCalendarEvent(id: number, event: Partial<InsertClientCalendarEvent>): Promise<ClientCalendarEvent | undefined> {
+    const [updated] = await db
+      .update(clientCalendarEvents)
+      .set({ ...event, updatedAt: new Date() })
+      .where(eq(clientCalendarEvents.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteClientCalendarEvent(id: number): Promise<boolean> {
+    await db.delete(clientCalendarEvents).where(eq(clientCalendarEvents.id, id));
+    return true;
+  }
+
+  async getCalendarEventsByGoogleId(googleEventId: string): Promise<ClientCalendarEvent | undefined> {
+    const [event] = await db
+      .select()
+      .from(clientCalendarEvents)
+      .where(eq(clientCalendarEvents.googleCalendarEventId, googleEventId));
+    return event;
+  }
+
+  async updateCalendarEventSyncStatus(id: number, status: string, googleEventId?: string): Promise<ClientCalendarEvent | undefined> {
+    const updates: Record<string, unknown> = { 
+      syncStatus: status, 
+      lastSyncedAt: new Date(),
+      updatedAt: new Date()
+    };
+    if (googleEventId) {
+      updates.googleCalendarEventId = googleEventId;
+    }
+    const [updated] = await db
+      .update(clientCalendarEvents)
+      .set(updates)
+      .where(eq(clientCalendarEvents.id, id))
+      .returning();
+    return updated;
+  }
+
+  // ==================== CLIENT TASK LINK METHODS ====================
+
+  async linkTaskToClient(clientProfileId: number, taskId?: number, orderId?: number): Promise<ClientTaskLink> {
+    const [link] = await db.insert(clientTaskLinks).values({
+      clientProfileId,
+      taskId: taskId || null,
+      orderId: orderId || null,
+    }).returning();
+    return link;
+  }
+
+  async getClientTaskLinks(clientProfileId: number): Promise<ClientTaskLink[]> {
+    return await db
+      .select()
+      .from(clientTaskLinks)
+      .where(eq(clientTaskLinks.clientProfileId, clientProfileId));
+  }
+
+  async getClientForTask(taskId: number): Promise<ClientProfile | undefined> {
+    const [result] = await db
+      .select({ profile: clientProfiles })
+      .from(clientTaskLinks)
+      .innerJoin(clientProfiles, eq(clientTaskLinks.clientProfileId, clientProfiles.id))
+      .where(eq(clientTaskLinks.taskId, taskId));
+    return result?.profile;
+  }
+
+  async getClientForOrder(orderId: number): Promise<ClientProfile | undefined> {
+    const [result] = await db
+      .select({ profile: clientProfiles })
+      .from(clientTaskLinks)
+      .innerJoin(clientProfiles, eq(clientTaskLinks.clientProfileId, clientProfiles.id))
+      .where(eq(clientTaskLinks.orderId, orderId));
+    return result?.profile;
+  }
+
+  async unlinkTaskFromClient(id: number): Promise<boolean> {
+    await db.delete(clientTaskLinks).where(eq(clientTaskLinks.id, id));
     return true;
   }
 }

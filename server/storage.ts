@@ -84,6 +84,8 @@ import {
   // Internal Team Member types
   type InternalTeamMember, type InsertInternalTeamMember, internalTeamMembers,
   type TeamPaymentHistory, type InsertTeamPaymentHistory, teamPaymentHistory,
+  // Team Member Client Assignments types
+  type TeamMemberClientAssignment, type InsertTeamMemberClientAssignment, teamMemberClientAssignments,
   // Content Ideas (Pre-Production Approval) types
   type ContentIdea, type InsertContentIdea, contentIdeas,
 } from "@shared/schema";
@@ -553,6 +555,19 @@ export interface IStorage {
   searchInternalTeamMembers(query: string): Promise<InternalTeamMember[]>;
   getTeamMembersByDepartment(department: string): Promise<InternalTeamMember[]>;
   getTeamMembersByStatus(status: string): Promise<InternalTeamMember[]>;
+  
+  // Team Structure methods (hierarchy, employment types)
+  getTeamMembersBySupervisor(supervisorId: number): Promise<InternalTeamMember[]>;
+  getTeamMembersByEmploymentType(employmentType: string): Promise<InternalTeamMember[]>;
+  getTeamHierarchy(): Promise<InternalTeamMember[]>; // All members with supervisor info
+  
+  // Team Member Client Assignments methods
+  getTeamMemberClientAssignments(memberId: number): Promise<TeamMemberClientAssignment[]>;
+  getClientProfileAssignees(clientProfileId: number): Promise<TeamMemberClientAssignment[]>;
+  getClientUserAssignees(clientUserId: string): Promise<TeamMemberClientAssignment[]>;
+  createTeamMemberClientAssignment(assignment: InsertTeamMemberClientAssignment): Promise<TeamMemberClientAssignment>;
+  updateTeamMemberClientAssignment(id: number, updates: Partial<InsertTeamMemberClientAssignment>): Promise<TeamMemberClientAssignment | undefined>;
+  deleteTeamMemberClientAssignment(id: number): Promise<boolean>;
   
   // Team Payment History methods
   getTeamPaymentHistory(memberId: number): Promise<TeamPaymentHistory[]>;
@@ -3548,6 +3563,73 @@ export class DbStorage implements IStorage {
       .from(internalTeamMembers)
       .where(eq(internalTeamMembers.status, status))
       .orderBy(internalTeamMembers.name);
+  }
+
+  // ==================== TEAM STRUCTURE METHODS ====================
+
+  async getTeamMembersBySupervisor(supervisorId: number): Promise<InternalTeamMember[]> {
+    return await db
+      .select()
+      .from(internalTeamMembers)
+      .where(eq(internalTeamMembers.supervisorId, supervisorId))
+      .orderBy(internalTeamMembers.name);
+  }
+
+  async getTeamMembersByEmploymentType(employmentType: string): Promise<InternalTeamMember[]> {
+    return await db
+      .select()
+      .from(internalTeamMembers)
+      .where(eq(internalTeamMembers.employmentType, employmentType))
+      .orderBy(internalTeamMembers.name);
+  }
+
+  async getTeamHierarchy(): Promise<InternalTeamMember[]> {
+    return await db
+      .select()
+      .from(internalTeamMembers)
+      .orderBy(internalTeamMembers.name);
+  }
+
+  // ==================== TEAM MEMBER CLIENT ASSIGNMENTS METHODS ====================
+
+  async getTeamMemberClientAssignments(memberId: number): Promise<TeamMemberClientAssignment[]> {
+    return await db
+      .select()
+      .from(teamMemberClientAssignments)
+      .where(eq(teamMemberClientAssignments.memberId, memberId));
+  }
+
+  async getClientProfileAssignees(clientProfileId: number): Promise<TeamMemberClientAssignment[]> {
+    return await db
+      .select()
+      .from(teamMemberClientAssignments)
+      .where(eq(teamMemberClientAssignments.clientProfileId, clientProfileId));
+  }
+
+  async getClientUserAssignees(clientUserId: string): Promise<TeamMemberClientAssignment[]> {
+    return await db
+      .select()
+      .from(teamMemberClientAssignments)
+      .where(eq(teamMemberClientAssignments.clientUserId, clientUserId));
+  }
+
+  async createTeamMemberClientAssignment(assignment: InsertTeamMemberClientAssignment): Promise<TeamMemberClientAssignment> {
+    const [created] = await db.insert(teamMemberClientAssignments).values(assignment).returning();
+    return created;
+  }
+
+  async updateTeamMemberClientAssignment(id: number, updates: Partial<InsertTeamMemberClientAssignment>): Promise<TeamMemberClientAssignment | undefined> {
+    const [updated] = await db
+      .update(teamMemberClientAssignments)
+      .set(updates)
+      .where(eq(teamMemberClientAssignments.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteTeamMemberClientAssignment(id: number): Promise<boolean> {
+    await db.delete(teamMemberClientAssignments).where(eq(teamMemberClientAssignments.id, id));
+    return true;
   }
 
   // ==================== TEAM PAYMENT HISTORY METHODS ====================

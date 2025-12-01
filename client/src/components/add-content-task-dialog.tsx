@@ -3,7 +3,7 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { format, addDays, addWeeks, getDay } from "date-fns";
-import { insertContentTaskSchema, type InsertContentTask, type DirectoryMember, type ContentTask, type Campaign, type TaskTemplate } from "@shared/schema";
+import { insertContentTaskSchema, type InsertContentTask, type DirectoryMember, type ContentTask, type Campaign, type TaskTemplate, internalProjects, type InternalProject } from "@shared/schema";
 import {
   Dialog,
   DialogContent,
@@ -53,7 +53,9 @@ import {
   Zap,
   AlertCircle,
   Flag,
-  CheckCircle2
+  CheckCircle2,
+  Building2,
+  Home
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -113,6 +115,8 @@ export function AddContentTaskDialog({ open, onOpenChange, task }: AddContentTas
       dueDate: undefined,
       assignedBy: currentUser,
       client: undefined,
+      clientType: "external",
+      internalProject: undefined,
       deliverable: undefined,
       notes: undefined,
       priority: "medium",
@@ -129,6 +133,8 @@ export function AddContentTaskDialog({ open, onOpenChange, task }: AddContentTas
         dueDate: task.dueDate || undefined,
         assignedBy: task.assignedBy || currentUser,
         client: task.client || undefined,
+        clientType: (task.clientType as "internal" | "external") || "external",
+        internalProject: task.internalProject || undefined,
         deliverable: task.deliverable || undefined,
         notes: task.notes || undefined,
         priority: task.priority || "medium",
@@ -155,6 +161,8 @@ export function AddContentTaskDialog({ open, onOpenChange, task }: AddContentTas
       dueDate: undefined,
       assignedBy: currentUser,
       client: undefined,
+      clientType: "external",
+      internalProject: undefined,
       deliverable: undefined,
       notes: undefined,
       priority: "medium",
@@ -697,13 +705,57 @@ export function AddContentTaskDialog({ open, onOpenChange, task }: AddContentTas
 
                   <FormField
                     control={form.control}
+                    name="clientType"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Client Type</FormLabel>
+                        <div className="flex gap-2">
+                          <Button
+                            type="button"
+                            variant={field.value === "external" ? "default" : "outline"}
+                            size="sm"
+                            className="flex-1"
+                            onClick={() => {
+                              field.onChange("external");
+                              form.setValue("internalProject", undefined);
+                            }}
+                            data-testid="client-type-external"
+                          >
+                            <Building2 className="h-3 w-3 mr-1" />
+                            External
+                          </Button>
+                          <Button
+                            type="button"
+                            variant={field.value === "internal" ? "default" : "outline"}
+                            size="sm"
+                            className="flex-1"
+                            onClick={() => {
+                              field.onChange("internal");
+                              form.setValue("client", undefined);
+                            }}
+                            data-testid="client-type-internal"
+                          >
+                            <Home className="h-3 w-3 mr-1" />
+                            Internal
+                          </Button>
+                        </div>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+
+                {/* Client/Project field - shows based on client type */}
+                {form.watch("clientType") === "external" ? (
+                  <FormField
+                    control={form.control}
                     name="client"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Client</FormLabel>
+                        <FormLabel>Client Name</FormLabel>
                         <FormControl>
                           <Input
-                            placeholder="Client name"
+                            placeholder="Enter client name"
                             data-testid="input-client"
                             {...field}
                             value={field.value || ""}
@@ -713,7 +765,35 @@ export function AddContentTaskDialog({ open, onOpenChange, task }: AddContentTas
                       </FormItem>
                     )}
                   />
-                </div>
+                ) : (
+                  <FormField
+                    control={form.control}
+                    name="internalProject"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Internal Project</FormLabel>
+                        <Select 
+                          onValueChange={field.onChange} 
+                          value={field.value || ""}
+                        >
+                          <FormControl>
+                            <SelectTrigger data-testid="select-internal-project">
+                              <SelectValue placeholder="Select internal project" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            {internalProjects.map((project) => (
+                              <SelectItem key={project} value={project}>
+                                {project}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
 
                 <FormField
                   control={form.control}

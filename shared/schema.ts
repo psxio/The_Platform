@@ -185,6 +185,10 @@ export const insertCampaignSchema = createInsertSchema(campaigns).omit({
 export type InsertCampaign = z.infer<typeof insertCampaignSchema>;
 export type Campaign = typeof campaigns.$inferSelect;
 
+// Internal projects for internal content work
+export const internalProjects = ["4444 Collection", "PSX", "Create", "Platform", "General"] as const;
+export type InternalProject = typeof internalProjects[number];
+
 // Content Tasks table - for content production team
 export const contentTasks = pgTable("content_tasks", {
   id: serial("id").primaryKey(),
@@ -194,6 +198,8 @@ export const contentTasks = pgTable("content_tasks", {
   dueDate: varchar("due_date", { length: 50 }),
   assignedBy: varchar("assigned_by", { length: 255 }),
   client: varchar("client", { length: 255 }),
+  clientType: varchar("client_type", { length: 20 }).default("external"), // "internal" or "external"
+  internalProject: varchar("internal_project", { length: 100 }), // For internal projects like 4444 Collection, PSX, etc.
   deliverable: text("deliverable"),
   notes: text("notes"),
   priority: varchar("priority", { length: 20 }).default("medium"),
@@ -209,6 +215,8 @@ export const insertContentTaskSchema = createInsertSchema(contentTasks).omit({
   dueDate: z.string().optional().transform(val => val && val.trim() !== "" ? val : undefined),
   assignedBy: z.string().optional().transform(val => val && val.trim() !== "" ? val : undefined),
   client: z.string().optional().transform(val => val && val.trim() !== "" ? val : undefined),
+  clientType: z.enum(["internal", "external"]).optional().default("external"),
+  internalProject: z.string().optional().transform(val => val && val.trim() !== "" ? val : undefined),
   deliverable: z.string().optional().transform(val => val && val.trim() !== "" ? val : undefined),
   notes: z.string().optional().transform(val => val && val.trim() !== "" ? val : undefined),
   priority: z.string().optional().default("medium"),

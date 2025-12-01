@@ -20,12 +20,13 @@ import { WelcomeModal } from "@/components/welcome-modal";
 import { IntegrationSettings } from "@/components/integration-settings";
 import { UserInvites } from "@/components/user-invites";
 import { ContentAccessGuard } from "@/components/content-access-guard";
+import { ProductionCommandCenter } from "@/components/production-command-center";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Plus, ClipboardList, Users, Upload, Settings, FolderKanban, BarChart3, LayoutGrid, Columns3, Calendar, FileText, Image, Repeat, Clock, Download, Camera, DollarSign, Package, MoreHorizontal, ChevronDown } from "lucide-react";
+import { Plus, ClipboardList, Users, Upload, Settings, FolderKanban, BarChart3, LayoutGrid, Columns3, Calendar, FileText, Image, Repeat, Clock, Download, Camera, DollarSign, Package, MoreHorizontal, ChevronDown, Rocket } from "lucide-react";
 import { Link } from "wouter";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/hooks/useAuth";
@@ -36,7 +37,7 @@ type TaskViewMode = "grid" | "kanban" | "calendar";
 export default function ContentDashboard() {
   const [isAddTaskDialogOpen, setIsAddTaskDialogOpen] = useState(false);
   const [isAddCampaignDialogOpen, setIsAddCampaignDialogOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState("tasks");
+  const [activeTab, setActiveTab] = useState("command");
   const [taskViewMode, setTaskViewMode] = useState<TaskViewMode>("grid");
   const { user } = useAuth();
   const { toast } = useToast();
@@ -123,6 +124,10 @@ export default function ContentDashboard() {
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <div className="flex items-center gap-2 mb-2">
             <TabsList className="inline-flex gap-1">
+              <TabsTrigger value="command" className="gap-2" data-testid="tab-command">
+                <Rocket className="h-4 w-4" />
+                <span className="hidden sm:inline">Command</span>
+              </TabsTrigger>
               <TabsTrigger value="tasks" className="gap-2" data-testid="tab-tasks">
                 <ClipboardList className="h-4 w-4" />
                 <span className="hidden sm:inline">Tasks</span>
@@ -193,6 +198,10 @@ export default function ContentDashboard() {
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
+
+          <TabsContent value="command" className="mt-6">
+            <ProductionCommandCenter />
+          </TabsContent>
 
           <TabsContent value="tasks" className="mt-6">
             {taskViewMode === "grid" && <ContentTasksView />}

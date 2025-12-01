@@ -61,6 +61,8 @@ import {
   type ClientOnboarding, type InsertClientOnboarding, clientOnboarding,
   // Web3 Onboarding types
   type Web3Onboarding, type InsertWeb3Onboarding, web3Onboarding,
+  // Client Work Library types
+  type ClientWorkItem, type InsertClientWorkItem, clientWorkItems,
 } from "@shared/schema";
 import { db } from "./db";
 import { desc, eq, and, sql, or, isNull } from "drizzle-orm";
@@ -394,6 +396,18 @@ export interface IStorage {
   createClientOnboarding(onboarding: InsertClientOnboarding): Promise<ClientOnboarding>;
   updateClientOnboarding(userId: string, updates: Partial<ClientOnboarding>): Promise<ClientOnboarding | undefined>;
   markClientOnboardingStep(userId: string, step: keyof InsertClientOnboarding): Promise<ClientOnboarding | undefined>;
+  
+  // ==================== CLIENT WORK LIBRARY METHODS ====================
+  
+  // Client Work Item methods
+  getClientWorkItems(brandPackId?: number): Promise<ClientWorkItem[]>;
+  getClientWorkItem(id: number): Promise<ClientWorkItem | undefined>;
+  getClientWorkItemsByUploader(uploaderId: string): Promise<ClientWorkItem[]>;
+  createClientWorkItem(item: InsertClientWorkItem): Promise<ClientWorkItem>;
+  updateClientWorkItem(id: number, updates: Partial<InsertClientWorkItem>): Promise<ClientWorkItem | undefined>;
+  deleteClientWorkItem(id: number): Promise<boolean>;
+  getClientWorkItemsByTask(taskId: number): Promise<ClientWorkItem[]>;
+  getClientWorkItemsByCampaign(campaignId: number): Promise<ClientWorkItem[]>;
 }
 
 export class DbStorage implements IStorage {
@@ -2520,6 +2534,73 @@ export class DbStorage implements IStorage {
     }
     
     return await this.updateWeb3Onboarding(userId, { [step]: true });
+  }
+  
+  // ==================== CLIENT WORK LIBRARY IMPLEMENTATION ====================
+  
+  async getClientWorkItems(brandPackId?: number): Promise<ClientWorkItem[]> {
+    if (brandPackId) {
+      return await db
+        .select()
+        .from(clientWorkItems)
+        .where(eq(clientWorkItems.brandPackId, brandPackId))
+        .orderBy(desc(clientWorkItems.createdAt));
+    }
+    return await db
+      .select()
+      .from(clientWorkItems)
+      .orderBy(desc(clientWorkItems.createdAt));
+  }
+  
+  async getClientWorkItem(id: number): Promise<ClientWorkItem | undefined> {
+    const [item] = await db
+      .select()
+      .from(clientWorkItems)
+      .where(eq(clientWorkItems.id, id));
+    return item;
+  }
+  
+  async getClientWorkItemsByUploader(uploaderId: string): Promise<ClientWorkItem[]> {
+    return await db
+      .select()
+      .from(clientWorkItems)
+      .where(eq(clientWorkItems.uploadedBy, uploaderId))
+      .orderBy(desc(clientWorkItems.createdAt));
+  }
+  
+  async createClientWorkItem(item: InsertClientWorkItem): Promise<ClientWorkItem> {
+    const [created] = await db.insert(clientWorkItems).values(item).returning();
+    return created;
+  }
+  
+  async updateClientWorkItem(id: number, updates: Partial<InsertClientWorkItem>): Promise<ClientWorkItem | undefined> {
+    const [updated] = await db
+      .update(clientWorkItems)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(clientWorkItems.id, id))
+      .returning();
+    return updated;
+  }
+  
+  async deleteClientWorkItem(id: number): Promise<boolean> {
+    const result = await db.delete(clientWorkItems).where(eq(clientWorkItems.id, id));
+    return result.rowCount > 0;
+  }
+  
+  async getClientWorkItemsByTask(taskId: number): Promise<ClientWorkItem[]> {
+    return await db
+      .select()
+      .from(clientWorkItems)
+      .where(eq(clientWorkItems.taskId, taskId))
+      .orderBy(desc(clientWorkItems.createdAt));
+  }
+  
+  async getClientWorkItemsByCampaign(campaignId: number): Promise<ClientWorkItem[]> {
+    return await db
+      .select()
+      .from(clientWorkItems)
+      .where(eq(clientWorkItems.campaignId, campaignId))
+      .orderBy(desc(clientWorkItems.createdAt));
   }
 }
 

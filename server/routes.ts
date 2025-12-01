@@ -5232,6 +5232,192 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ================== CLIENT WORK LIBRARY ENDPOINTS ==================
+
+  // Get all client work items, optionally filtered by brand pack
+  app.get("/api/client-work", requireRole("content"), async (req, res) => {
+    try {
+      const brandPackId = req.query.brandPackId ? parseInt(req.query.brandPackId as string) : undefined;
+      const items = await storage.getClientWorkItems(brandPackId);
+      res.json(items);
+    } catch (error) {
+      console.error("Error fetching client work items:", error);
+      res.status(500).json({ error: "Failed to fetch client work items" });
+    }
+  });
+
+  // Get single client work item
+  app.get("/api/client-work/:id", requireRole("content"), async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const item = await storage.getClientWorkItem(id);
+      
+      if (!item) {
+        return res.status(404).json({ error: "Work item not found" });
+      }
+      
+      res.json(item);
+    } catch (error) {
+      console.error("Error fetching client work item:", error);
+      res.status(500).json({ error: "Failed to fetch work item" });
+    }
+  });
+
+  // Get work items by uploader
+  app.get("/api/client-work/by-uploader/:uploaderId", requireRole("content"), async (req, res) => {
+    try {
+      const uploaderId = req.params.uploaderId;
+      const items = await storage.getClientWorkItemsByUploader(uploaderId);
+      res.json(items);
+    } catch (error) {
+      console.error("Error fetching work items by uploader:", error);
+      res.status(500).json({ error: "Failed to fetch work items" });
+    }
+  });
+
+  // Get work items by task
+  app.get("/api/client-work/by-task/:taskId", requireRole("content"), async (req, res) => {
+    try {
+      const taskId = parseInt(req.params.taskId);
+      const items = await storage.getClientWorkItemsByTask(taskId);
+      res.json(items);
+    } catch (error) {
+      console.error("Error fetching work items by task:", error);
+      res.status(500).json({ error: "Failed to fetch work items" });
+    }
+  });
+
+  // Get work items by campaign
+  app.get("/api/client-work/by-campaign/:campaignId", requireRole("content"), async (req, res) => {
+    try {
+      const campaignId = parseInt(req.params.campaignId);
+      const items = await storage.getClientWorkItemsByCampaign(campaignId);
+      res.json(items);
+    } catch (error) {
+      console.error("Error fetching work items by campaign:", error);
+      res.status(500).json({ error: "Failed to fetch work items" });
+    }
+  });
+
+  // Create client work item (content team uploads)
+  app.post("/api/client-work", requireRole("content"), upload.single("file"), async (req, res) => {
+    try {
+      const user = (req as any).user;
+      const file = req.file;
+      const { brandPackId, title, description, category, taskId, campaignId, status } = req.body;
+      
+      if (!brandPackId || !title) {
+        return res.status(400).json({ error: "Brand pack ID and title are required" });
+      }
+      
+      if (!file) {
+        return res.status(400).json({ error: "File is required" });
+      }
+      
+      // Verify brand pack exists
+      const brandPack = await storage.getClientBrandPack(parseInt(brandPackId));
+      if (!brandPack) {
+        return res.status(404).json({ error: "Brand pack not found" });
+      }
+      
+      // Upload file to Google Drive if configured
+      let filePath = `/uploads/client-work/${file.filename}`;
+      let driveResult = null;
+      
+      try {
+        driveResult = await driveService.uploadFile(
+          file.path,
+          file.originalname,
+          `client-work/${brandPack.clientName}`,
+          file.mimetype
+        );
+        if (driveResult?.webViewLink) {
+          filePath = driveResult.webViewLink;
+        }
+      } catch (driveError) {
+        console.error("Drive upload failed, using local storage:", driveError);
+      }
+      
+      const workItem = await storage.createClientWorkItem({
+        brandPackId: parseInt(brandPackId),
+        title,
+        description: description || null,
+        category: category || "other",
+        fileName: file.filename,
+        originalName: file.originalname,
+        filePath,
+        fileSize: formatFileSize(file.size),
+        fileType: file.mimetype,
+        status: status || "draft",
+        uploadedBy: user.id,
+        taskId: taskId ? parseInt(taskId) : null,
+        campaignId: campaignId ? parseInt(campaignId) : null,
+      });
+      
+      res.status(201).json(workItem);
+    } catch (error) {
+      console.error("Error creating client work item:", error);
+      res.status(500).json({ error: "Failed to create work item" });
+    }
+  });
+
+  // Update client work item
+  app.patch("/api/client-work/:id", requireRole("content"), async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const user = (req as any).user;
+      const { title, description, category, status, taskId, campaignId } = req.body;
+      
+      const existing = await storage.getClientWorkItem(id);
+      if (!existing) {
+        return res.status(404).json({ error: "Work item not found" });
+      }
+      
+      // Only uploader or admin can update
+      if (existing.uploadedBy !== user.id && user.role !== "admin") {
+        return res.status(403).json({ error: "Not authorized to update this work item" });
+      }
+      
+      const updated = await storage.updateClientWorkItem(id, {
+        title,
+        description,
+        category,
+        status,
+        taskId: taskId ? parseInt(taskId) : undefined,
+        campaignId: campaignId ? parseInt(campaignId) : undefined,
+      });
+      
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating client work item:", error);
+      res.status(500).json({ error: "Failed to update work item" });
+    }
+  });
+
+  // Delete client work item
+  app.delete("/api/client-work/:id", requireRole("content"), async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const user = (req as any).user;
+      
+      const existing = await storage.getClientWorkItem(id);
+      if (!existing) {
+        return res.status(404).json({ error: "Work item not found" });
+      }
+      
+      // Only uploader or admin can delete
+      if (existing.uploadedBy !== user.id && user.role !== "admin") {
+        return res.status(403).json({ error: "Not authorized to delete this work item" });
+      }
+      
+      await storage.deleteClientWorkItem(id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting client work item:", error);
+      res.status(500).json({ error: "Failed to delete work item" });
+    }
+  });
+
   // ================== SHEETS HUB ENDPOINTS ==================
 
   // Get all connected sheets (admin only)

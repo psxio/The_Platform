@@ -30,6 +30,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
+import { DiscordPresenceIndicator } from "@/components/discord-presence";
 
 interface MemberFormData {
   person: string;
@@ -379,11 +380,14 @@ export function DirectoryTable() {
                   >
                     <TableCell>
                       <div className="flex items-center gap-3">
-                        <Avatar className="h-9 w-9">
-                          <AvatarFallback className={cn("text-white text-sm font-medium", getAvatarColor(member.person))}>
-                            {getInitials(member.person)}
-                          </AvatarFallback>
-                        </Avatar>
+                        <div className="relative">
+                          <Avatar className="h-9 w-9">
+                            <AvatarFallback className={cn("text-white text-sm font-medium", getAvatarColor(member.person))}>
+                              {getInitials(member.person)}
+                            </AvatarFallback>
+                          </Avatar>
+                          {member.email && <DiscordPresenceIndicator email={member.email} />}
+                        </div>
                         <div className="min-w-0">
                           <p className="font-medium truncate" data-testid={`text-person-${member.id}`}>
                             {member.person}

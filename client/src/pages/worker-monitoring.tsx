@@ -30,6 +30,8 @@ import {
 } from "@/lib/screen-capture";
 import { ContentAccessGuard } from "@/components/content-access-guard";
 import { useToast } from "@/hooks/use-toast";
+import { DiscordLiveList, DiscordLinkStatus } from "@/components/discord-presence";
+import { SiDiscord } from "react-icons/si";
 
 interface MonitoringSession {
   id: number;
@@ -265,6 +267,27 @@ export default function WorkerMonitoring() {
             </Badge>
           )}
         </div>
+
+        <Card data-testid="card-discord-live">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <SiDiscord className="h-5 w-5 text-[#5865F2]" />
+              Team Screen Sharing
+            </CardTitle>
+            <CardDescription>
+              Live status of team members currently sharing their screen on Discord
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <DiscordLiveList />
+            <div className="mt-4 pt-4 border-t">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">Your Discord status:</span>
+                <DiscordLinkStatus />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
 
         {!hasConsent && (
           <Alert>

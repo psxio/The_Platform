@@ -22,6 +22,7 @@ import AdminContentUsers from "@/pages/admin-content-users";
 import AdminMonitoring from "@/pages/admin-monitoring";
 import AdminPayments from "@/pages/admin-payments";
 import AdminBrandPacks from "@/pages/admin-brand-packs";
+import AdminDiscordSettings from "@/pages/admin-discord-settings";
 import AdminSheetsHub from "@/pages/admin-sheets-hub";
 import AdminCredits from "@/pages/admin-credits";
 import ContentProfileSetup from "@/pages/content-profile-setup";
@@ -195,6 +196,9 @@ function AuthenticatedRouter() {
       </Route>
       <Route path="/admin/brand-packs">
         <AdminRouteGuard><AdminBrandPacks /></AdminRouteGuard>
+      </Route>
+      <Route path="/admin/discord">
+        <AdminRouteGuard><AdminDiscordSettings /></AdminRouteGuard>
       </Route>
       <Route path="/admin/sheets-hub">
         <AdminRouteGuard><AdminSheetsHub /></AdminRouteGuard>

@@ -54,6 +54,7 @@ import {
   Shield,
   HelpCircle,
   FolderOpen,
+  Radio,
 } from "lucide-react";
 
 type NavSection = "web3" | "content" | "client" | "admin";
@@ -92,6 +93,7 @@ const adminItems: NavItem[] = [
   { title: "Buy Power Requests", href: "/admin/credit-requests", icon: Receipt, description: "Approve buy power requests" },
   { title: "Client Buy Power", href: "/admin/credits", icon: CreditCard, description: "Manage client buy power" },
   { title: "Brand Packs", href: "/admin/brand-packs", icon: Package, description: "Manage brand assets" },
+  { title: "Discord Monitor", href: "/admin/discord", icon: Radio, description: "Screen sharing status" },
   { title: "Sheets Hub", href: "/admin/sheets-hub", icon: FileSpreadsheet, description: "Google Sheets sync" },
   { title: "Invite Codes", href: "/admin/codes", icon: Key, description: "Generate invite codes" },
 ];

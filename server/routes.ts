@@ -1945,6 +1945,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // ================== CONTENT TASK ENDPOINTS (ContentFlowStudio) ==================
   // These require "content" or "admin" role
 
+  // Get internal projects list
+  app.get("/api/internal-projects", requireRole("content"), async (req, res) => {
+    try {
+      const { internalProjects } = await import("@shared/schema");
+      res.json(internalProjects);
+    } catch (error) {
+      console.error("Error fetching internal projects:", error);
+      res.status(500).json({ error: "Failed to fetch internal projects" });
+    }
+  });
+
   // Get all content tasks
   app.get("/api/content-tasks", requireRole("content"), async (req, res) => {
     try {
@@ -1974,7 +1985,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Create content task
   app.post("/api/content-tasks", requireRole("content"), async (req: any, res) => {
     try {
-      const { description, status, assignedTo, dueDate, assignedBy, client, deliverable, notes, priority, campaignId } = req.body;
+      const { description, status, assignedTo, dueDate, assignedBy, client, clientType, internalProject, deliverable, notes, priority, campaignId } = req.body;
       
       if (!description || typeof description !== "string") {
         return res.status(400).json({ error: "Description is required" });
@@ -1986,7 +1997,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         assignedTo: assignedTo || undefined,
         dueDate: dueDate || undefined,
         assignedBy: assignedBy || undefined,
-        client: client || undefined,
+        client: clientType === "internal" ? undefined : (client || undefined),
+        clientType: clientType || "external",
+        internalProject: clientType === "internal" ? (internalProject || undefined) : undefined,
         deliverable: deliverable || undefined,
         notes: notes || undefined,
         priority: priority || "medium",

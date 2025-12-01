@@ -3418,7 +3418,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const approvalId = parseInt(req.params.id);
       const { status, comments } = req.body;
       
-      if (!status || !["approved", "rejected", "revision_requested"].includes(status)) {
+      if (!status || !["approved", "rejected", "revision_requested", "skipped"].includes(status)) {
         return res.status(400).json({ error: "Valid status required" });
       }
       
@@ -3441,6 +3441,228 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error updating approval:", error);
       res.status(500).json({ error: "Failed to update approval" });
+    }
+  });
+
+  // Get pending approvals for current user
+  app.get("/api/approvals/pending", requireRole("content"), async (req, res) => {
+    try {
+      const userId = (req as any).user?.id;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      const approvals = await storage.getPendingApprovals(userId);
+      res.json(approvals);
+    } catch (error) {
+      console.error("Error fetching pending approvals:", error);
+      res.status(500).json({ error: "Failed to fetch pending approvals" });
+    }
+  });
+
+  // ================== APPROVAL WORKFLOW ENDPOINTS ==================
+
+  // Get all approval workflows
+  app.get("/api/approval-workflows", requireRole("content"), async (req, res) => {
+    try {
+      const workflows = await storage.getApprovalWorkflows();
+      res.json(workflows);
+    } catch (error) {
+      console.error("Error fetching approval workflows:", error);
+      res.status(500).json({ error: "Failed to fetch approval workflows" });
+    }
+  });
+
+  // Get approval workflow by ID with stages
+  app.get("/api/approval-workflows/:id", requireRole("content"), async (req, res) => {
+    try {
+      const workflowId = parseInt(req.params.id);
+      const workflow = await storage.getApprovalWorkflow(workflowId);
+      if (!workflow) {
+        return res.status(404).json({ error: "Workflow not found" });
+      }
+      const stages = await storage.getApprovalWorkflowStages(workflowId);
+      res.json({ ...workflow, stages });
+    } catch (error) {
+      console.error("Error fetching approval workflow:", error);
+      res.status(500).json({ error: "Failed to fetch approval workflow" });
+    }
+  });
+
+  // Create approval workflow (admin only)
+  app.post("/api/approval-workflows", requireRole("admin"), async (req, res) => {
+    try {
+      const userId = (req as any).user?.id;
+      const { name, description, contentType, stages } = req.body;
+      
+      const workflow = await storage.createApprovalWorkflow({
+        name,
+        description,
+        contentType,
+        createdBy: userId,
+      });
+
+      // Create stages
+      if (stages && Array.isArray(stages)) {
+        for (const stage of stages) {
+          await storage.createApprovalWorkflowStage({
+            workflowId: workflow.id,
+            stageName: stage.stageName,
+            stageOrder: stage.stageOrder,
+            reviewerRole: stage.reviewerRole,
+            reviewerId: stage.reviewerId,
+            isRequired: stage.isRequired ?? true,
+            daysToComplete: stage.daysToComplete,
+          });
+        }
+      }
+
+      const createdStages = await storage.getApprovalWorkflowStages(workflow.id);
+      res.status(201).json({ ...workflow, stages: createdStages });
+    } catch (error) {
+      console.error("Error creating approval workflow:", error);
+      res.status(500).json({ error: "Failed to create approval workflow" });
+    }
+  });
+
+  // Update approval workflow (admin only)
+  app.patch("/api/approval-workflows/:id", requireRole("admin"), async (req, res) => {
+    try {
+      const workflowId = parseInt(req.params.id);
+      const { name, description, contentType, isActive } = req.body;
+      
+      const updated = await storage.updateApprovalWorkflow(workflowId, {
+        name,
+        description,
+        contentType,
+        isActive,
+      });
+      
+      if (!updated) {
+        return res.status(404).json({ error: "Workflow not found" });
+      }
+      
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating approval workflow:", error);
+      res.status(500).json({ error: "Failed to update approval workflow" });
+    }
+  });
+
+  // Delete approval workflow (admin only)
+  app.delete("/api/approval-workflows/:id", requireRole("admin"), async (req, res) => {
+    try {
+      const workflowId = parseInt(req.params.id);
+      const deleted = await storage.deleteApprovalWorkflow(workflowId);
+      if (!deleted) {
+        return res.status(404).json({ error: "Workflow not found" });
+      }
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting approval workflow:", error);
+      res.status(500).json({ error: "Failed to delete approval workflow" });
+    }
+  });
+
+  // Apply workflow to task
+  app.post("/api/content-tasks/:id/apply-workflow", requireRole("content"), async (req, res) => {
+    try {
+      const taskId = parseInt(req.params.id);
+      const { workflowId } = req.body;
+      
+      if (!workflowId) {
+        return res.status(400).json({ error: "Workflow ID is required" });
+      }
+      
+      const approvals = await storage.applyWorkflowToTask(taskId, workflowId);
+      
+      // Log activity
+      await storage.createActivityLog({
+        taskId,
+        userId: (req as any).user?.id || null,
+        action: "workflow_applied",
+        details: `Applied approval workflow with ${approvals.length} stages`,
+      });
+      
+      res.status(201).json(approvals);
+    } catch (error) {
+      console.error("Error applying workflow:", error);
+      res.status(500).json({ error: "Failed to apply workflow" });
+    }
+  });
+
+  // Get workflow stages
+  app.get("/api/approval-workflows/:id/stages", requireRole("content"), async (req, res) => {
+    try {
+      const workflowId = parseInt(req.params.id);
+      const stages = await storage.getApprovalWorkflowStages(workflowId);
+      res.json(stages);
+    } catch (error) {
+      console.error("Error fetching workflow stages:", error);
+      res.status(500).json({ error: "Failed to fetch workflow stages" });
+    }
+  });
+
+  // Add stage to workflow (admin only)
+  app.post("/api/approval-workflows/:id/stages", requireRole("admin"), async (req, res) => {
+    try {
+      const workflowId = parseInt(req.params.id);
+      const { stageName, stageOrder, reviewerRole, reviewerId, isRequired, daysToComplete } = req.body;
+      
+      const stage = await storage.createApprovalWorkflowStage({
+        workflowId,
+        stageName,
+        stageOrder: stageOrder || 1,
+        reviewerRole,
+        reviewerId,
+        isRequired: isRequired ?? true,
+        daysToComplete,
+      });
+      
+      res.status(201).json(stage);
+    } catch (error) {
+      console.error("Error creating workflow stage:", error);
+      res.status(500).json({ error: "Failed to create workflow stage" });
+    }
+  });
+
+  // Update workflow stage (admin only)
+  app.patch("/api/approval-workflows/:workflowId/stages/:id", requireRole("admin"), async (req, res) => {
+    try {
+      const stageId = parseInt(req.params.id);
+      const { stageName, stageOrder, reviewerRole, reviewerId, isRequired, daysToComplete } = req.body;
+      
+      const updated = await storage.updateApprovalWorkflowStage(stageId, {
+        stageName,
+        stageOrder,
+        reviewerRole,
+        reviewerId,
+        isRequired,
+        daysToComplete,
+      });
+      
+      if (!updated) {
+        return res.status(404).json({ error: "Stage not found" });
+      }
+      
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating workflow stage:", error);
+      res.status(500).json({ error: "Failed to update workflow stage" });
+    }
+  });
+
+  // Delete workflow stage (admin only)
+  app.delete("/api/approval-workflows/:workflowId/stages/:id", requireRole("admin"), async (req, res) => {
+    try {
+      const stageId = parseInt(req.params.id);
+      const deleted = await storage.deleteApprovalWorkflowStage(stageId);
+      if (!deleted) {
+        return res.status(404).json({ error: "Stage not found" });
+      }
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting workflow stage:", error);
+      res.status(500).json({ error: "Failed to delete workflow stage" });
     }
   });
 

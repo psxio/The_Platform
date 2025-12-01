@@ -8,6 +8,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Progress } from "@/components/ui/progress";
+import { Separator } from "@/components/ui/separator";
 import {
   Select,
   SelectContent,
@@ -15,6 +17,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { 
   CheckCircle, 
   XCircle, 
@@ -23,19 +30,30 @@ import {
   Send,
   Shield,
   MessageSquare,
-  X
+  X,
+  Workflow,
+  ChevronRight,
+  ArrowRight,
+  Zap,
+  SkipForward,
+  AlertTriangle,
+  Calendar,
+  Users
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface Approval {
   id: number;
   taskId: number;
-  requestedBy: string;
-  approverId: string;
-  status: "pending" | "approved" | "rejected";
+  reviewerId: string;
+  status: "pending" | "approved" | "rejected" | "skipped";
   comments: string | null;
-  requestedAt: string;
-  respondedAt: string | null;
+  createdAt: string;
+  reviewedAt: string | null;
+  stage: number;
+  stageName: string | null;
+  isRequired: boolean;
+  dueDate: string | null;
   approver?: {
     id: string;
     firstName: string | null;
@@ -43,13 +61,25 @@ interface Approval {
     email: string;
     profileImageUrl: string | null;
   };
-  requester?: {
-    id: string;
-    firstName: string | null;
-    lastName: string | null;
-    email: string;
-    profileImageUrl: string | null;
-  };
+}
+
+interface ApprovalWorkflow {
+  id: number;
+  name: string;
+  description: string | null;
+  contentType: string | null;
+  stages?: ApprovalWorkflowStage[];
+}
+
+interface ApprovalWorkflowStage {
+  id: number;
+  workflowId: number;
+  stageName: string;
+  stageOrder: number;
+  reviewerRole: string | null;
+  reviewerId: string | null;
+  isRequired: boolean;
+  daysToComplete: number | null;
 }
 
 interface User {
@@ -81,12 +111,19 @@ const statusConfig = {
     label: "Rejected",
     className: "bg-destructive/10 text-destructive border-destructive/20",
   },
+  skipped: {
+    icon: SkipForward,
+    label: "Skipped",
+    className: "bg-muted text-muted-foreground border-muted",
+  },
 };
 
 export function TaskApprovals({ taskId, currentUserId }: TaskApprovalsProps) {
   const { toast } = useToast();
   const [isAddingRequest, setIsAddingRequest] = useState(false);
+  const [isApplyingWorkflow, setIsApplyingWorkflow] = useState(false);
   const [selectedApprover, setSelectedApprover] = useState("");
+  const [selectedWorkflow, setSelectedWorkflow] = useState("");
   const [responseComments, setResponseComments] = useState<{ [key: number]: string }>({});
 
   const { data: approvals, isLoading } = useQuery<Approval[]>({
@@ -111,6 +148,27 @@ export function TaskApprovals({ taskId, currentUserId }: TaskApprovalsProps) {
       return response.json();
     },
     enabled: isAddingRequest,
+  });
+
+  const { data: workflows } = useQuery<ApprovalWorkflow[]>({
+    queryKey: ["/api/approval-workflows"],
+    enabled: isApplyingWorkflow,
+  });
+
+  const applyWorkflowMutation = useMutation({
+    mutationFn: async (workflowId: number) => {
+      return apiRequest("POST", `/api/content-tasks/${taskId}/apply-workflow`, { workflowId });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/content-tasks", taskId, "approvals"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/content-tasks", taskId, "activity"] });
+      setSelectedWorkflow("");
+      setIsApplyingWorkflow(false);
+      toast({ title: "Workflow applied", description: "The approval workflow has been applied to this task." });
+    },
+    onError: () => {
+      toast({ title: "Error", description: "Failed to apply workflow.", variant: "destructive" });
+    },
   });
 
   const requestApprovalMutation = useMutation({
@@ -157,7 +215,23 @@ export function TaskApprovals({ taskId, currentUserId }: TaskApprovalsProps) {
 
   const pendingApprovals = approvals?.filter(a => a.status === "pending") || [];
   const completedApprovals = approvals?.filter(a => a.status !== "pending") || [];
-  const myPendingApprovals = pendingApprovals.filter(a => a.approverId === currentUserId);
+  const myPendingApprovals = pendingApprovals.filter(a => a.reviewerId === currentUserId);
+  
+  // Group approvals by stage for multi-stage workflow visualization
+  const stageGroups = approvals ? approvals.reduce((acc, approval) => {
+    const stage = approval.stage || 1;
+    if (!acc[stage]) acc[stage] = [];
+    acc[stage].push(approval);
+    return acc;
+  }, {} as { [key: number]: Approval[] }) : {};
+  
+  const stages = Object.keys(stageGroups).map(Number).sort((a, b) => a - b);
+  const hasMultipleStages = stages.length > 1;
+  
+  // Calculate approval progress
+  const totalApprovals = approvals?.length || 0;
+  const completedCount = completedApprovals.filter(a => a.status === "approved").length;
+  const progressPercent = totalApprovals > 0 ? (completedCount / totalApprovals) * 100 : 0;
 
   return (
     <div className="space-y-4">
@@ -171,18 +245,136 @@ export function TaskApprovals({ taskId, currentUserId }: TaskApprovalsProps) {
             </Badge>
           )}
         </div>
-        {!isAddingRequest && (
-          <Button 
-            variant="outline" 
-            size="sm"
-            onClick={() => setIsAddingRequest(true)}
-            data-testid="button-request-approval"
-          >
-            <Plus className="w-4 h-4 mr-1" />
-            Request Approval
-          </Button>
+        {!isAddingRequest && !isApplyingWorkflow && (
+          <div className="flex items-center gap-2">
+            <Button 
+              variant="ghost" 
+              size="sm"
+              onClick={() => setIsApplyingWorkflow(true)}
+              data-testid="button-apply-workflow"
+            >
+              <Workflow className="w-4 h-4 mr-1" />
+              Apply Workflow
+            </Button>
+            <Button 
+              variant="outline" 
+              size="sm"
+              onClick={() => setIsAddingRequest(true)}
+              data-testid="button-request-approval"
+            >
+              <Plus className="w-4 h-4 mr-1" />
+              Add Reviewer
+            </Button>
+          </div>
         )}
       </div>
+      
+      {/* Approval Progress (for multi-stage workflows) */}
+      {approvals && approvals.length > 0 && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <span>Approval Progress</span>
+            <span>{completedCount} of {totalApprovals} approved</span>
+          </div>
+          <Progress value={progressPercent} className="h-2" />
+          {hasMultipleStages && (
+            <div className="flex items-center gap-1 flex-wrap">
+              {stages.map((stage, index) => {
+                const stageApprovals = stageGroups[stage];
+                const allApproved = stageApprovals.every(a => a.status === "approved");
+                const hasPending = stageApprovals.some(a => a.status === "pending");
+                const stageName = stageApprovals[0]?.stageName || `Stage ${stage}`;
+                
+                return (
+                  <div key={stage} className="flex items-center">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Badge 
+                          variant="outline" 
+                          className={cn(
+                            "text-xs cursor-default",
+                            allApproved && "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-500/20",
+                            hasPending && !allApproved && "bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20",
+                            !hasPending && !allApproved && "bg-destructive/10 text-destructive border-destructive/20"
+                          )}
+                        >
+                          {allApproved ? (
+                            <CheckCircle className="w-3 h-3 mr-1" />
+                          ) : hasPending ? (
+                            <Clock className="w-3 h-3 mr-1" />
+                          ) : (
+                            <XCircle className="w-3 h-3 mr-1" />
+                          )}
+                          {stageName}
+                        </Badge>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>{stageApprovals.length} reviewer(s) in this stage</p>
+                      </TooltipContent>
+                    </Tooltip>
+                    {index < stages.length - 1 && (
+                      <ArrowRight className="w-3 h-3 mx-1 text-muted-foreground" />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+      
+      {/* Apply Workflow Form */}
+      {isApplyingWorkflow && (
+        <div className="p-4 border rounded-md space-y-3 bg-primary/5">
+          <div className="flex items-center gap-2 text-sm font-medium">
+            <Workflow className="w-4 h-4 text-primary" />
+            Apply Approval Workflow
+          </div>
+          <Select value={selectedWorkflow} onValueChange={setSelectedWorkflow}>
+            <SelectTrigger data-testid="select-workflow">
+              <SelectValue placeholder="Select a workflow..." />
+            </SelectTrigger>
+            <SelectContent>
+              {workflows?.map((workflow) => (
+                <SelectItem key={workflow.id} value={workflow.id.toString()}>
+                  <div>
+                    <span className="font-medium">{workflow.name}</span>
+                    {workflow.contentType && (
+                      <span className="text-xs text-muted-foreground ml-2">
+                        ({workflow.contentType})
+                      </span>
+                    )}
+                  </div>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground">
+            This will create approval stages with predefined reviewers based on the workflow template.
+          </p>
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setIsApplyingWorkflow(false);
+                setSelectedWorkflow("");
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => applyWorkflowMutation.mutate(parseInt(selectedWorkflow))}
+              disabled={!selectedWorkflow || applyWorkflowMutation.isPending}
+              data-testid="button-confirm-workflow"
+            >
+              <Zap className="w-4 h-4 mr-1" />
+              {applyWorkflowMutation.isPending ? "Applying..." : "Apply Workflow"}
+            </Button>
+          </div>
+        </div>
+      )}
 
       {isAddingRequest && (
         <div className="p-4 border rounded-md space-y-3 bg-muted/30">
@@ -252,24 +444,30 @@ export function TaskApprovals({ taskId, currentUserId }: TaskApprovalsProps) {
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <Avatar className="h-6 w-6">
-                        <AvatarImage src={approval.requester?.profileImageUrl || undefined} />
-                        <AvatarFallback className="text-xs">
-                          {getInitials(
-                            approval.requester?.firstName || null,
-                            approval.requester?.lastName || null,
-                            approval.requester?.email || "?"
-                          )}
-                        </AvatarFallback>
-                      </Avatar>
-                      <span className="text-sm">
-                        {getUserName(approval.requester)} requested your approval
-                      </span>
+                      <Shield className="h-5 w-5 text-amber-600" />
+                      <div>
+                        <span className="text-sm font-medium">
+                          {approval.stageName || "Approval"} requested
+                        </span>
+                        {approval.dueDate && (
+                          <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                            <Calendar className="h-3 w-3" />
+                            Due: {new Date(approval.dueDate).toLocaleDateString()}
+                          </p>
+                        )}
+                      </div>
                     </div>
-                    <Badge variant="outline" className={statusConfig.pending.className}>
-                      <Clock className="w-3 h-3 mr-1" />
-                      Pending
-                    </Badge>
+                    <div className="flex items-center gap-2">
+                      {approval.stageName && (
+                        <Badge variant="outline" className="text-xs">
+                          Stage {approval.stage}
+                        </Badge>
+                      )}
+                      <Badge variant="outline" className={statusConfig.pending.className}>
+                        <Clock className="w-3 h-3 mr-1" />
+                        Pending
+                      </Badge>
+                    </div>
                   </div>
                   <div className="flex items-center gap-2">
                     <Input
@@ -317,12 +515,12 @@ export function TaskApprovals({ taskId, currentUserId }: TaskApprovalsProps) {
             </div>
           )}
 
-          {pendingApprovals.filter(a => a.approverId !== currentUserId).length > 0 && (
+          {pendingApprovals.filter(a => a.reviewerId !== currentUserId).length > 0 && (
             <div className="space-y-2">
               <p className="text-sm font-medium text-muted-foreground">
                 Awaiting Response
               </p>
-              {pendingApprovals.filter(a => a.approverId !== currentUserId).map((approval) => (
+              {pendingApprovals.filter(a => a.reviewerId !== currentUserId).map((approval) => (
                 <ApprovalItem key={approval.id} approval={approval} getInitials={getInitials} getUserName={getUserName} />
               ))}
             </div>
@@ -359,7 +557,7 @@ function ApprovalItem({
   getInitials: (firstName: string | null, lastName: string | null, email: string) => string;
   getUserName: (user?: { firstName: string | null; lastName: string | null; email: string }) => string;
 }) {
-  const config = statusConfig[approval.status];
+  const config = statusConfig[approval.status] || statusConfig.pending;
   const Icon = config.icon;
 
   return (
@@ -379,7 +577,14 @@ function ApprovalItem({
           </AvatarFallback>
         </Avatar>
         <div className="text-sm">
-          <p className="font-medium">{getUserName(approval.approver)}</p>
+          <div className="flex items-center gap-2">
+            <p className="font-medium">{getUserName(approval.approver)}</p>
+            {approval.stageName && (
+              <Badge variant="outline" className="text-xs">
+                {approval.stageName}
+              </Badge>
+            )}
+          </div>
           {approval.comments && (
             <p className="text-muted-foreground text-xs flex items-center gap-1">
               <MessageSquare className="w-3 h-3" />
@@ -387,17 +592,24 @@ function ApprovalItem({
             </p>
           )}
           <p className="text-xs text-muted-foreground">
-            Requested {new Date(approval.requestedAt).toLocaleDateString()}
-            {approval.respondedAt && (
-              <> • Responded {new Date(approval.respondedAt).toLocaleDateString()}</>
+            Created {new Date(approval.createdAt).toLocaleDateString()}
+            {approval.reviewedAt && (
+              <> &bull; Responded {new Date(approval.reviewedAt).toLocaleDateString()}</>
             )}
           </p>
         </div>
       </div>
-      <Badge variant="outline" className={config.className}>
-        <Icon className="w-3 h-3 mr-1" />
-        {config.label}
-      </Badge>
+      <div className="flex items-center gap-2">
+        {!approval.isRequired && (
+          <Badge variant="outline" className="text-xs text-muted-foreground">
+            Optional
+          </Badge>
+        )}
+        <Badge variant="outline" className={config.className}>
+          <Icon className="w-3 h-3 mr-1" />
+          {config.label}
+        </Badge>
+      </div>
     </div>
   );
 }

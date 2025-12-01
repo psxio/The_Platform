@@ -445,10 +445,14 @@ export const approvals = pgTable("approvals", {
   id: serial("id").primaryKey(),
   taskId: integer("task_id").notNull().references(() => contentTasks.id, { onDelete: "cascade" }),
   reviewerId: varchar("reviewer_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  status: varchar("status", { length: 50 }).notNull().default("pending"), // pending, approved, rejected
+  status: varchar("status", { length: 50 }).notNull().default("pending"), // pending, approved, rejected, skipped
   comments: text("comments"),
   reviewedAt: timestamp("reviewed_at"),
   createdAt: timestamp("created_at").defaultNow(),
+  stage: integer("stage").notNull().default(1), // Stage order in multi-stage workflow
+  stageName: varchar("stage_name", { length: 100 }), // e.g., "Internal Review", "Client Review", "Final Approval"
+  isRequired: boolean("is_required").notNull().default(true), // Whether this approval is required to proceed
+  dueDate: timestamp("due_date"), // Optional deadline for this approval stage
 });
 
 export const insertApprovalSchema = createInsertSchema(approvals).omit({
@@ -459,6 +463,46 @@ export const insertApprovalSchema = createInsertSchema(approvals).omit({
 
 export type InsertApproval = z.infer<typeof insertApprovalSchema>;
 export type Approval = typeof approvals.$inferSelect;
+
+// Approval Workflow Templates - predefined workflows for different content types
+export const approvalWorkflows = pgTable("approval_workflows", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  description: text("description"),
+  contentType: varchar("content_type", { length: 100 }), // article, blog_post, social_media, etc.
+  isActive: boolean("is_active").notNull().default(true),
+  createdBy: varchar("created_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertApprovalWorkflowSchema = createInsertSchema(approvalWorkflows).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertApprovalWorkflow = z.infer<typeof insertApprovalWorkflowSchema>;
+export type ApprovalWorkflow = typeof approvalWorkflows.$inferSelect;
+
+// Approval Workflow Stages - stages within a workflow template
+export const approvalWorkflowStages = pgTable("approval_workflow_stages", {
+  id: serial("id").primaryKey(),
+  workflowId: integer("workflow_id").notNull().references(() => approvalWorkflows.id, { onDelete: "cascade" }),
+  stageName: varchar("stage_name", { length: 100 }).notNull(),
+  stageOrder: integer("stage_order").notNull().default(1),
+  reviewerRole: varchar("reviewer_role", { length: 50 }), // admin, content, or specific user type
+  reviewerId: varchar("reviewer_id").references(() => users.id, { onDelete: "set null" }), // Optional specific reviewer
+  isRequired: boolean("is_required").notNull().default(true),
+  daysToComplete: integer("days_to_complete"), // SLA for this stage
+});
+
+export const insertApprovalWorkflowStageSchema = createInsertSchema(approvalWorkflowStages).omit({
+  id: true,
+});
+
+export type InsertApprovalWorkflowStage = z.infer<typeof insertApprovalWorkflowStageSchema>;
+export type ApprovalWorkflowStage = typeof approvalWorkflowStages.$inferSelect;
 
 // Time Entries - for time tracking per task
 export const timeEntries = pgTable("time_entries", {

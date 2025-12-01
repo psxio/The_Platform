@@ -70,6 +70,9 @@ import {
   // Order Templates types
   type OrderTemplate, type InsertOrderTemplate, orderTemplates,
   type SavedOrder, type InsertSavedOrder, savedOrders,
+  // Approval Workflow types
+  type ApprovalWorkflow, type InsertApprovalWorkflow, approvalWorkflows,
+  type ApprovalWorkflowStage, type InsertApprovalWorkflowStage, approvalWorkflowStages,
 } from "@shared/schema";
 import { db } from "./db";
 import { desc, eq, and, sql, or, isNull } from "drizzle-orm";
@@ -195,6 +198,23 @@ export interface IStorage {
   getApprovals(taskId: number): Promise<Approval[]>;
   createApproval(approval: InsertApproval): Promise<Approval>;
   updateApprovalStatus(id: number, status: string, comments?: string): Promise<Approval | undefined>;
+  getApprovalsByReviewer(reviewerId: string): Promise<Approval[]>;
+  getPendingApprovals(reviewerId: string): Promise<Approval[]>;
+  
+  // Approval Workflow methods
+  getApprovalWorkflows(): Promise<ApprovalWorkflow[]>;
+  getApprovalWorkflow(id: number): Promise<ApprovalWorkflow | undefined>;
+  getApprovalWorkflowByContentType(contentType: string): Promise<ApprovalWorkflow | undefined>;
+  createApprovalWorkflow(workflow: InsertApprovalWorkflow): Promise<ApprovalWorkflow>;
+  updateApprovalWorkflow(id: number, workflow: Partial<InsertApprovalWorkflow>): Promise<ApprovalWorkflow | undefined>;
+  deleteApprovalWorkflow(id: number): Promise<boolean>;
+  
+  // Approval Workflow Stage methods
+  getApprovalWorkflowStages(workflowId: number): Promise<ApprovalWorkflowStage[]>;
+  createApprovalWorkflowStage(stage: InsertApprovalWorkflowStage): Promise<ApprovalWorkflowStage>;
+  updateApprovalWorkflowStage(id: number, stage: Partial<InsertApprovalWorkflowStage>): Promise<ApprovalWorkflowStage | undefined>;
+  deleteApprovalWorkflowStage(id: number): Promise<boolean>;
+  applyWorkflowToTask(taskId: number, workflowId: number): Promise<Approval[]>;
   
   // Time Entry methods
   getTimeEntries(taskId: number): Promise<TimeEntry[]>;
@@ -1206,6 +1226,101 @@ export class DbStorage implements IStorage {
       .where(eq(approvals.id, id))
       .returning();
     return updated;
+  }
+
+  async getApprovalsByReviewer(reviewerId: string): Promise<Approval[]> {
+    return await db.select().from(approvals).where(eq(approvals.reviewerId, reviewerId)).orderBy(desc(approvals.createdAt));
+  }
+
+  async getPendingApprovals(reviewerId: string): Promise<Approval[]> {
+    return await db
+      .select()
+      .from(approvals)
+      .where(and(eq(approvals.reviewerId, reviewerId), eq(approvals.status, "pending")))
+      .orderBy(approvals.stage, desc(approvals.createdAt));
+  }
+
+  // Approval Workflow methods
+  async getApprovalWorkflows(): Promise<ApprovalWorkflow[]> {
+    return await db.select().from(approvalWorkflows).where(eq(approvalWorkflows.isActive, true)).orderBy(approvalWorkflows.name);
+  }
+
+  async getApprovalWorkflow(id: number): Promise<ApprovalWorkflow | undefined> {
+    const [workflow] = await db.select().from(approvalWorkflows).where(eq(approvalWorkflows.id, id));
+    return workflow;
+  }
+
+  async getApprovalWorkflowByContentType(contentType: string): Promise<ApprovalWorkflow | undefined> {
+    const [workflow] = await db
+      .select()
+      .from(approvalWorkflows)
+      .where(and(eq(approvalWorkflows.contentType, contentType), eq(approvalWorkflows.isActive, true)));
+    return workflow;
+  }
+
+  async createApprovalWorkflow(workflow: InsertApprovalWorkflow): Promise<ApprovalWorkflow> {
+    const [created] = await db.insert(approvalWorkflows).values(workflow).returning();
+    return created;
+  }
+
+  async updateApprovalWorkflow(id: number, workflow: Partial<InsertApprovalWorkflow>): Promise<ApprovalWorkflow | undefined> {
+    const [updated] = await db
+      .update(approvalWorkflows)
+      .set({ ...workflow, updatedAt: new Date() })
+      .where(eq(approvalWorkflows.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteApprovalWorkflow(id: number): Promise<boolean> {
+    const result = await db.delete(approvalWorkflows).where(eq(approvalWorkflows.id, id)).returning();
+    return result.length > 0;
+  }
+
+  // Approval Workflow Stage methods
+  async getApprovalWorkflowStages(workflowId: number): Promise<ApprovalWorkflowStage[]> {
+    return await db.select().from(approvalWorkflowStages).where(eq(approvalWorkflowStages.workflowId, workflowId)).orderBy(approvalWorkflowStages.stageOrder);
+  }
+
+  async createApprovalWorkflowStage(stage: InsertApprovalWorkflowStage): Promise<ApprovalWorkflowStage> {
+    const [created] = await db.insert(approvalWorkflowStages).values(stage).returning();
+    return created;
+  }
+
+  async updateApprovalWorkflowStage(id: number, stage: Partial<InsertApprovalWorkflowStage>): Promise<ApprovalWorkflowStage | undefined> {
+    const [updated] = await db.update(approvalWorkflowStages).set(stage).where(eq(approvalWorkflowStages.id, id)).returning();
+    return updated;
+  }
+
+  async deleteApprovalWorkflowStage(id: number): Promise<boolean> {
+    const result = await db.delete(approvalWorkflowStages).where(eq(approvalWorkflowStages.id, id)).returning();
+    return result.length > 0;
+  }
+
+  async applyWorkflowToTask(taskId: number, workflowId: number): Promise<Approval[]> {
+    const stages = await this.getApprovalWorkflowStages(workflowId);
+    const createdApprovals: Approval[] = [];
+    
+    for (const stage of stages) {
+      if (stage.reviewerId) {
+        const dueDate = stage.daysToComplete 
+          ? new Date(Date.now() + stage.daysToComplete * 24 * 60 * 60 * 1000)
+          : undefined;
+          
+        const approval = await this.createApproval({
+          taskId,
+          reviewerId: stage.reviewerId,
+          status: "pending",
+          stage: stage.stageOrder,
+          stageName: stage.stageName,
+          isRequired: stage.isRequired,
+          dueDate,
+        });
+        createdApprovals.push(approval);
+      }
+    }
+    
+    return createdApprovals;
   }
 
   // Time Entry methods

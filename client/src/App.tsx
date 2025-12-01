@@ -35,6 +35,7 @@ import AuthPage from "@/pages/auth";
 import InvitePage from "@/pages/invite";
 import HelpPage from "@/pages/help";
 import ClientDirectory from "@/pages/client-directory";
+import InternalTeam from "@/pages/internal-team";
 import NotFound from "@/pages/not-found";
 import { Web3WelcomeModal } from "@/components/web3-welcome-modal";
 import { WelcomeModal } from "@/components/welcome-modal";
@@ -214,6 +215,9 @@ function AuthenticatedRouter() {
       </Route>
       <Route path="/admin/credit-requests">
         <AdminRouteGuard><AdminCreditRequests /></AdminRouteGuard>
+      </Route>
+      <Route path="/admin/internal-team">
+        <AdminRouteGuard><InternalTeam /></AdminRouteGuard>
       </Route>
       <Route path="/admin">
         <AdminRouteGuard><Redirect to="/admin/content-users" /></AdminRouteGuard>

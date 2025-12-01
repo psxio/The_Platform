@@ -81,6 +81,9 @@ import {
   type ClientProfile, type InsertClientProfile, clientProfiles,
   type ClientCalendarEvent, type InsertClientCalendarEvent, clientCalendarEvents,
   type ClientTaskLink, type InsertClientTaskLink, clientTaskLinks,
+  // Internal Team Member types
+  type InternalTeamMember, type InsertInternalTeamMember, internalTeamMembers,
+  type TeamPaymentHistory, type InsertTeamPaymentHistory, teamPaymentHistory,
 } from "@shared/schema";
 import { db } from "./db";
 import { desc, eq, and, sql, or, isNull } from "drizzle-orm";
@@ -535,6 +538,26 @@ export interface IStorage {
   getClientForTask(taskId: number): Promise<ClientProfile | undefined>;
   getClientForOrder(orderId: number): Promise<ClientProfile | undefined>;
   unlinkTaskFromClient(id: number): Promise<boolean>;
+  
+  // ==================== INTERNAL TEAM MEMBERS METHODS ====================
+  
+  // Internal Team Member methods
+  getInternalTeamMembers(): Promise<InternalTeamMember[]>;
+  getInternalTeamMember(id: number): Promise<InternalTeamMember | undefined>;
+  getInternalTeamMemberByName(name: string): Promise<InternalTeamMember | undefined>;
+  createInternalTeamMember(member: InsertInternalTeamMember): Promise<InternalTeamMember>;
+  updateInternalTeamMember(id: number, updates: Partial<InsertInternalTeamMember>): Promise<InternalTeamMember | undefined>;
+  deleteInternalTeamMember(id: number): Promise<boolean>;
+  searchInternalTeamMembers(query: string): Promise<InternalTeamMember[]>;
+  getTeamMembersByDepartment(department: string): Promise<InternalTeamMember[]>;
+  getTeamMembersByStatus(status: string): Promise<InternalTeamMember[]>;
+  
+  // Team Payment History methods
+  getTeamPaymentHistory(memberId: number): Promise<TeamPaymentHistory[]>;
+  getAllTeamPayments(startDate?: Date, endDate?: Date): Promise<TeamPaymentHistory[]>;
+  createTeamPayment(payment: InsertTeamPaymentHistory): Promise<TeamPaymentHistory>;
+  updateTeamPayment(id: number, updates: Partial<InsertTeamPaymentHistory>): Promise<TeamPaymentHistory | undefined>;
+  deleteTeamPayment(id: number): Promise<boolean>;
 }
 
 export class DbStorage implements IStorage {
@@ -3433,6 +3456,129 @@ export class DbStorage implements IStorage {
 
   async unlinkTaskFromClient(id: number): Promise<boolean> {
     await db.delete(clientTaskLinks).where(eq(clientTaskLinks.id, id));
+    return true;
+  }
+
+  // ==================== INTERNAL TEAM MEMBERS METHODS ====================
+
+  async getInternalTeamMembers(): Promise<InternalTeamMember[]> {
+    return await db
+      .select()
+      .from(internalTeamMembers)
+      .orderBy(internalTeamMembers.name);
+  }
+
+  async getInternalTeamMember(id: number): Promise<InternalTeamMember | undefined> {
+    const [member] = await db
+      .select()
+      .from(internalTeamMembers)
+      .where(eq(internalTeamMembers.id, id));
+    return member;
+  }
+
+  async getInternalTeamMemberByName(name: string): Promise<InternalTeamMember | undefined> {
+    const [member] = await db
+      .select()
+      .from(internalTeamMembers)
+      .where(eq(internalTeamMembers.name, name));
+    return member;
+  }
+
+  async createInternalTeamMember(member: InsertInternalTeamMember): Promise<InternalTeamMember> {
+    const [created] = await db.insert(internalTeamMembers).values(member).returning();
+    return created;
+  }
+
+  async updateInternalTeamMember(id: number, updates: Partial<InsertInternalTeamMember>): Promise<InternalTeamMember | undefined> {
+    const [updated] = await db
+      .update(internalTeamMembers)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(internalTeamMembers.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteInternalTeamMember(id: number): Promise<boolean> {
+    await db.delete(internalTeamMembers).where(eq(internalTeamMembers.id, id));
+    return true;
+  }
+
+  async searchInternalTeamMembers(query: string): Promise<InternalTeamMember[]> {
+    const searchPattern = `%${query.toLowerCase()}%`;
+    return await db
+      .select()
+      .from(internalTeamMembers)
+      .where(
+        or(
+          sql`LOWER(${internalTeamMembers.name}) LIKE ${searchPattern}`,
+          sql`LOWER(${internalTeamMembers.nickname}) LIKE ${searchPattern}`,
+          sql`LOWER(${internalTeamMembers.role}) LIKE ${searchPattern}`
+        )
+      )
+      .orderBy(internalTeamMembers.name);
+  }
+
+  async getTeamMembersByDepartment(department: string): Promise<InternalTeamMember[]> {
+    return await db
+      .select()
+      .from(internalTeamMembers)
+      .where(eq(internalTeamMembers.department, department))
+      .orderBy(internalTeamMembers.name);
+  }
+
+  async getTeamMembersByStatus(status: string): Promise<InternalTeamMember[]> {
+    return await db
+      .select()
+      .from(internalTeamMembers)
+      .where(eq(internalTeamMembers.status, status))
+      .orderBy(internalTeamMembers.name);
+  }
+
+  // ==================== TEAM PAYMENT HISTORY METHODS ====================
+
+  async getTeamPaymentHistory(memberId: number): Promise<TeamPaymentHistory[]> {
+    return await db
+      .select()
+      .from(teamPaymentHistory)
+      .where(eq(teamPaymentHistory.memberId, memberId))
+      .orderBy(desc(teamPaymentHistory.paymentDate));
+  }
+
+  async getAllTeamPayments(startDate?: Date, endDate?: Date): Promise<TeamPaymentHistory[]> {
+    if (startDate && endDate) {
+      return await db
+        .select()
+        .from(teamPaymentHistory)
+        .where(
+          and(
+            sql`${teamPaymentHistory.paymentDate} >= ${startDate}`,
+            sql`${teamPaymentHistory.paymentDate} <= ${endDate}`
+          )
+        )
+        .orderBy(desc(teamPaymentHistory.paymentDate));
+    }
+    return await db
+      .select()
+      .from(teamPaymentHistory)
+      .orderBy(desc(teamPaymentHistory.paymentDate));
+  }
+
+  async createTeamPayment(payment: InsertTeamPaymentHistory): Promise<TeamPaymentHistory> {
+    const [created] = await db.insert(teamPaymentHistory).values(payment).returning();
+    return created;
+  }
+
+  async updateTeamPayment(id: number, updates: Partial<InsertTeamPaymentHistory>): Promise<TeamPaymentHistory | undefined> {
+    const [updated] = await db
+      .update(teamPaymentHistory)
+      .set(updates)
+      .where(eq(teamPaymentHistory.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteTeamPayment(id: number): Promise<boolean> {
+    await db.delete(teamPaymentHistory).where(eq(teamPaymentHistory.id, id));
     return true;
   }
 }

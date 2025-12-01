@@ -91,7 +91,8 @@ const sharedItems: NavItem[] = [
 ];
 
 const adminItems: NavItem[] = [
-  { title: "Manage Users", href: "/admin/content-users", icon: Users, description: "View and manage all users" },
+  { title: "Internal Team", href: "/admin/internal-team", icon: Users, description: "Team roster and payroll" },
+  { title: "Manage Users", href: "/admin/content-users", icon: Shield, description: "View and manage all users" },
   { title: "Pending Members", href: "/admin/pending-members", icon: UserPlus, description: "Approve new members" },
   { title: "Worker Monitoring", href: "/admin/monitoring", icon: Monitor, description: "View worker activity" },
   { title: "Payment Requests", href: "/admin/payments", icon: DollarSign, description: "Approve payments" },

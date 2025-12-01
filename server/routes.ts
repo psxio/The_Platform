@@ -4,6 +4,7 @@ import multer from "multer";
 import * as XLSX from "xlsx";
 import crypto from "crypto";
 import type { ComparisonResult, InsertCollection } from "@shared/schema";
+import { insertInternalTeamMemberSchema, insertTeamPaymentHistorySchema } from "@shared/schema";
 import { storage } from "./storage";
 import { parseFile } from "./file-parser";
 import { createRequire } from "module";
@@ -7853,6 +7854,190 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error deleting calendar event:", error);
       res.status(500).json({ error: "Failed to delete calendar event" });
+    }
+  });
+
+  // ==================== INTERNAL TEAM MEMBER ROUTES ====================
+
+  // Get all internal team members - admin only
+  app.get("/api/internal-team", requireRole("admin"), async (req: any, res) => {
+    try {
+      const members = await storage.getInternalTeamMembers();
+      res.json(members);
+    } catch (error) {
+      console.error("Error fetching internal team members:", error);
+      res.status(500).json({ error: "Failed to fetch team members" });
+    }
+  });
+
+  // Get single internal team member - admin only
+  app.get("/api/internal-team/:id", requireRole("admin"), async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const member = await storage.getInternalTeamMember(id);
+      if (!member) {
+        return res.status(404).json({ error: "Team member not found" });
+      }
+      res.json(member);
+    } catch (error) {
+      console.error("Error fetching team member:", error);
+      res.status(500).json({ error: "Failed to fetch team member" });
+    }
+  });
+
+  // Search internal team members - admin only
+  app.get("/api/internal-team/search/:query", requireRole("admin"), async (req: any, res) => {
+    try {
+      const query = req.params.query;
+      const members = await storage.searchInternalTeamMembers(query);
+      res.json(members);
+    } catch (error) {
+      console.error("Error searching team members:", error);
+      res.status(500).json({ error: "Failed to search team members" });
+    }
+  });
+
+  // Get team members by department - admin only
+  app.get("/api/internal-team/department/:dept", requireRole("admin"), async (req: any, res) => {
+    try {
+      const department = req.params.dept;
+      const members = await storage.getTeamMembersByDepartment(department);
+      res.json(members);
+    } catch (error) {
+      console.error("Error fetching team members by department:", error);
+      res.status(500).json({ error: "Failed to fetch team members" });
+    }
+  });
+
+  // Create internal team member - admin only
+  app.post("/api/internal-team", requireRole("admin"), async (req: any, res) => {
+    try {
+      const validationResult = insertInternalTeamMemberSchema.safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({ error: "Validation failed", details: validationResult.error.flatten() });
+      }
+      const member = await storage.createInternalTeamMember(validationResult.data);
+      res.status(201).json(member);
+    } catch (error) {
+      console.error("Error creating team member:", error);
+      res.status(500).json({ error: "Failed to create team member" });
+    }
+  });
+
+  // Update internal team member - admin only
+  app.patch("/api/internal-team/:id", requireRole("admin"), async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const validationResult = insertInternalTeamMemberSchema.partial().safeParse(req.body);
+      if (!validationResult.success) {
+        return res.status(400).json({ error: "Validation failed", details: validationResult.error.flatten() });
+      }
+      const member = await storage.updateInternalTeamMember(id, validationResult.data);
+      if (!member) {
+        return res.status(404).json({ error: "Team member not found" });
+      }
+      res.json(member);
+    } catch (error) {
+      console.error("Error updating team member:", error);
+      res.status(500).json({ error: "Failed to update team member" });
+    }
+  });
+
+  // Delete internal team member - admin only
+  app.delete("/api/internal-team/:id", requireRole("admin"), async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      await storage.deleteInternalTeamMember(id);
+      res.status(204).end();
+    } catch (error) {
+      console.error("Error deleting team member:", error);
+      res.status(500).json({ error: "Failed to delete team member" });
+    }
+  });
+
+  // ==================== TEAM PAYMENT HISTORY ROUTES ====================
+
+  // Get payment history for a member - admin only
+  app.get("/api/internal-team/:id/payments", requireRole("admin"), async (req: any, res) => {
+    try {
+      const memberId = parseInt(req.params.id);
+      const payments = await storage.getTeamPaymentHistory(memberId);
+      res.json(payments);
+    } catch (error) {
+      console.error("Error fetching payment history:", error);
+      res.status(500).json({ error: "Failed to fetch payment history" });
+    }
+  });
+
+  // Get all team payments - admin only
+  app.get("/api/team-payments", requireRole("admin"), async (req: any, res) => {
+    try {
+      const startDate = req.query.start ? new Date(req.query.start) : undefined;
+      const endDate = req.query.end ? new Date(req.query.end) : undefined;
+      const payments = await storage.getAllTeamPayments(startDate, endDate);
+      res.json(payments);
+    } catch (error) {
+      console.error("Error fetching team payments:", error);
+      res.status(500).json({ error: "Failed to fetch team payments" });
+    }
+  });
+
+  // Create team payment - admin only
+  app.post("/api/team-payments", requireRole("admin"), async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const paymentData = {
+        ...req.body,
+        processedBy: user.id,
+        paymentDate: req.body.paymentDate ? new Date(req.body.paymentDate) : new Date(),
+        periodStart: req.body.periodStart ? new Date(req.body.periodStart) : null,
+        periodEnd: req.body.periodEnd ? new Date(req.body.periodEnd) : null,
+      };
+      const validationResult = insertTeamPaymentHistorySchema.safeParse(paymentData);
+      if (!validationResult.success) {
+        return res.status(400).json({ error: "Validation failed", details: validationResult.error.flatten() });
+      }
+      const payment = await storage.createTeamPayment(validationResult.data);
+      res.status(201).json(payment);
+    } catch (error) {
+      console.error("Error creating team payment:", error);
+      res.status(500).json({ error: "Failed to create team payment" });
+    }
+  });
+
+  // Update team payment - admin only
+  app.patch("/api/team-payments/:id", requireRole("admin"), async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const updates = { ...req.body };
+      if (updates.paymentDate) updates.paymentDate = new Date(updates.paymentDate);
+      if (updates.periodStart) updates.periodStart = new Date(updates.periodStart);
+      if (updates.periodEnd) updates.periodEnd = new Date(updates.periodEnd);
+      
+      const validationResult = insertTeamPaymentHistorySchema.partial().safeParse(updates);
+      if (!validationResult.success) {
+        return res.status(400).json({ error: "Validation failed", details: validationResult.error.flatten() });
+      }
+      const payment = await storage.updateTeamPayment(id, validationResult.data);
+      if (!payment) {
+        return res.status(404).json({ error: "Payment not found" });
+      }
+      res.json(payment);
+    } catch (error) {
+      console.error("Error updating team payment:", error);
+      res.status(500).json({ error: "Failed to update team payment" });
+    }
+  });
+
+  // Delete team payment - admin only
+  app.delete("/api/team-payments/:id", requireRole("admin"), async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      await storage.deleteTeamPayment(id);
+      res.status(204).end();
+    } catch (error) {
+      console.error("Error deleting team payment:", error);
+      res.status(500).json({ error: "Failed to delete team payment" });
     }
   });
 

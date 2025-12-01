@@ -11,10 +11,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Progress } from "@/components/ui/progress";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { 
   CreditCard, 
   Plus, 
@@ -29,7 +31,19 @@ import {
   Package,
   FileText,
   Send,
-  Loader2
+  Loader2,
+  FolderOpen,
+  Download,
+  ExternalLink,
+  TrendingUp,
+  Timer,
+  AlertTriangle,
+  Eye,
+  Calendar,
+  User,
+  Activity,
+  BarChart3,
+  Zap
 } from "lucide-react";
 import { ClientWelcomeModal } from "@/components/client-welcome-modal";
 import type { CreditRequest, ContentOrder, CreditTransaction, ClientOnboarding } from "@shared/schema";
@@ -42,6 +56,15 @@ const formatCurrency = (cents: number, currency: string = "USD") => {
 };
 
 const formatDate = (date: string | Date | null) => {
+  if (!date) return "N/A";
+  return new Date(date).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+};
+
+const formatDateTime = (date: string | Date | null) => {
   if (!date) return "N/A";
   return new Date(date).toLocaleDateString("en-US", {
     month: "short",
@@ -61,7 +84,7 @@ const getStatusBadge = (status: string) => {
     draft: { variant: "secondary", icon: <FileText className="h-3 w-3" /> },
     submitted: { variant: "default", icon: <Send className="h-3 w-3" /> },
     in_progress: { variant: "default", icon: <Loader2 className="h-3 w-3 animate-spin" /> },
-    review: { variant: "secondary", icon: <AlertCircle className="h-3 w-3" /> },
+    review: { variant: "secondary", icon: <Eye className="h-3 w-3" /> },
     completed: { variant: "default", icon: <CheckCircle className="h-3 w-3" /> },
   };
   const config = variants[status] || variants.pending;
@@ -73,15 +96,68 @@ const getStatusBadge = (status: string) => {
   );
 };
 
+const getPriorityBadge = (priority: string) => {
+  const colors: Record<string, string> = {
+    low: "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
+    normal: "bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300",
+    high: "bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300",
+    urgent: "bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300",
+  };
+  return (
+    <Badge variant="outline" className={colors[priority] || colors.normal}>
+      {priority.charAt(0).toUpperCase() + priority.slice(1)}
+    </Badge>
+  );
+};
+
+interface DashboardSummary {
+  balance: number;
+  currency: string;
+  stats: {
+    activeOrders: number;
+    completedOrders: number;
+    totalOrders: number;
+    pendingRequests: number;
+    overdueOrders: number;
+    avgCompletionDays: number;
+  };
+  recentOrders: ContentOrder[];
+  activeOrderDetails: Array<{
+    id: number;
+    title: string;
+    status: string;
+    priority: string;
+    createdAt: Date | null;
+    dueDate: Date | null;
+    orderType: string;
+  }>;
+}
+
+interface WorkLibraryItem {
+  id: number;
+  title: string;
+  orderType: string;
+  deliverableUrl: string | null;
+  completedAt: Date | null;
+  createdAt: Date | null;
+  description: string;
+  specifications: string | null;
+}
+
 export default function ClientPortal() {
   const [activeTab, setActiveTab] = useState("overview");
   const [isRequestDialogOpen, setIsRequestDialogOpen] = useState(false);
   const [isOrderDialogOpen, setIsOrderDialogOpen] = useState(false);
+  const [selectedOrderId, setSelectedOrderId] = useState<number | null>(null);
   const { user } = useAuth();
   const { toast } = useToast();
 
-  const { data: balance, isLoading: balanceLoading } = useQuery<{ balance: number; currency: string }>({
-    queryKey: ["/api/client-credits/my-balance"],
+  const { data: dashboardSummary, isLoading: summaryLoading } = useQuery<DashboardSummary>({
+    queryKey: ["/api/client/dashboard-summary"],
+  });
+
+  const { data: workLibrary, isLoading: libraryLoading } = useQuery<WorkLibraryItem[]>({
+    queryKey: ["/api/client/work-library"],
   });
 
   const { data: transactions, isLoading: transactionsLoading } = useQuery<CreditTransaction[]>({
@@ -121,159 +197,394 @@ export default function ClientPortal() {
 
   const pendingRequests = creditRequests?.filter(r => r.status === "pending") || [];
   const activeOrders = contentOrders?.filter(o => !["completed", "cancelled"].includes(o.status)) || [];
+  const balance = dashboardSummary?.balance || 0;
+  const currency = dashboardSummary?.currency || "USD";
 
   return (
-    <div className="container mx-auto py-6 px-4 max-w-6xl">
+    <div className="container mx-auto py-6 px-4 max-w-7xl">
       <ClientWelcomeModal />
       
       <div className="flex flex-col gap-6">
+        {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold tracking-tight" data-testid="heading-client-portal">
               Client Portal
             </h1>
             <p className="text-muted-foreground">
-              Manage your buy power, orders, and content requests
+              Manage your projects, orders, and deliverables
             </p>
+          </div>
+          <div className="flex gap-2">
+            <Button 
+              onClick={() => setIsOrderDialogOpen(true)}
+              disabled={balance <= 0}
+              data-testid="button-quick-order"
+            >
+              <ShoppingCart className="h-4 w-4 mr-2" />
+              New Order
+            </Button>
+            <Button 
+              variant="outline"
+              onClick={() => setIsRequestDialogOpen(true)}
+              data-testid="button-quick-request"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Request Buy Power
+            </Button>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {/* Stats Cards */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
-              <CardTitle className="text-sm font-medium">Available Buy Power</CardTitle>
+              <CardTitle className="text-sm font-medium">Buy Power</CardTitle>
               <CreditCard className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              {balanceLoading ? (
+              {summaryLoading ? (
                 <Skeleton className="h-8 w-24" />
               ) : (
-                <div className="text-2xl font-bold" data-testid="text-credit-balance">
-                  {formatCurrency(balance?.balance || 0, balance?.currency)}
+                <div className="text-2xl font-bold text-primary" data-testid="text-credit-balance">
+                  {formatCurrency(balance, currency)}
                 </div>
               )}
-              <p className="text-xs text-muted-foreground mt-1">Use buy power to order content</p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
-              <CardTitle className="text-sm font-medium">Pending Requests</CardTitle>
-              <Clock className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold" data-testid="text-pending-requests">
-                {pendingRequests.length}
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">Buy power requests awaiting approval</p>
+              <p className="text-xs text-muted-foreground mt-1">Available balance</p>
             </CardContent>
           </Card>
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
               <CardTitle className="text-sm font-medium">Active Orders</CardTitle>
-              <Package className="h-4 w-4 text-muted-foreground" />
+              <Activity className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold" data-testid="text-active-orders">
-                {activeOrders.length}
+                {summaryLoading ? <Skeleton className="h-8 w-12" /> : dashboardSummary?.stats.activeOrders || 0}
               </div>
-              <p className="text-xs text-muted-foreground mt-1">Content orders in progress</p>
+              <p className="text-xs text-muted-foreground mt-1">In progress</p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+              <CardTitle className="text-sm font-medium">Completed</CardTitle>
+              <CheckCircle className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-green-600" data-testid="text-completed-orders">
+                {summaryLoading ? <Skeleton className="h-8 w-12" /> : dashboardSummary?.stats.completedOrders || 0}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">Delivered</p>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between gap-2 pb-2">
+              <CardTitle className="text-sm font-medium">Avg. Delivery</CardTitle>
+              <Timer className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold" data-testid="text-avg-delivery">
+                {summaryLoading ? <Skeleton className="h-8 w-16" /> : `${dashboardSummary?.stats.avgCompletionDays || 0} days`}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">Turnaround time</p>
             </CardContent>
           </Card>
         </div>
 
+        {/* Main Content Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="mb-4">
-            <TabsTrigger value="overview" data-testid="tab-overview">Overview</TabsTrigger>
-            <TabsTrigger value="orders" data-testid="tab-orders">My Orders</TabsTrigger>
-            <TabsTrigger value="requests" data-testid="tab-requests">Buy Power Requests</TabsTrigger>
-            <TabsTrigger value="history" data-testid="tab-history">Transaction History</TabsTrigger>
+          <TabsList className="mb-4 flex-wrap">
+            <TabsTrigger value="overview" data-testid="tab-overview">
+              <BarChart3 className="h-4 w-4 mr-2" />
+              Dashboard
+            </TabsTrigger>
+            <TabsTrigger value="orders" data-testid="tab-orders">
+              <Package className="h-4 w-4 mr-2" />
+              My Orders
+            </TabsTrigger>
+            <TabsTrigger value="library" data-testid="tab-library">
+              <FolderOpen className="h-4 w-4 mr-2" />
+              Work Library
+            </TabsTrigger>
+            <TabsTrigger value="requests" data-testid="tab-requests">
+              <CreditCard className="h-4 w-4 mr-2" />
+              Buy Power
+            </TabsTrigger>
+            <TabsTrigger value="history" data-testid="tab-history">
+              <History className="h-4 w-4 mr-2" />
+              History
+            </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="overview" className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Quick Actions</CardTitle>
-                  <CardDescription>Get started with your portal</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <Button 
-                    onClick={() => setIsOrderDialogOpen(true)} 
-                    className="w-full justify-start"
-                    disabled={!balance || balance.balance <= 0}
-                    data-testid="button-new-order"
-                  >
-                    <ShoppingCart className="h-4 w-4 mr-2" />
-                    Place New Content Order
-                  </Button>
-                  <Button 
-                    variant="outline" 
-                    onClick={() => setIsRequestDialogOpen(true)} 
-                    className="w-full justify-start"
-                    data-testid="button-request-credits"
-                  >
-                    <Plus className="h-4 w-4 mr-2" />
-                    Request More Buy Power
-                  </Button>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Recent Activity</CardTitle>
-                  <CardDescription>Your latest transactions</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  {transactionsLoading ? (
-                    <div className="space-y-2">
-                      <Skeleton className="h-10 w-full" />
-                      <Skeleton className="h-10 w-full" />
+          {/* Dashboard/Overview Tab */}
+          <TabsContent value="overview" className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Active Orders Panel */}
+              <div className="lg:col-span-2 space-y-4">
+                <Card>
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <CardTitle>Active Orders</CardTitle>
+                        <CardDescription>Orders currently being worked on</CardDescription>
+                      </div>
+                      {dashboardSummary?.stats.overdueOrders && dashboardSummary.stats.overdueOrders > 0 && (
+                        <Badge variant="destructive" className="gap-1">
+                          <AlertTriangle className="h-3 w-3" />
+                          {dashboardSummary.stats.overdueOrders} overdue
+                        </Badge>
+                      )}
                     </div>
-                  ) : transactions && transactions.length > 0 ? (
-                    <div className="space-y-2">
-                      {transactions.slice(0, 3).map((tx) => (
-                        <div key={tx.id} className="flex items-center justify-between py-2 border-b last:border-0">
-                          <div className="flex items-center gap-2">
-                            {tx.amount > 0 ? (
-                              <ArrowUpRight className="h-4 w-4 text-green-500" />
-                            ) : (
-                              <ArrowDownRight className="h-4 w-4 text-red-500" />
-                            )}
-                            <div>
-                              <p className="text-sm font-medium">{tx.description || tx.type}</p>
-                              <p className="text-xs text-muted-foreground">{formatDate(tx.createdAt)}</p>
+                  </CardHeader>
+                  <CardContent>
+                    {summaryLoading ? (
+                      <div className="space-y-3">
+                        <Skeleton className="h-20 w-full" />
+                        <Skeleton className="h-20 w-full" />
+                      </div>
+                    ) : dashboardSummary?.activeOrderDetails && dashboardSummary.activeOrderDetails.length > 0 ? (
+                      <div className="space-y-3">
+                        {dashboardSummary.activeOrderDetails.map((order) => (
+                          <div 
+                            key={order.id} 
+                            className="p-4 border rounded-lg hover-elevate cursor-pointer"
+                            onClick={() => {
+                              setSelectedOrderId(order.id);
+                              setActiveTab("orders");
+                            }}
+                            data-testid={`active-order-${order.id}`}
+                          >
+                            <div className="flex items-start justify-between gap-4">
+                              <div className="flex-1 min-w-0">
+                                <h4 className="font-medium truncate">{order.title}</h4>
+                                <p className="text-sm text-muted-foreground capitalize">
+                                  {order.orderType.replace("_", " ")}
+                                </p>
+                              </div>
+                              <div className="flex flex-col items-end gap-1">
+                                {getStatusBadge(order.status)}
+                                {getPriorityBadge(order.priority || "normal")}
+                              </div>
                             </div>
+                            {order.dueDate && (
+                              <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+                                <Calendar className="h-3 w-3" />
+                                Due: {formatDate(order.dueDate)}
+                                {new Date(order.dueDate) < new Date() && (
+                                  <Badge variant="destructive" className="text-[10px] px-1 py-0">
+                                    Overdue
+                                  </Badge>
+                                )}
+                              </div>
+                            )}
                           </div>
-                          <span className={`font-medium ${tx.amount > 0 ? 'text-green-500' : 'text-red-500'}`}>
-                            {tx.amount > 0 ? '+' : ''}{formatCurrency(tx.amount)}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-muted-foreground">No recent transactions</p>
-                  )}
-                </CardContent>
-                <CardFooter>
-                  <Button variant="ghost" size="sm" onClick={() => setActiveTab("history")}>
-                    View All Transactions
-                  </Button>
-                </CardFooter>
-              </Card>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-center py-8 text-muted-foreground">
+                        <Package className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                        <p>No active orders</p>
+                        <Button 
+                          className="mt-4" 
+                          onClick={() => setIsOrderDialogOpen(true)}
+                          disabled={balance <= 0}
+                        >
+                          Place Your First Order
+                        </Button>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+
+                {/* Recent Deliveries */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Recent Deliveries</CardTitle>
+                    <CardDescription>Your latest completed work</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {libraryLoading ? (
+                      <div className="space-y-2">
+                        <Skeleton className="h-12 w-full" />
+                        <Skeleton className="h-12 w-full" />
+                      </div>
+                    ) : workLibrary && workLibrary.length > 0 ? (
+                      <div className="space-y-2">
+                        {workLibrary.slice(0, 3).map((item) => (
+                          <div 
+                            key={item.id}
+                            className="flex items-center justify-between p-3 border rounded-lg hover-elevate"
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className="p-2 bg-primary/10 rounded">
+                                <FileText className="h-4 w-4 text-primary" />
+                              </div>
+                              <div>
+                                <p className="font-medium text-sm">{item.title}</p>
+                                <p className="text-xs text-muted-foreground">
+                                  Delivered {formatDate(item.completedAt)}
+                                </p>
+                              </div>
+                            </div>
+                            {item.deliverableUrl && (
+                              <Button variant="ghost" size="sm" asChild>
+                                <a href={item.deliverableUrl} target="_blank" rel="noopener noreferrer">
+                                  <ExternalLink className="h-4 w-4" />
+                                </a>
+                              </Button>
+                            )}
+                          </div>
+                        ))}
+                        {workLibrary.length > 3 && (
+                          <Button 
+                            variant="ghost" 
+                            className="w-full" 
+                            onClick={() => setActiveTab("library")}
+                          >
+                            View All ({workLibrary.length})
+                          </Button>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-center py-4 text-muted-foreground">
+                        No deliveries yet
+                      </p>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Sidebar */}
+              <div className="space-y-4">
+                {/* Quick Actions */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Quick Actions</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    <Button 
+                      onClick={() => setIsOrderDialogOpen(true)} 
+                      className="w-full justify-start"
+                      disabled={balance <= 0}
+                      data-testid="button-new-order"
+                    >
+                      <ShoppingCart className="h-4 w-4 mr-2" />
+                      Place New Order
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      onClick={() => setIsRequestDialogOpen(true)} 
+                      className="w-full justify-start"
+                      data-testid="button-request-credits"
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      Request Buy Power
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      onClick={() => setActiveTab("library")} 
+                      className="w-full justify-start"
+                      data-testid="button-view-library"
+                    >
+                      <FolderOpen className="h-4 w-4 mr-2" />
+                      View Work Library
+                    </Button>
+                  </CardContent>
+                </Card>
+
+                {/* Pending Requests */}
+                {pendingRequests.length > 0 && (
+                  <Card>
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-base flex items-center gap-2">
+                        <Clock className="h-4 w-4" />
+                        Pending Requests
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2">
+                        {pendingRequests.slice(0, 3).map((request) => (
+                          <div key={request.id} className="flex items-center justify-between text-sm">
+                            <span className="text-muted-foreground">Buy Power</span>
+                            <span className="font-medium">
+                              {formatCurrency(request.amount, request.currency)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Recent Activity */}
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-base">Recent Activity</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {transactionsLoading ? (
+                      <div className="space-y-2">
+                        <Skeleton className="h-8 w-full" />
+                        <Skeleton className="h-8 w-full" />
+                      </div>
+                    ) : transactions && transactions.length > 0 ? (
+                      <div className="space-y-2">
+                        {transactions.slice(0, 4).map((tx) => (
+                          <div key={tx.id} className="flex items-center justify-between text-sm">
+                            <div className="flex items-center gap-2">
+                              {tx.amount > 0 ? (
+                                <ArrowUpRight className="h-3 w-3 text-green-500" />
+                              ) : (
+                                <ArrowDownRight className="h-3 w-3 text-red-500" />
+                              )}
+                              <span className="truncate max-w-[120px]">
+                                {tx.description || tx.type}
+                              </span>
+                            </div>
+                            <span className={tx.amount > 0 ? 'text-green-600' : 'text-red-600'}>
+                              {tx.amount > 0 ? '+' : ''}{formatCurrency(tx.amount)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">No recent activity</p>
+                    )}
+                  </CardContent>
+                  <CardFooter className="pt-0">
+                    <Button variant="ghost" size="sm" onClick={() => setActiveTab("history")}>
+                      View All
+                    </Button>
+                  </CardFooter>
+                </Card>
+              </div>
             </div>
           </TabsContent>
 
+          {/* Orders Tab */}
           <TabsContent value="orders">
             <ContentOrdersSection 
               orders={contentOrders || []} 
               isLoading={ordersLoading}
               onNewOrder={() => setIsOrderDialogOpen(true)}
-              balance={balance?.balance || 0}
+              balance={balance}
+              selectedOrderId={selectedOrderId}
+              onOrderSelect={setSelectedOrderId}
             />
           </TabsContent>
 
+          {/* Work Library Tab */}
+          <TabsContent value="library">
+            <WorkLibrarySection 
+              items={workLibrary || []}
+              isLoading={libraryLoading}
+            />
+          </TabsContent>
+
+          {/* Buy Power Requests Tab */}
           <TabsContent value="requests">
             <CreditRequestsSection 
               requests={creditRequests || []} 
@@ -282,6 +593,7 @@ export default function ClientPortal() {
             />
           </TabsContent>
 
+          {/* Transaction History Tab */}
           <TabsContent value="history">
             <TransactionHistorySection 
               transactions={transactions || []} 
@@ -299,8 +611,117 @@ export default function ClientPortal() {
       <NewContentOrderDialog 
         open={isOrderDialogOpen} 
         onOpenChange={setIsOrderDialogOpen}
-        balance={balance?.balance || 0}
+        balance={balance}
       />
+    </div>
+  );
+}
+
+// Work Library Section Component
+function WorkLibrarySection({ 
+  items, 
+  isLoading 
+}: { 
+  items: WorkLibraryItem[]; 
+  isLoading: boolean;
+}) {
+  const [filter, setFilter] = useState<string>("all");
+  
+  const orderTypes = Array.from(new Set(items.map(i => i.orderType)));
+  
+  const filteredItems = filter === "all" 
+    ? items 
+    : items.filter(i => i.orderType === filter);
+
+  if (isLoading) {
+    return (
+      <div className="space-y-4">
+        <Skeleton className="h-10 w-48" />
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {[1, 2, 3, 4, 5, 6].map((i) => (
+            <Skeleton key={i} className="h-40 w-full" />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h3 className="text-lg font-semibold">Work Library</h3>
+          <p className="text-sm text-muted-foreground">
+            Access all your completed deliverables
+          </p>
+        </div>
+        {orderTypes.length > 1 && (
+          <Select value={filter} onValueChange={setFilter}>
+            <SelectTrigger className="w-[180px]" data-testid="select-library-filter">
+              <SelectValue placeholder="Filter by type" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Types</SelectItem>
+              {orderTypes.map((type) => (
+                <SelectItem key={type} value={type}>
+                  {type.replace("_", " ").replace(/\b\w/g, l => l.toUpperCase())}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+      </div>
+
+      {filteredItems.length === 0 ? (
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center py-12">
+            <FolderOpen className="h-16 w-16 text-muted-foreground mb-4 opacity-50" />
+            <h3 className="font-medium text-lg mb-1">No deliverables yet</h3>
+            <p className="text-muted-foreground text-center max-w-md">
+              Your completed work will appear here. Place an order to get started!
+            </p>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filteredItems.map((item) => (
+            <Card key={item.id} className="hover-elevate" data-testid={`library-item-${item.id}`}>
+              <CardHeader className="pb-2">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex-1 min-w-0">
+                    <CardTitle className="text-base truncate">{item.title}</CardTitle>
+                    <CardDescription className="capitalize">
+                      {item.orderType.replace("_", " ")}
+                    </CardDescription>
+                  </div>
+                  <div className="p-2 bg-green-100 dark:bg-green-900 rounded">
+                    <CheckCircle className="h-4 w-4 text-green-600 dark:text-green-400" />
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent className="pb-2">
+                <p className="text-sm text-muted-foreground line-clamp-2">
+                  {item.description}
+                </p>
+                <div className="flex items-center gap-2 mt-3 text-xs text-muted-foreground">
+                  <Calendar className="h-3 w-3" />
+                  Delivered {formatDate(item.completedAt)}
+                </div>
+              </CardContent>
+              <CardFooter className="pt-2">
+                {item.deliverableUrl && (
+                  <Button variant="outline" size="sm" className="w-full" asChild>
+                    <a href={item.deliverableUrl} target="_blank" rel="noopener noreferrer">
+                      <ExternalLink className="h-4 w-4 mr-2" />
+                      View Deliverable
+                    </a>
+                  </Button>
+                )}
+              </CardFooter>
+            </Card>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -309,14 +730,19 @@ function ContentOrdersSection({
   orders, 
   isLoading, 
   onNewOrder,
-  balance 
+  balance,
+  selectedOrderId,
+  onOrderSelect
 }: { 
   orders: ContentOrder[]; 
   isLoading: boolean; 
   onNewOrder: () => void;
   balance: number;
+  selectedOrderId: number | null;
+  onOrderSelect: (id: number | null) => void;
 }) {
   const { toast } = useToast();
+  const [viewingOrder, setViewingOrder] = useState<ContentOrder | null>(null);
 
   const cancelMutation = useMutation({
     mutationFn: async (id: number) => {
@@ -325,6 +751,7 @@ function ContentOrdersSection({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/content-orders"] });
       queryClient.invalidateQueries({ queryKey: ["/api/client-credits/my-balance"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/client/dashboard-summary"] });
       toast({ title: "Order cancelled" });
     },
     onError: () => {
@@ -339,6 +766,7 @@ function ContentOrdersSection({
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/content-orders"] });
       queryClient.invalidateQueries({ queryKey: ["/api/client-credits/my-balance"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/client/dashboard-summary"] });
       queryClient.invalidateQueries({ queryKey: ["/api/client-onboarding"] });
       toast({ title: "Order submitted successfully" });
     },
@@ -346,6 +774,16 @@ function ContentOrdersSection({
       toast({ title: error.message || "Failed to submit order", variant: "destructive" });
     },
   });
+
+  useEffect(() => {
+    if (selectedOrderId && orders.length > 0) {
+      const order = orders.find(o => o.id === selectedOrderId);
+      if (order) {
+        setViewingOrder(order);
+        onOrderSelect(null);
+      }
+    }
+  }, [selectedOrderId, orders]);
 
   if (isLoading) {
     return (
@@ -359,7 +797,12 @@ function ContentOrdersSection({
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
-        <h3 className="text-lg font-semibold">Your Content Orders</h3>
+        <div>
+          <h3 className="text-lg font-semibold">Your Content Orders</h3>
+          <p className="text-sm text-muted-foreground">
+            Track and manage your orders
+          </p>
+        </div>
         <Button onClick={onNewOrder} disabled={balance <= 0} data-testid="button-create-order">
           <Plus className="h-4 w-4 mr-2" />
           New Order
@@ -368,10 +811,11 @@ function ContentOrdersSection({
 
       {orders.length === 0 ? (
         <Card>
-          <CardContent className="flex flex-col items-center justify-center py-10">
-            <ShoppingCart className="h-12 w-12 text-muted-foreground mb-4" />
-            <p className="text-muted-foreground">No orders yet</p>
-            <Button className="mt-4" onClick={onNewOrder} disabled={balance <= 0}>
+          <CardContent className="flex flex-col items-center justify-center py-12">
+            <ShoppingCart className="h-16 w-16 text-muted-foreground mb-4 opacity-50" />
+            <h3 className="font-medium text-lg mb-1">No orders yet</h3>
+            <p className="text-muted-foreground mb-4">Place your first order to get started</p>
+            <Button onClick={onNewOrder} disabled={balance <= 0}>
               Place Your First Order
             </Button>
           </CardContent>
@@ -379,19 +823,27 @@ function ContentOrdersSection({
       ) : (
         <div className="space-y-3">
           {orders.map((order) => (
-            <Card key={order.id} data-testid={`card-order-${order.id}`}>
+            <Card 
+              key={order.id} 
+              className="hover-elevate cursor-pointer"
+              onClick={() => setViewingOrder(order)}
+              data-testid={`card-order-${order.id}`}
+            >
               <CardHeader className="pb-2">
-                <div className="flex justify-between items-start">
-                  <div>
+                <div className="flex justify-between items-start gap-4">
+                  <div className="flex-1 min-w-0">
                     <CardTitle className="text-base">{order.title}</CardTitle>
                     <CardDescription className="capitalize">{order.orderType.replace("_", " ")}</CardDescription>
                   </div>
-                  {getStatusBadge(order.status)}
+                  <div className="flex flex-col items-end gap-1">
+                    {getStatusBadge(order.status)}
+                    {order.priority && getPriorityBadge(order.priority)}
+                  </div>
                 </div>
               </CardHeader>
-              <CardContent>
+              <CardContent className="pb-2">
                 <p className="text-sm text-muted-foreground line-clamp-2">{order.description}</p>
-                <div className="flex justify-between items-center mt-3">
+                <div className="flex flex-wrap justify-between items-center mt-3 gap-2">
                   <span className="text-sm font-medium">
                     Cost: {formatCurrency(order.creditCost)}
                   </span>
@@ -400,16 +852,18 @@ function ContentOrdersSection({
                   </span>
                 </div>
               </CardContent>
-              {order.status === "draft" && (
-                <CardFooter className="pt-0 gap-2">
-                  <Button 
-                    size="sm" 
-                    onClick={() => submitMutation.mutate(order.id)}
-                    disabled={submitMutation.isPending}
-                    data-testid={`button-submit-order-${order.id}`}
-                  >
-                    {submitMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Submit Order"}
-                  </Button>
+              {(order.status === "draft" || order.status === "submitted") && (
+                <CardFooter className="pt-2 gap-2" onClick={(e) => e.stopPropagation()}>
+                  {order.status === "draft" && (
+                    <Button 
+                      size="sm" 
+                      onClick={() => submitMutation.mutate(order.id)}
+                      disabled={submitMutation.isPending}
+                      data-testid={`button-submit-order-${order.id}`}
+                    >
+                      {submitMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Submit Order"}
+                    </Button>
+                  )}
                   <Button 
                     size="sm" 
                     variant="outline"
@@ -417,26 +871,15 @@ function ContentOrdersSection({
                     disabled={cancelMutation.isPending}
                     data-testid={`button-cancel-order-${order.id}`}
                   >
-                    Cancel
-                  </Button>
-                </CardFooter>
-              )}
-              {order.status === "submitted" && (
-                <CardFooter className="pt-0">
-                  <Button 
-                    size="sm" 
-                    variant="outline"
-                    onClick={() => cancelMutation.mutate(order.id)}
-                    disabled={cancelMutation.isPending}
-                  >
-                    Cancel & Refund
+                    {order.status === "submitted" ? "Cancel & Refund" : "Cancel"}
                   </Button>
                 </CardFooter>
               )}
               {order.status === "completed" && order.deliverableUrl && (
-                <CardFooter className="pt-0">
+                <CardFooter className="pt-2" onClick={(e) => e.stopPropagation()}>
                   <Button size="sm" variant="outline" asChild>
                     <a href={order.deliverableUrl} target="_blank" rel="noopener noreferrer">
+                      <ExternalLink className="h-4 w-4 mr-2" />
                       View Deliverable
                     </a>
                   </Button>
@@ -446,7 +889,128 @@ function ContentOrdersSection({
           ))}
         </div>
       )}
+
+      {/* Order Details Dialog */}
+      <OrderDetailsDialog 
+        order={viewingOrder}
+        open={!!viewingOrder}
+        onOpenChange={(open) => !open && setViewingOrder(null)}
+      />
     </div>
+  );
+}
+
+function OrderDetailsDialog({
+  order,
+  open,
+  onOpenChange
+}: {
+  order: ContentOrder | null;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const { data: progress } = useQuery({
+    queryKey: [`/api/client/order-progress/${order?.id}`],
+    enabled: !!order?.id && open,
+  });
+
+  if (!order) return null;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>{order.title}</DialogTitle>
+          <DialogDescription className="capitalize">
+            {order.orderType.replace("_", " ")} • {formatCurrency(order.creditCost)}
+          </DialogDescription>
+        </DialogHeader>
+        
+        <div className="space-y-4">
+          {/* Status */}
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-muted-foreground">Status</span>
+            {getStatusBadge(order.status)}
+          </div>
+
+          {/* Priority */}
+          {order.priority && (
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-muted-foreground">Priority</span>
+              {getPriorityBadge(order.priority)}
+            </div>
+          )}
+
+          {/* Timeline */}
+          <div className="space-y-2">
+            <h4 className="text-sm font-medium">Timeline</h4>
+            <div className="space-y-2 pl-4 border-l-2 border-muted">
+              {order.createdAt && (
+                <div className="relative">
+                  <div className="absolute -left-[1.35rem] w-2.5 h-2.5 rounded-full bg-primary" />
+                  <p className="text-sm">Order created</p>
+                  <p className="text-xs text-muted-foreground">{formatDateTime(order.createdAt)}</p>
+                </div>
+              )}
+              {order.submittedAt && (
+                <div className="relative">
+                  <div className="absolute -left-[1.35rem] w-2.5 h-2.5 rounded-full bg-primary" />
+                  <p className="text-sm">Order submitted</p>
+                  <p className="text-xs text-muted-foreground">{formatDateTime(order.submittedAt)}</p>
+                </div>
+              )}
+              {order.status === "in_progress" && (
+                <div className="relative">
+                  <div className="absolute -left-[1.35rem] w-2.5 h-2.5 rounded-full bg-blue-500 animate-pulse" />
+                  <p className="text-sm">Work in progress</p>
+                  <p className="text-xs text-muted-foreground">Currently being worked on</p>
+                </div>
+              )}
+              {order.status === "review" && (
+                <div className="relative">
+                  <div className="absolute -left-[1.35rem] w-2.5 h-2.5 rounded-full bg-orange-500 animate-pulse" />
+                  <p className="text-sm">Under review</p>
+                  <p className="text-xs text-muted-foreground">Final review before delivery</p>
+                </div>
+              )}
+              {order.completedAt && (
+                <div className="relative">
+                  <div className="absolute -left-[1.35rem] w-2.5 h-2.5 rounded-full bg-green-500" />
+                  <p className="text-sm">Completed</p>
+                  <p className="text-xs text-muted-foreground">{formatDateTime(order.completedAt)}</p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Description */}
+          <div className="space-y-2">
+            <h4 className="text-sm font-medium">Description</h4>
+            <p className="text-sm text-muted-foreground">{order.description}</p>
+          </div>
+
+          {/* Specifications */}
+          {order.specifications && (
+            <div className="space-y-2">
+              <h4 className="text-sm font-medium">Specifications</h4>
+              <p className="text-sm text-muted-foreground">{order.specifications}</p>
+            </div>
+          )}
+
+          {/* Deliverable */}
+          {order.deliverableUrl && (
+            <div className="pt-2">
+              <Button className="w-full" asChild>
+                <a href={order.deliverableUrl} target="_blank" rel="noopener noreferrer">
+                  <ExternalLink className="h-4 w-4 mr-2" />
+                  View Deliverable
+                </a>
+              </Button>
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -467,6 +1031,7 @@ function CreditRequestsSection({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/credit-requests"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/client/dashboard-summary"] });
       toast({ title: "Request cancelled" });
     },
     onError: () => {
@@ -486,7 +1051,12 @@ function CreditRequestsSection({
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
-        <h3 className="text-lg font-semibold">Buy Power Requests</h3>
+        <div>
+          <h3 className="text-lg font-semibold">Buy Power Requests</h3>
+          <p className="text-sm text-muted-foreground">
+            Request additional buy power for your projects
+          </p>
+        </div>
         <Button onClick={onNewRequest} data-testid="button-new-credit-request">
           <Plus className="h-4 w-4 mr-2" />
           Request Buy Power
@@ -495,10 +1065,11 @@ function CreditRequestsSection({
 
       {requests.length === 0 ? (
         <Card>
-          <CardContent className="flex flex-col items-center justify-center py-10">
-            <CreditCard className="h-12 w-12 text-muted-foreground mb-4" />
-            <p className="text-muted-foreground">No buy power requests</p>
-            <Button className="mt-4" onClick={onNewRequest}>
+          <CardContent className="flex flex-col items-center justify-center py-12">
+            <CreditCard className="h-16 w-16 text-muted-foreground mb-4 opacity-50" />
+            <h3 className="font-medium text-lg mb-1">No buy power requests</h3>
+            <p className="text-muted-foreground mb-4">Request buy power when you need more</p>
+            <Button onClick={onNewRequest}>
               Request More Buy Power
             </Button>
           </CardContent>
@@ -574,13 +1145,19 @@ function TransactionHistorySection({
 
   return (
     <div className="space-y-4">
-      <h3 className="text-lg font-semibold">Transaction History</h3>
+      <div>
+        <h3 className="text-lg font-semibold">Transaction History</h3>
+        <p className="text-sm text-muted-foreground">
+          Complete history of your buy power transactions
+        </p>
+      </div>
       
       {transactions.length === 0 ? (
         <Card>
-          <CardContent className="flex flex-col items-center justify-center py-10">
-            <History className="h-12 w-12 text-muted-foreground mb-4" />
-            <p className="text-muted-foreground">No transactions yet</p>
+          <CardContent className="flex flex-col items-center justify-center py-12">
+            <History className="h-16 w-16 text-muted-foreground mb-4 opacity-50" />
+            <h3 className="font-medium text-lg mb-1">No transactions yet</h3>
+            <p className="text-muted-foreground">Your transaction history will appear here</p>
           </CardContent>
         </Card>
       ) : (
@@ -600,7 +1177,7 @@ function TransactionHistorySection({
                       </div>
                       <div>
                         <p className="font-medium">{tx.description || tx.type.replace("_", " ").replace(/\b\w/g, l => l.toUpperCase())}</p>
-                        <p className="text-xs text-muted-foreground">{formatDate(tx.createdAt)}</p>
+                        <p className="text-xs text-muted-foreground">{formatDateTime(tx.createdAt)}</p>
                       </div>
                     </div>
                     <div className="text-right">
@@ -645,6 +1222,7 @@ function NewCreditRequestDialog({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/credit-requests"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/client/dashboard-summary"] });
       toast({ title: "Buy power request submitted" });
       onOpenChange(false);
       setAmount("");
@@ -749,6 +1327,8 @@ function NewContentOrderDialog({
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/content-orders"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/client/dashboard-summary"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/client/work-library"] });
       toast({ title: "Order created as draft" });
       onOpenChange(false);
       resetForm();

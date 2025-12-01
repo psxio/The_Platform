@@ -6583,6 +6583,172 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ==================== CLIENT WORK LIBRARY ROUTES ====================
+
+  // Get client's completed deliverables (work library)
+  app.get("/api/client/work-library", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user;
+      
+      // Get completed orders for this client with deliverables
+      const orders = await storage.getContentOrders(user.id);
+      const completedOrders = orders.filter(o => o.status === "completed" && o.deliverableUrl);
+      
+      // Group by order type for easy categorization
+      const library = completedOrders.map(order => ({
+        id: order.id,
+        title: order.title,
+        orderType: order.orderType,
+        deliverableUrl: order.deliverableUrl,
+        completedAt: order.completedAt,
+        createdAt: order.createdAt,
+        description: order.description,
+        specifications: order.specifications,
+      }));
+      
+      res.json(library);
+    } catch (error) {
+      console.error("Error fetching work library:", error);
+      res.status(500).json({ error: "Failed to fetch work library" });
+    }
+  });
+
+  // Get client's order progress/timeline for visibility
+  app.get("/api/client/order-progress/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user;
+      const orderId = parseInt(req.params.id);
+      
+      const order = await storage.getContentOrder(orderId);
+      if (!order) {
+        return res.status(404).json({ error: "Order not found" });
+      }
+      
+      // Only the client who owns the order can see details
+      if (order.clientId !== user.id && user.role !== "admin") {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      
+      // Get related task if exists
+      let taskInfo = null;
+      if (order.relatedTaskId) {
+        const task = await storage.getContentTask(order.relatedTaskId);
+        if (task) {
+          taskInfo = {
+            id: task.id,
+            status: task.status,
+            assignedTo: task.assignedTo || null,
+            dueDate: task.dueDate,
+            createdAt: task.createdAt,
+          };
+        }
+      }
+      
+      // Build timeline/progress
+      const progress = {
+        order: {
+          id: order.id,
+          title: order.title,
+          status: order.status,
+          createdAt: order.createdAt,
+          submittedAt: order.submittedAt,
+          completedAt: order.completedAt,
+          priority: order.priority,
+          deliverableUrl: order.deliverableUrl,
+        },
+        task: taskInfo,
+        timeline: [] as { date: Date | null; event: string; status: string }[],
+      };
+      
+      // Build timeline events
+      if (order.createdAt) {
+        progress.timeline.push({ date: order.createdAt, event: "Order created", status: "completed" });
+      }
+      if (order.submittedAt) {
+        progress.timeline.push({ date: order.submittedAt, event: "Order submitted", status: "completed" });
+      }
+      if (order.status === "in_progress") {
+        progress.timeline.push({ date: null, event: "Work in progress", status: "current" });
+      }
+      if (order.status === "review") {
+        progress.timeline.push({ date: null, event: "Under review", status: "current" });
+      }
+      if (order.completedAt) {
+        progress.timeline.push({ date: order.completedAt, event: "Completed", status: "completed" });
+      }
+      
+      res.json(progress);
+    } catch (error) {
+      console.error("Error fetching order progress:", error);
+      res.status(500).json({ error: "Failed to fetch order progress" });
+    }
+  });
+
+  // Get client dashboard summary
+  app.get("/api/client/dashboard-summary", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user;
+      
+      // Get balance
+      const balance = await storage.getClientCredit(user.id);
+      
+      // Get orders
+      const orders = await storage.getContentOrders(user.id);
+      
+      // Get credit requests
+      const requests = await storage.getCreditRequests(user.id);
+      
+      // Calculate stats
+      const activeOrders = orders.filter((o: any) => !["completed", "cancelled"].includes(o.status));
+      const completedOrders = orders.filter((o: any) => o.status === "completed");
+      const pendingRequests = requests.filter((r: any) => r.status === "pending");
+      
+      // Calculate SLA metrics (orders that have a due date)
+      const ordersWithDueDate = orders.filter((o: any) => o.dueDate && !["completed", "cancelled"].includes(o.status));
+      const overdueOrders = ordersWithDueDate.filter((o: any) => new Date(o.dueDate!) < new Date());
+      
+      // Calculate average completion time (for completed orders)
+      let avgCompletionDays = 0;
+      if (completedOrders.length > 0) {
+        const totalDays = completedOrders.reduce((sum: number, order: any) => {
+          if (order.submittedAt && order.completedAt) {
+            const submitted = new Date(order.submittedAt);
+            const completed = new Date(order.completedAt);
+            return sum + (completed.getTime() - submitted.getTime()) / (1000 * 60 * 60 * 24);
+          }
+          return sum;
+        }, 0);
+        avgCompletionDays = Math.round(totalDays / completedOrders.length);
+      }
+      
+      res.json({
+        balance: balance?.balance || 0,
+        currency: balance?.currency || "USD",
+        stats: {
+          activeOrders: activeOrders.length,
+          completedOrders: completedOrders.length,
+          totalOrders: orders.length,
+          pendingRequests: pendingRequests.length,
+          overdueOrders: overdueOrders.length,
+          avgCompletionDays,
+        },
+        recentOrders: orders.slice(0, 5),
+        activeOrderDetails: activeOrders.map(o => ({
+          id: o.id,
+          title: o.title,
+          status: o.status,
+          priority: o.priority,
+          createdAt: o.createdAt,
+          dueDate: o.dueDate,
+          orderType: o.orderType,
+        })),
+      });
+    } catch (error) {
+      console.error("Error fetching dashboard summary:", error);
+      res.status(500).json({ error: "Failed to fetch dashboard summary" });
+    }
+  });
+
   // ==================== CLIENT ONBOARDING ROUTES ====================
 
   // Get client onboarding status

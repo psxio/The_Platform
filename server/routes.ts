@@ -8041,6 +8041,119 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ==================== TEAM STRUCTURE ROUTES ====================
+
+  // Get team hierarchy (all members with supervisor info) - admin only
+  app.get("/api/team-structure/hierarchy", requireRole("admin"), async (req: any, res) => {
+    try {
+      const members = await storage.getTeamHierarchy();
+      res.json(members);
+    } catch (error) {
+      console.error("Error fetching team hierarchy:", error);
+      res.status(500).json({ error: "Failed to fetch team hierarchy" });
+    }
+  });
+
+  // Get direct reports for a supervisor - admin only
+  app.get("/api/team-structure/reports/:supervisorId", requireRole("admin"), async (req: any, res) => {
+    try {
+      const supervisorId = parseInt(req.params.supervisorId);
+      const members = await storage.getTeamMembersBySupervisor(supervisorId);
+      res.json(members);
+    } catch (error) {
+      console.error("Error fetching direct reports:", error);
+      res.status(500).json({ error: "Failed to fetch direct reports" });
+    }
+  });
+
+  // Get team members by employment type - admin only
+  app.get("/api/team-structure/type/:type", requireRole("admin"), async (req: any, res) => {
+    try {
+      const employmentType = req.params.type;
+      const members = await storage.getTeamMembersByEmploymentType(employmentType);
+      res.json(members);
+    } catch (error) {
+      console.error("Error fetching team members by employment type:", error);
+      res.status(500).json({ error: "Failed to fetch team members" });
+    }
+  });
+
+  // ==================== TEAM MEMBER CLIENT ASSIGNMENTS ROUTES ====================
+
+  // Get client assignments for a team member - admin only
+  app.get("/api/team-structure/assignments/:memberId", requireRole("admin"), async (req: any, res) => {
+    try {
+      const memberId = parseInt(req.params.memberId);
+      const assignments = await storage.getTeamMemberClientAssignments(memberId);
+      res.json(assignments);
+    } catch (error) {
+      console.error("Error fetching client assignments:", error);
+      res.status(500).json({ error: "Failed to fetch client assignments" });
+    }
+  });
+
+  // Get all assignments for a client profile - admin only
+  app.get("/api/team-structure/client-profile/:clientProfileId/assignees", requireRole("admin"), async (req: any, res) => {
+    try {
+      const clientProfileId = parseInt(req.params.clientProfileId);
+      const assignees = await storage.getClientProfileAssignees(clientProfileId);
+      res.json(assignees);
+    } catch (error) {
+      console.error("Error fetching client profile assignees:", error);
+      res.status(500).json({ error: "Failed to fetch assignees" });
+    }
+  });
+
+  // Get all assignments for a client user - admin only
+  app.get("/api/team-structure/client-user/:clientUserId/assignees", requireRole("admin"), async (req: any, res) => {
+    try {
+      const clientUserId = req.params.clientUserId;
+      const assignees = await storage.getClientUserAssignees(clientUserId);
+      res.json(assignees);
+    } catch (error) {
+      console.error("Error fetching client user assignees:", error);
+      res.status(500).json({ error: "Failed to fetch assignees" });
+    }
+  });
+
+  // Create client assignment - admin only
+  app.post("/api/team-structure/assignments", requireRole("admin"), async (req: any, res) => {
+    try {
+      const assignment = await storage.createTeamMemberClientAssignment(req.body);
+      res.status(201).json(assignment);
+    } catch (error) {
+      console.error("Error creating client assignment:", error);
+      res.status(500).json({ error: "Failed to create client assignment" });
+    }
+  });
+
+  // Update client assignment - admin only
+  app.patch("/api/team-structure/assignments/:id", requireRole("admin"), async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const assignment = await storage.updateTeamMemberClientAssignment(id, req.body);
+      if (!assignment) {
+        return res.status(404).json({ error: "Assignment not found" });
+      }
+      res.json(assignment);
+    } catch (error) {
+      console.error("Error updating client assignment:", error);
+      res.status(500).json({ error: "Failed to update client assignment" });
+    }
+  });
+
+  // Delete client assignment - admin only
+  app.delete("/api/team-structure/assignments/:id", requireRole("admin"), async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      await storage.deleteTeamMemberClientAssignment(id);
+      res.status(204).end();
+    } catch (error) {
+      console.error("Error deleting client assignment:", error);
+      res.status(500).json({ error: "Failed to delete client assignment" });
+    }
+  });
+
   // ==================== CONTENT IDEAS (PRE-PRODUCTION APPROVAL) ROUTES ====================
 
   // Get all content ideas - content/admin only

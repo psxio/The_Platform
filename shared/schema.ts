@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { sql } from "drizzle-orm";
-import { pgTable, text, serial, timestamp, jsonb, integer, varchar, index, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, jsonb, integer, varchar, index, boolean, real } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 
 // Session storage table for auth
@@ -1572,3 +1572,108 @@ export const insertClientTaskLinkSchema = createInsertSchema(clientTaskLinks).om
 
 export type InsertClientTaskLink = z.infer<typeof insertClientTaskLinkSchema>;
 export type ClientTaskLink = typeof clientTaskLinks.$inferSelect;
+
+// ==================== INTERNAL TEAM MEMBERS ====================
+
+export const teamMemberRoles = [
+  "founder",
+  "lead",
+  "developer",
+  "designer", 
+  "content_creator",
+  "community_manager",
+  "business_development",
+  "marketing",
+  "artist",
+  "video_editor",
+  "writer",
+  "project_manager",
+  "operations",
+  "advisor",
+  "contributor",
+  "other"
+] as const;
+
+export const teamMemberDepartments = [
+  "leadership",
+  "engineering",
+  "content",
+  "design",
+  "community",
+  "business",
+  "operations",
+  "general"
+] as const;
+
+export const paymentMethods = [
+  "crypto_base",
+  "crypto_eth",
+  "crypto_sol",
+  "venmo",
+  "paypal",
+  "wells_fargo",
+  "bank_transfer",
+  "other"
+] as const;
+
+export const internalTeamMembers = pgTable("internal_team_members", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  nickname: varchar("nickname", { length: 100 }), // Display name / alias
+  role: varchar("role", { length: 50 }).default("contributor"),
+  department: varchar("department", { length: 50 }).default("general"),
+  walletAddress: varchar("wallet_address", { length: 255 }),
+  walletChain: varchar("wallet_chain", { length: 20 }).default("base"), // base, eth, sol
+  payRate: real("pay_rate").default(0), // Weekly/monthly rate in USD
+  payFrequency: varchar("pay_frequency", { length: 20 }).default("weekly"), // weekly, monthly, per_task
+  paymentMethod: varchar("payment_method", { length: 50 }).default("crypto_base"),
+  paymentNotes: text("payment_notes"), // Special payment instructions
+  email: varchar("email", { length: 255 }),
+  telegram: varchar("telegram", { length: 100 }),
+  discord: varchar("discord", { length: 100 }),
+  twitter: varchar("twitter", { length: 100 }),
+  skills: text("skills").array(), // Array of skill tags
+  bio: text("bio"),
+  notes: text("notes"),
+  avatarUrl: varchar("avatar_url", { length: 500 }),
+  status: varchar("status", { length: 20 }).default("active"), // active, inactive, on_hold
+  startDate: timestamp("start_date"),
+  linkedUserId: varchar("linked_user_id").references(() => users.id, { onDelete: "set null" }), // Link to platform user
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertInternalTeamMemberSchema = createInsertSchema(internalTeamMembers).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertInternalTeamMember = z.infer<typeof insertInternalTeamMemberSchema>;
+export type InternalTeamMember = typeof internalTeamMembers.$inferSelect;
+
+// ==================== TEAM PAYMENT HISTORY ====================
+
+export const teamPaymentHistory = pgTable("team_payment_history", {
+  id: serial("id").primaryKey(),
+  memberId: integer("member_id").notNull().references(() => internalTeamMembers.id, { onDelete: "cascade" }),
+  amount: real("amount").notNull(),
+  currency: varchar("currency", { length: 10 }).default("USDC"),
+  paymentMethod: varchar("payment_method", { length: 50 }),
+  txHash: varchar("tx_hash", { length: 255 }), // Blockchain transaction hash if crypto
+  description: text("description"),
+  paymentDate: timestamp("payment_date").defaultNow(),
+  periodStart: timestamp("period_start"),
+  periodEnd: timestamp("period_end"),
+  status: varchar("status", { length: 20 }).default("completed"), // pending, completed, failed
+  processedBy: varchar("processed_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertTeamPaymentHistorySchema = createInsertSchema(teamPaymentHistory).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertTeamPaymentHistory = z.infer<typeof insertTeamPaymentHistorySchema>;
+export type TeamPaymentHistory = typeof teamPaymentHistory.$inferSelect;

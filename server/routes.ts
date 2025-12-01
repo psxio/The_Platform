@@ -3360,12 +3360,68 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ================== APPROVAL ENDPOINTS ==================
 
-  // Get approvals for a task
+  // Get approvals for a task with joined user data and stage progression
   app.get("/api/content-tasks/:id/approvals", requireRole("content"), async (req, res) => {
     try {
       const taskId = parseInt(req.params.id);
       const taskApprovals = await storage.getApprovals(taskId);
-      res.json(taskApprovals);
+      
+      // Enrich approvals with user data
+      const allUsers = await storage.getAllUsers();
+      const userMap = new Map(allUsers.map(u => [u.id, {
+        id: u.id,
+        firstName: u.firstName,
+        lastName: u.lastName,
+        email: u.email,
+        profileImageUrl: u.profileImageUrl,
+      }]));
+      
+      // Calculate stage progression
+      const sortedApprovals = [...taskApprovals].sort((a, b) => (a.stage || 1) - (b.stage || 1));
+      const stages = [...new Set(sortedApprovals.map(a => a.stage || 1))].sort((a, b) => a - b);
+      
+      // Find active stage (first stage that isn't fully approved)
+      let activeStage = 1;
+      for (const stage of stages) {
+        const stageApprovals = sortedApprovals.filter(a => (a.stage || 1) === stage);
+        const requiredApprovals = stageApprovals.filter(a => a.isRequired);
+        const allRequiredApproved = requiredApprovals.every(a => a.status === "approved");
+        
+        if (!allRequiredApproved) {
+          activeStage = stage;
+          break;
+        }
+        // Move to next stage if current is complete
+        if (stage === stages[stages.length - 1]) {
+          activeStage = stage; // All stages complete
+        }
+      }
+      
+      const enrichedApprovals = sortedApprovals.map(approval => ({
+        ...approval,
+        approver: userMap.get(approval.reviewerId) || null, // Keep for backward compatibility
+        reviewer: userMap.get(approval.reviewerId) || null, // New canonical name
+        isActiveStage: (approval.stage || 1) === activeStage,
+      }));
+      
+      // Calculate overall progress
+      const totalApprovals = enrichedApprovals.length;
+      const approvedCount = enrichedApprovals.filter(a => a.status === "approved").length;
+      const progressPercent = totalApprovals > 0 ? Math.round((approvedCount / totalApprovals) * 100) : 0;
+      
+      res.json({
+        approvals: enrichedApprovals,
+        progression: {
+          activeStage,
+          totalStages: stages.length,
+          completedStages: stages.filter(stage => {
+            const stageApprovals = sortedApprovals.filter(a => (a.stage || 1) === stage);
+            return stageApprovals.every(a => a.status === "approved");
+          }).length,
+          progressPercent,
+          isComplete: enrichedApprovals.every(a => a.status === "approved"),
+        }
+      });
     } catch (error) {
       console.error("Error fetching approvals:", error);
       res.status(500).json({ error: "Failed to fetch approvals" });

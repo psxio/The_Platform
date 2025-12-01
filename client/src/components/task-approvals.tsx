@@ -53,6 +53,7 @@ interface Approval {
   stage: number;
   stageName: string | null;
   isRequired: boolean;
+  isActiveStage?: boolean;
   dueDate: string | null;
   approver?: {
     id: string;
@@ -61,6 +62,26 @@ interface Approval {
     email: string;
     profileImageUrl: string | null;
   };
+  reviewer?: {
+    id: string;
+    firstName: string | null;
+    lastName: string | null;
+    email: string;
+    profileImageUrl: string | null;
+  };
+}
+
+interface ApprovalProgression {
+  activeStage: number;
+  totalStages: number;
+  completedStages: number;
+  progressPercent: number;
+  isComplete: boolean;
+}
+
+interface ApprovalsResponse {
+  approvals: Approval[];
+  progression: ApprovalProgression;
 }
 
 interface ApprovalWorkflow {
@@ -126,7 +147,7 @@ export function TaskApprovals({ taskId, currentUserId }: TaskApprovalsProps) {
   const [selectedWorkflow, setSelectedWorkflow] = useState("");
   const [responseComments, setResponseComments] = useState<{ [key: number]: string }>({});
 
-  const { data: approvals, isLoading } = useQuery<Approval[]>({
+  const { data: approvalsData, isLoading } = useQuery<ApprovalsResponse>({
     queryKey: ["/api/content-tasks", taskId, "approvals"],
     queryFn: async () => {
       const response = await fetch(`/api/content-tasks/${taskId}/approvals`, {
@@ -137,6 +158,10 @@ export function TaskApprovals({ taskId, currentUserId }: TaskApprovalsProps) {
     },
     enabled: !!taskId,
   });
+  
+  // Handle the new response format with approvals array and progression
+  const approvals = approvalsData?.approvals || [];
+  const progression = approvalsData?.progression;
 
   const { data: allUsers } = useQuery<User[]>({
     queryKey: ["/api/users"],
@@ -213,25 +238,26 @@ export function TaskApprovals({ taskId, currentUserId }: TaskApprovalsProps) {
     return user.email;
   };
 
-  const pendingApprovals = approvals?.filter(a => a.status === "pending") || [];
-  const completedApprovals = approvals?.filter(a => a.status !== "pending") || [];
-  const myPendingApprovals = pendingApprovals.filter(a => a.reviewerId === currentUserId);
+  const pendingApprovals = approvals.filter(a => a.status === "pending");
+  const completedApprovals = approvals.filter(a => a.status !== "pending");
+  const myPendingApprovals = pendingApprovals.filter(a => a.reviewerId === currentUserId && a.isActiveStage);
   
   // Group approvals by stage for multi-stage workflow visualization
-  const stageGroups = approvals ? approvals.reduce((acc, approval) => {
+  const stageGroups = approvals.reduce((acc, approval) => {
     const stage = approval.stage || 1;
     if (!acc[stage]) acc[stage] = [];
     acc[stage].push(approval);
     return acc;
-  }, {} as { [key: number]: Approval[] }) : {};
+  }, {} as { [key: number]: Approval[] });
   
   const stages = Object.keys(stageGroups).map(Number).sort((a, b) => a - b);
-  const hasMultipleStages = stages.length > 1;
+  const hasMultipleStages = stages.length > 1 || (progression && progression.totalStages > 1);
   
-  // Calculate approval progress
-  const totalApprovals = approvals?.length || 0;
-  const completedCount = completedApprovals.filter(a => a.status === "approved").length;
-  const progressPercent = totalApprovals > 0 ? (completedCount / totalApprovals) * 100 : 0;
+  // Use progression data from API or calculate locally
+  const totalApprovals = approvals.length;
+  const completedCount = approvals.filter(a => a.status === "approved").length;
+  const progressPercent = progression?.progressPercent ?? (totalApprovals > 0 ? (completedCount / totalApprovals) * 100 : 0);
+  const activeStage = progression?.activeStage ?? 1;
 
   return (
     <div className="space-y-4">

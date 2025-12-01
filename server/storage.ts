@@ -1300,16 +1300,32 @@ export class DbStorage implements IStorage {
   async applyWorkflowToTask(taskId: number, workflowId: number): Promise<Approval[]> {
     const stages = await this.getApprovalWorkflowStages(workflowId);
     const createdApprovals: Approval[] = [];
+    const skippedStages: string[] = [];
+    
+    // Get all users to assign based on role
+    const allUsers = await this.getAllUsers();
     
     for (const stage of stages) {
-      if (stage.reviewerId) {
+      let reviewerId = stage.reviewerId;
+      
+      // If no specific reviewer but has a role requirement, find an appropriate user
+      if (!reviewerId && stage.reviewerRole) {
+        const roleUsers = allUsers.filter(u => u.role === stage.reviewerRole);
+        if (roleUsers.length > 0) {
+          // Assign to first available user with that role (could be randomized or round-robin in future)
+          reviewerId = roleUsers[0].id;
+        }
+      }
+      
+      // Create approval if we have a reviewer
+      if (reviewerId) {
         const dueDate = stage.daysToComplete 
           ? new Date(Date.now() + stage.daysToComplete * 24 * 60 * 60 * 1000)
           : undefined;
           
         const approval = await this.createApproval({
           taskId,
-          reviewerId: stage.reviewerId,
+          reviewerId,
           status: "pending",
           stage: stage.stageOrder,
           stageName: stage.stageName,
@@ -1317,7 +1333,15 @@ export class DbStorage implements IStorage {
           dueDate,
         });
         createdApprovals.push(approval);
+      } else if (stage.isRequired) {
+        // Track required stages that couldn't be assigned
+        skippedStages.push(`${stage.stageName} (requires ${stage.reviewerRole || 'specific'} reviewer)`);
       }
+    }
+    
+    // Log warning if required stages were skipped
+    if (skippedStages.length > 0) {
+      console.warn(`Workflow ${workflowId} applied to task ${taskId} but skipped required stages: ${skippedStages.join(', ')}`);
     }
     
     return createdApprovals;

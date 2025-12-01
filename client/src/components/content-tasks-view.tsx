@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { ContentTask, User, DirectoryMember } from "@shared/schema";
+import { internalProjects } from "@shared/schema";
 import { ContentTaskCard } from "@/components/content-task-card";
 import { AdvancedTaskFilters } from "@/components/advanced-task-filters";
 import { BulkTaskActions } from "@/components/bulk-task-actions";
@@ -8,7 +9,7 @@ import { AddContentTaskDialog } from "@/components/add-content-task-dialog";
 import { TaskDetailsDialog } from "@/components/task-details-dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { AlertCircle, Inbox, User as UserIcon, Users } from "lucide-react";
+import { AlertCircle, Inbox, User as UserIcon, Users, Building2, Home, Filter } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import type { DateRange } from "react-day-picker";
 
@@ -17,6 +18,8 @@ export function ContentTasksView() {
   const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
   const [selectedAssignees, setSelectedAssignees] = useState<string[]>([]);
   const [selectedClients, setSelectedClients] = useState<string[]>([]);
+  const [selectedClientType, setSelectedClientType] = useState<"all" | "internal" | "external">("all");
+  const [selectedInternalProjects, setSelectedInternalProjects] = useState<string[]>([]);
   const [dateRange, setDateRange] = useState<DateRange | undefined>();
   const [selectedTaskIds, setSelectedTaskIds] = useState<number[]>([]);
   const [editingTask, setEditingTask] = useState<ContentTask | null>(null);
@@ -74,6 +77,7 @@ export function ContentTasksView() {
         task.description.toLowerCase().includes(query) ||
         task.assignedTo?.toLowerCase().includes(query) ||
         task.client?.toLowerCase().includes(query) ||
+        task.internalProject?.toLowerCase().includes(query) ||
         task.notes?.toLowerCase().includes(query);
       if (!matchesSearch) return false;
     }
@@ -90,6 +94,20 @@ export function ContentTasksView() {
 
     if (selectedClients.length > 0) {
       if (!task.client || !selectedClients.includes(task.client)) {
+        return false;
+      }
+    }
+
+    // Filter by client type (internal/external)
+    if (selectedClientType !== "all") {
+      if ((task.clientType || "external") !== selectedClientType) {
+        return false;
+      }
+    }
+
+    // Filter by internal projects
+    if (selectedInternalProjects.length > 0) {
+      if (!task.internalProject || !selectedInternalProjects.includes(task.internalProject)) {
         return false;
       }
     }
@@ -137,7 +155,17 @@ export function ContentTasksView() {
     setSelectedStatuses([]);
     setSelectedAssignees([]);
     setSelectedClients([]);
+    setSelectedClientType("all");
+    setSelectedInternalProjects([]);
     setDateRange(undefined);
+  };
+
+  const handleInternalProjectToggle = (project: string) => {
+    setSelectedInternalProjects(prev =>
+      prev.includes(project)
+        ? prev.filter(p => p !== project)
+        : [...prev, project]
+    );
   };
 
   const handleTaskSelectionChange = (taskId: number, selected: boolean) => {
@@ -174,10 +202,14 @@ export function ContentTasksView() {
 
   const allTaskCount = tasks?.length || 0;
 
+  // Calculate counts for internal/external
+  const internalTaskCount = tasks?.filter(t => t.clientType === "internal").length || 0;
+  const externalTaskCount = tasks?.filter(t => (t.clientType || "external") === "external").length || 0;
+
   return (
     <div className="space-y-6">
       {/* My Tasks / All Tasks Toggle */}
-      <div className="flex items-center gap-2" data-testid="task-visibility-toggle">
+      <div className="flex flex-wrap items-center gap-2" data-testid="task-visibility-toggle">
         <Button
           variant={showMyTasksOnly ? "default" : "outline"}
           size="sm"
@@ -196,7 +228,60 @@ export function ContentTasksView() {
           <Users className="h-4 w-4 mr-2" />
           All Tasks ({allTaskCount})
         </Button>
+        <div className="w-px h-6 bg-border mx-1" />
+        {/* Client Type Filter */}
+        <Button
+          variant={selectedClientType === "all" ? "default" : "outline"}
+          size="sm"
+          onClick={() => {
+            setSelectedClientType("all");
+            setSelectedInternalProjects([]);
+          }}
+          data-testid="client-type-all"
+        >
+          <Filter className="h-4 w-4 mr-2" />
+          All Clients
+        </Button>
+        <Button
+          variant={selectedClientType === "external" ? "default" : "outline"}
+          size="sm"
+          onClick={() => {
+            setSelectedClientType("external");
+            setSelectedInternalProjects([]);
+          }}
+          data-testid="client-type-filter-external"
+        >
+          <Building2 className="h-4 w-4 mr-2" />
+          External ({externalTaskCount})
+        </Button>
+        <Button
+          variant={selectedClientType === "internal" ? "default" : "outline"}
+          size="sm"
+          onClick={() => setSelectedClientType("internal")}
+          data-testid="client-type-filter-internal"
+        >
+          <Home className="h-4 w-4 mr-2" />
+          Internal ({internalTaskCount})
+        </Button>
       </div>
+
+      {/* Internal Projects Filter - Show only when Internal is selected */}
+      {selectedClientType === "internal" && (
+        <div className="flex flex-wrap items-center gap-2" data-testid="internal-projects-filter">
+          <span className="text-sm text-muted-foreground mr-2">Project:</span>
+          {internalProjects.map((project) => (
+            <Button
+              key={project}
+              variant={selectedInternalProjects.includes(project) ? "default" : "outline"}
+              size="sm"
+              onClick={() => handleInternalProjectToggle(project)}
+              data-testid={`filter-project-${project.replace(/\s+/g, '-').toLowerCase()}`}
+            >
+              {project}
+            </Button>
+          ))}
+        </div>
+      )}
 
       <AdvancedTaskFilters
         searchQuery={searchQuery}

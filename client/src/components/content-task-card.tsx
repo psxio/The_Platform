@@ -2,7 +2,7 @@ import type { ContentTask, Campaign } from "@shared/schema";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Calendar, User, Building2, AlertTriangle, Flag, FolderKanban } from "lucide-react";
+import { Calendar, User, Building2, AlertTriangle, Flag, FolderKanban, Home } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 
@@ -214,7 +214,15 @@ export function ContentTaskCard({ task, isSelected, onSelectionChange, onEdit }:
             </div>
           )}
 
-          {task.client && (
+          {/* Show client (external) or internal project */}
+          {task.clientType === "internal" && task.internalProject ? (
+            <div className="flex items-center gap-1.5">
+              <Home className="w-3.5 h-3.5 text-primary" />
+              <span className="truncate max-w-[80px] text-primary" data-testid={`text-internal-project-${task.id}`}>
+                {task.internalProject}
+              </span>
+            </div>
+          ) : task.client && (
             <div className="flex items-center gap-1.5">
               <Building2 className="w-3.5 h-3.5" />
               <span className="truncate max-w-[80px]" data-testid={`text-client-${task.id}`}>

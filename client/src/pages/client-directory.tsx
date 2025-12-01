@@ -65,9 +65,34 @@ import {
   Activity,
   Link as LinkIcon,
   X,
+  FolderOpen,
+  Image,
+  FileVideo,
+  FileAudio,
+  File,
+  Download,
+  CheckCircle2,
+  AlertCircle,
 } from "lucide-react";
 import { SiDiscord, SiTelegram, SiX } from "react-icons/si";
-import type { ClientProfile, ClientCalendarEvent } from "@shared/schema";
+import type { ClientProfile, ClientCalendarEvent, ContentTask, Deliverable } from "@shared/schema";
+
+function getFileIcon(fileName: string) {
+  const ext = fileName.toLowerCase().split('.').pop() || '';
+  if (['jpg', 'jpeg', 'png', 'gif', 'svg', 'webp'].includes(ext)) {
+    return <Image className="w-4 h-4 text-blue-500" />;
+  }
+  if (['mp4', 'webm', 'mov', 'avi'].includes(ext)) {
+    return <FileVideo className="w-4 h-4 text-purple-500" />;
+  }
+  if (['mp3', 'wav', 'ogg', 'm4a'].includes(ext)) {
+    return <FileAudio className="w-4 h-4 text-green-500" />;
+  }
+  if (['pdf'].includes(ext)) {
+    return <FileText className="w-4 h-4 text-red-500" />;
+  }
+  return <File className="w-4 h-4 text-muted-foreground" />;
+}
 
 const clientProfileSchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -137,6 +162,25 @@ export default function ClientDirectory() {
     queryKey: [`/api/client-profiles/${selectedClient?.id}/calendar`],
     enabled: !!selectedClient,
   });
+
+  const { data: allTasks = [] } = useQuery<ContentTask[]>({
+    queryKey: ["/api/content-tasks"],
+  });
+
+  const { data: allDeliverables = [] } = useQuery<Deliverable[]>({
+    queryKey: ["/api/deliverables"],
+  });
+
+  const clientTasks = allTasks.filter(task => 
+    task.client?.toLowerCase() === selectedClient?.name.toLowerCase()
+  );
+
+  const clientDeliverables = allDeliverables.filter(deliverable => 
+    clientTasks.some(task => task.id === deliverable.taskId)
+  );
+
+  const completedTasks = clientTasks.filter(t => t.status === "COMPLETED");
+  const inProgressTasks = clientTasks.filter(t => t.status === "IN PROGRESS");
 
   const form = useForm<ClientProfileForm>({
     resolver: zodResolver(clientProfileSchema),
@@ -516,6 +560,12 @@ export default function ClientDirectory() {
                   <Tabs value={activeTab} onValueChange={setActiveTab}>
                     <TabsList className="mb-4">
                       <TabsTrigger value="overview" data-testid="tab-overview">Overview</TabsTrigger>
+                      <TabsTrigger value="content" data-testid="tab-content">
+                        Content
+                        {clientDeliverables.length > 0 && (
+                          <Badge variant="secondary" className="ml-1.5 text-xs">{clientDeliverables.length}</Badge>
+                        )}
+                      </TabsTrigger>
                       <TabsTrigger value="calendar" data-testid="tab-calendar">Calendar</TabsTrigger>
                       <TabsTrigger value="contacts" data-testid="tab-contacts">Contacts</TabsTrigger>
                     </TabsList>
@@ -586,6 +636,118 @@ export default function ClientDirectory() {
                               <Badge key={i} variant="secondary">{tag}</Badge>
                             ))}
                           </div>
+                        </div>
+                      )}
+                    </TabsContent>
+
+                    <TabsContent value="content" className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <h4 className="font-medium flex items-center gap-2">
+                          <FolderOpen className="h-4 w-4" />
+                          Content Repository
+                        </h4>
+                        <div className="flex items-center gap-4 text-sm text-muted-foreground">
+                          <span className="flex items-center gap-1">
+                            <CheckCircle2 className="h-4 w-4 text-green-500" />
+                            {completedTasks.length} completed
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <Activity className="h-4 w-4 text-blue-500" />
+                            {inProgressTasks.length} in progress
+                          </span>
+                        </div>
+                      </div>
+
+                      {clientDeliverables.length > 0 ? (
+                        <div className="space-y-4">
+                          {clientTasks.filter(task => 
+                            clientDeliverables.some(d => d.taskId === task.id)
+                          ).map((task) => {
+                            const taskDeliverables = clientDeliverables.filter(d => d.taskId === task.id);
+                            return (
+                              <div key={task.id} className="border rounded-lg overflow-hidden">
+                                <div className="flex items-center justify-between gap-3 p-3 bg-muted/30">
+                                  <div className="flex-1 min-w-0">
+                                    <p className="font-medium text-sm truncate" title={task.description}>
+                                      {task.description}
+                                    </p>
+                                    <div className="flex items-center gap-2 mt-1">
+                                      <Badge 
+                                        variant="outline" 
+                                        className={
+                                          task.status === "COMPLETED" 
+                                            ? "bg-green-500/10 text-green-700 dark:text-green-400 border-green-500/20" 
+                                            : task.status === "IN PROGRESS"
+                                            ? "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/20"
+                                            : ""
+                                        }
+                                      >
+                                        {task.status}
+                                      </Badge>
+                                      {task.dueDate && (
+                                        <span className="text-xs text-muted-foreground flex items-center gap-1">
+                                          <Clock className="h-3 w-3" />
+                                          {task.dueDate}
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <Badge variant="secondary">{taskDeliverables.length} files</Badge>
+                                </div>
+                                <div className="divide-y">
+                                  {taskDeliverables.map((deliverable) => (
+                                    <div 
+                                      key={deliverable.id}
+                                      className="flex items-center gap-3 p-3 hover-elevate"
+                                      data-testid={`deliverable-${deliverable.id}`}
+                                    >
+                                      {getFileIcon(deliverable.fileName)}
+                                      <div className="flex-1 min-w-0">
+                                        <p className="text-sm font-medium truncate">{deliverable.fileName}</p>
+                                        {deliverable.fileSize && (
+                                          <p className="text-xs text-muted-foreground">{deliverable.fileSize}</p>
+                                        )}
+                                      </div>
+                                      <div className="flex items-center gap-1">
+                                        <Button 
+                                          variant="ghost" 
+                                          size="icon"
+                                          asChild
+                                          data-testid={`download-${deliverable.id}`}
+                                        >
+                                          <a href={deliverable.filePath} target="_blank" rel="noopener noreferrer">
+                                            <Download className="h-4 w-4" />
+                                          </a>
+                                        </Button>
+                                        <Button 
+                                          variant="ghost" 
+                                          size="icon"
+                                          asChild
+                                          data-testid={`view-${deliverable.id}`}
+                                        >
+                                          <a href={deliverable.filePath} target="_blank" rel="noopener noreferrer">
+                                            <ExternalLink className="h-4 w-4" />
+                                          </a>
+                                        </Button>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : clientTasks.length > 0 ? (
+                        <div className="text-center py-8 text-muted-foreground">
+                          <FolderOpen className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                          <p>No deliverables uploaded yet</p>
+                          <p className="text-sm">{clientTasks.length} task{clientTasks.length !== 1 ? "s" : ""} assigned to this client</p>
+                        </div>
+                      ) : (
+                        <div className="text-center py-8 text-muted-foreground">
+                          <AlertCircle className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                          <p>No content tasks found</p>
+                          <p className="text-sm">Assign tasks to this client to see content here</p>
                         </div>
                       )}
                     </TabsContent>

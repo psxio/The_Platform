@@ -1757,3 +1757,25 @@ export const insertContentIdeaSchema = createInsertSchema(contentIdeas).omit({
 
 export type InsertContentIdea = z.infer<typeof insertContentIdeaSchema>;
 export type ContentIdea = typeof contentIdeas.$inferSelect;
+
+// ==================== TEAM STRUCTURE TEMPLATES ====================
+
+export const teamStructureTemplates = pgTable("team_structure_templates", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  description: text("description"),
+  teamData: jsonb("team_data").notNull(), // JSON array of team members
+  createdBy: varchar("created_by").references(() => users.id, { onDelete: "set null" }),
+  isDefault: boolean("is_default").default(false), // Mark one as the default template
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertTeamStructureTemplateSchema = createInsertSchema(teamStructureTemplates).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertTeamStructureTemplate = z.infer<typeof insertTeamStructureTemplateSchema>;
+export type TeamStructureTemplate = typeof teamStructureTemplates.$inferSelect;

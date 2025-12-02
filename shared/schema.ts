@@ -1779,3 +1779,140 @@ export const insertTeamStructureTemplateSchema = createInsertSchema(teamStructur
 
 export type InsertTeamStructureTemplate = z.infer<typeof insertTeamStructureTemplateSchema>;
 export type TeamStructureTemplate = typeof teamStructureTemplates.$inferSelect;
+
+// ==================== SAVED ITEMS (Pinned Content) ====================
+
+export const savedItemTypes = ["task", "client", "deliverable", "order", "member", "idea"] as const;
+export type SavedItemType = typeof savedItemTypes[number];
+
+export const savedItems = pgTable("saved_items", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  itemType: varchar("item_type", { length: 20 }).$type<SavedItemType>().notNull(),
+  itemId: integer("item_id").notNull(), // ID of the saved item (task, client, etc.)
+  notes: text("notes"), // Optional user notes about why they saved it
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertSavedItemSchema = createInsertSchema(savedItems).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertSavedItem = z.infer<typeof insertSavedItemSchema>;
+export type SavedItem = typeof savedItems.$inferSelect;
+
+// ==================== FEEDBACK SUBMISSIONS ====================
+
+export const feedbackCategories = ["quality", "communication", "timeline", "creativity", "overall"] as const;
+export type FeedbackCategory = typeof feedbackCategories[number];
+
+export const feedbackSubmissions = pgTable("feedback_submissions", {
+  id: serial("id").primaryKey(),
+  submittedBy: varchar("submitted_by").notNull().references(() => users.id, { onDelete: "cascade" }),
+  targetType: varchar("target_type", { length: 30 }).notNull(), // deliverable, task, order, member
+  targetId: integer("target_id").notNull(),
+  category: varchar("category", { length: 30 }).$type<FeedbackCategory>().notNull(),
+  rating: integer("rating").notNull(), // 1-5 star rating
+  comment: text("comment"),
+  isPublic: boolean("is_public").default(false), // Whether visible to client
+  respondedBy: varchar("responded_by").references(() => users.id, { onDelete: "set null" }),
+  responseText: text("response_text"),
+  respondedAt: timestamp("responded_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertFeedbackSubmissionSchema = createInsertSchema(feedbackSubmissions).omit({
+  id: true,
+  respondedBy: true,
+  responseText: true,
+  respondedAt: true,
+  createdAt: true,
+});
+
+export type InsertFeedbackSubmission = z.infer<typeof insertFeedbackSubmissionSchema>;
+export type FeedbackSubmission = typeof feedbackSubmissions.$inferSelect;
+
+// ==================== YOUTUBE REFERENCES ====================
+
+export const youtubeReferences = pgTable("youtube_references", {
+  id: serial("id").primaryKey(),
+  addedBy: varchar("added_by").notNull().references(() => users.id, { onDelete: "cascade" }),
+  targetType: varchar("target_type", { length: 30 }).notNull(), // client, task, order, idea
+  targetId: integer("target_id"), // Can be null for global/team references
+  targetStringId: varchar("target_string_id", { length: 255 }), // For string-based IDs like client profiles
+  videoUrl: varchar("video_url", { length: 500 }).notNull(),
+  videoId: varchar("video_id", { length: 50 }).notNull(), // YouTube video ID for embedding
+  title: varchar("title", { length: 255 }).notNull(),
+  description: text("description"),
+  thumbnailUrl: varchar("thumbnail_url", { length: 500 }),
+  category: varchar("category", { length: 50 }), // reference, tutorial, inspiration, brief
+  tags: text("tags"), // JSON array of tags
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertYoutubeReferenceSchema = createInsertSchema(youtubeReferences).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertYoutubeReference = z.infer<typeof insertYoutubeReferenceSchema>;
+export type YoutubeReference = typeof youtubeReferences.$inferSelect;
+
+// ==================== BURNDOWN DATA (Task Completion Snapshots) ====================
+
+export const burndownSnapshots = pgTable("burndown_snapshots", {
+  id: serial("id").primaryKey(),
+  snapshotDate: timestamp("snapshot_date").notNull(),
+  totalTasks: integer("total_tasks").notNull(),
+  completedTasks: integer("completed_tasks").notNull(),
+  inProgressTasks: integer("in_progress_tasks").notNull(),
+  blockedTasks: integer("blocked_tasks").notNull(),
+  pendingTasks: integer("pending_tasks").notNull(),
+  campaignId: integer("campaign_id").references(() => campaigns.id, { onDelete: "set null" }),
+  metadata: jsonb("metadata"), // Additional context like priority breakdown
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertBurndownSnapshotSchema = createInsertSchema(burndownSnapshots).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertBurndownSnapshot = z.infer<typeof insertBurndownSnapshotSchema>;
+export type BurndownSnapshot = typeof burndownSnapshots.$inferSelect;
+
+// ==================== ASSET LIBRARY ENHANCED ====================
+
+export const assetCategories = ["image", "video", "audio", "document", "template", "brand", "other"] as const;
+export type AssetCategory = typeof assetCategories[number];
+
+export const libraryAssets = pgTable("library_assets", {
+  id: serial("id").primaryKey(),
+  uploadedBy: varchar("uploaded_by").notNull().references(() => users.id, { onDelete: "cascade" }),
+  name: varchar("name", { length: 255 }).notNull(),
+  description: text("description"),
+  fileUrl: varchar("file_url", { length: 500 }).notNull(),
+  thumbnailUrl: varchar("thumbnail_url", { length: 500 }),
+  fileType: varchar("file_type", { length: 50 }).notNull(), // MIME type
+  fileSize: integer("file_size"), // Size in bytes
+  category: varchar("category", { length: 30 }).$type<AssetCategory>().notNull(),
+  tags: text("tags"), // JSON array of tags
+  clientProfileId: integer("client_profile_id").references(() => clientProfiles.id, { onDelete: "set null" }),
+  isPublic: boolean("is_public").default(false), // Team-wide visibility
+  isFavorite: boolean("is_favorite").default(false),
+  usageCount: integer("usage_count").default(0), // Track how often asset is used
+  metadata: jsonb("metadata"), // Width, height, duration, etc.
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertLibraryAssetSchema = createInsertSchema(libraryAssets).omit({
+  id: true,
+  usageCount: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertLibraryAsset = z.infer<typeof insertLibraryAssetSchema>;
+export type LibraryAsset = typeof libraryAssets.$inferSelect;

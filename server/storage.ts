@@ -90,6 +90,16 @@ import {
   type ContentIdea, type InsertContentIdea, contentIdeas,
   // Team Structure Templates
   type TeamStructureTemplate, type InsertTeamStructureTemplate, teamStructureTemplates,
+  // Saved Items (Pinned Content)
+  type SavedItem, type InsertSavedItem, savedItems,
+  // Feedback Submissions
+  type FeedbackSubmission, type InsertFeedbackSubmission, feedbackSubmissions,
+  // YouTube References
+  type YoutubeReference, type InsertYoutubeReference, youtubeReferences,
+  // Burndown Snapshots
+  type BurndownSnapshot, type InsertBurndownSnapshot, burndownSnapshots,
+  // Library Assets (Enhanced)
+  type LibraryAsset, type InsertLibraryAsset, libraryAssets,
 } from "@shared/schema";
 import { db } from "./db";
 import { desc, eq, and, sql, or, isNull } from "drizzle-orm";
@@ -601,6 +611,56 @@ export interface IStorage {
   deleteTeamStructureTemplate(id: number): Promise<boolean>;
   setDefaultTeamStructureTemplate(id: number): Promise<TeamStructureTemplate | undefined>;
   loadTeamStructureTemplate(id: number): Promise<InternalTeamMember[]>;
+  
+  // ==================== SAVED ITEMS (PINNED CONTENT) ====================
+  
+  getSavedItems(userId: string): Promise<SavedItem[]>;
+  getSavedItem(id: number): Promise<SavedItem | undefined>;
+  getSavedItemsByType(userId: string, itemType: string): Promise<SavedItem[]>;
+  isItemSaved(userId: string, itemType: string, itemId: number): Promise<boolean>;
+  createSavedItem(item: InsertSavedItem): Promise<SavedItem>;
+  updateSavedItem(id: number, updates: Partial<InsertSavedItem>): Promise<SavedItem | undefined>;
+  deleteSavedItem(id: number): Promise<boolean>;
+  deleteSavedItemByTarget(userId: string, itemType: string, itemId: number): Promise<boolean>;
+  
+  // ==================== FEEDBACK SUBMISSIONS ====================
+  
+  getFeedbackSubmissions(targetType?: string, targetId?: number): Promise<FeedbackSubmission[]>;
+  getFeedbackSubmission(id: number): Promise<FeedbackSubmission | undefined>;
+  getFeedbackByUser(userId: string): Promise<FeedbackSubmission[]>;
+  createFeedbackSubmission(feedback: InsertFeedbackSubmission): Promise<FeedbackSubmission>;
+  respondToFeedback(id: number, respondedBy: string, responseText: string): Promise<FeedbackSubmission | undefined>;
+  deleteFeedbackSubmission(id: number): Promise<boolean>;
+  getFeedbackStats(targetType: string, targetId: number): Promise<{ avgRating: number; totalCount: number; byCategory: Record<string, number> }>;
+  
+  // ==================== YOUTUBE REFERENCES ====================
+  
+  getYoutubeReferences(targetType?: string, targetId?: number): Promise<YoutubeReference[]>;
+  getYoutubeReference(id: number): Promise<YoutubeReference | undefined>;
+  getYoutubeReferencesByStringTarget(targetType: string, targetStringId: string): Promise<YoutubeReference[]>;
+  createYoutubeReference(reference: InsertYoutubeReference): Promise<YoutubeReference>;
+  updateYoutubeReference(id: number, updates: Partial<InsertYoutubeReference>): Promise<YoutubeReference | undefined>;
+  deleteYoutubeReference(id: number): Promise<boolean>;
+  
+  // ==================== BURNDOWN SNAPSHOTS ====================
+  
+  getBurndownSnapshots(campaignId?: number, startDate?: Date, endDate?: Date): Promise<BurndownSnapshot[]>;
+  getBurndownSnapshot(id: number): Promise<BurndownSnapshot | undefined>;
+  getLatestBurndownSnapshot(campaignId?: number): Promise<BurndownSnapshot | undefined>;
+  createBurndownSnapshot(snapshot: InsertBurndownSnapshot): Promise<BurndownSnapshot>;
+  generateBurndownSnapshot(campaignId?: number): Promise<BurndownSnapshot>;
+  
+  // ==================== LIBRARY ASSETS (ENHANCED) ====================
+  
+  getLibraryAssets(filters?: { category?: string; clientProfileId?: number; isPublic?: boolean; tags?: string[] }): Promise<LibraryAsset[]>;
+  getLibraryAsset(id: number): Promise<LibraryAsset | undefined>;
+  searchLibraryAssets(query: string): Promise<LibraryAsset[]>;
+  createLibraryAsset(asset: InsertLibraryAsset): Promise<LibraryAsset>;
+  updateLibraryAsset(id: number, updates: Partial<InsertLibraryAsset>): Promise<LibraryAsset | undefined>;
+  deleteLibraryAsset(id: number): Promise<boolean>;
+  incrementAssetUsage(id: number): Promise<LibraryAsset | undefined>;
+  toggleAssetFavorite(id: number): Promise<LibraryAsset | undefined>;
+  getAssetStats(): Promise<{ totalAssets: number; byCategory: Record<string, number>; totalSize: number; recentlyAdded: number }>;
 }
 
 export class DbStorage implements IStorage {
@@ -3896,6 +3956,271 @@ export class DbStorage implements IStorage {
 
     // Refetch to get updated data with correct supervisor IDs
     return await this.getInternalTeamMembers();
+  }
+
+  // ==================== SAVED ITEMS (PINNED CONTENT) ====================
+
+  async getSavedItems(userId: string): Promise<SavedItem[]> {
+    return db.select().from(savedItems).where(eq(savedItems.userId, userId)).orderBy(desc(savedItems.createdAt));
+  }
+
+  async getSavedItem(id: number): Promise<SavedItem | undefined> {
+    const [item] = await db.select().from(savedItems).where(eq(savedItems.id, id));
+    return item;
+  }
+
+  async getSavedItemsByType(userId: string, itemType: string): Promise<SavedItem[]> {
+    return db.select().from(savedItems).where(and(eq(savedItems.userId, userId), eq(savedItems.itemType, itemType))).orderBy(desc(savedItems.createdAt));
+  }
+
+  async isItemSaved(userId: string, itemType: string, itemId: number): Promise<boolean> {
+    const [item] = await db.select().from(savedItems).where(and(eq(savedItems.userId, userId), eq(savedItems.itemType, itemType), eq(savedItems.itemId, itemId)));
+    return !!item;
+  }
+
+  async createSavedItem(item: InsertSavedItem): Promise<SavedItem> {
+    const [saved] = await db.insert(savedItems).values(item).returning();
+    return saved;
+  }
+
+  async updateSavedItem(id: number, updates: Partial<InsertSavedItem>): Promise<SavedItem | undefined> {
+    const [updated] = await db.update(savedItems).set(updates).where(eq(savedItems.id, id)).returning();
+    return updated;
+  }
+
+  async deleteSavedItem(id: number): Promise<boolean> {
+    await db.delete(savedItems).where(eq(savedItems.id, id));
+    return true;
+  }
+
+  async deleteSavedItemByTarget(userId: string, itemType: string, itemId: number): Promise<boolean> {
+    await db.delete(savedItems).where(and(eq(savedItems.userId, userId), eq(savedItems.itemType, itemType), eq(savedItems.itemId, itemId)));
+    return true;
+  }
+
+  // ==================== FEEDBACK SUBMISSIONS ====================
+
+  async getFeedbackSubmissions(targetType?: string, targetId?: number): Promise<FeedbackSubmission[]> {
+    if (targetType && targetId) {
+      return db.select().from(feedbackSubmissions).where(and(eq(feedbackSubmissions.targetType, targetType), eq(feedbackSubmissions.targetId, targetId))).orderBy(desc(feedbackSubmissions.createdAt));
+    }
+    if (targetType) {
+      return db.select().from(feedbackSubmissions).where(eq(feedbackSubmissions.targetType, targetType)).orderBy(desc(feedbackSubmissions.createdAt));
+    }
+    return db.select().from(feedbackSubmissions).orderBy(desc(feedbackSubmissions.createdAt));
+  }
+
+  async getFeedbackSubmission(id: number): Promise<FeedbackSubmission | undefined> {
+    const [feedback] = await db.select().from(feedbackSubmissions).where(eq(feedbackSubmissions.id, id));
+    return feedback;
+  }
+
+  async getFeedbackByUser(userId: string): Promise<FeedbackSubmission[]> {
+    return db.select().from(feedbackSubmissions).where(eq(feedbackSubmissions.submittedBy, userId)).orderBy(desc(feedbackSubmissions.createdAt));
+  }
+
+  async createFeedbackSubmission(feedback: InsertFeedbackSubmission): Promise<FeedbackSubmission> {
+    const [created] = await db.insert(feedbackSubmissions).values(feedback).returning();
+    return created;
+  }
+
+  async respondToFeedback(id: number, respondedBy: string, responseText: string): Promise<FeedbackSubmission | undefined> {
+    const [updated] = await db.update(feedbackSubmissions).set({ respondedBy, responseText, respondedAt: new Date() }).where(eq(feedbackSubmissions.id, id)).returning();
+    return updated;
+  }
+
+  async deleteFeedbackSubmission(id: number): Promise<boolean> {
+    await db.delete(feedbackSubmissions).where(eq(feedbackSubmissions.id, id));
+    return true;
+  }
+
+  async getFeedbackStats(targetType: string, targetId: number): Promise<{ avgRating: number; totalCount: number; byCategory: Record<string, number> }> {
+    const feedbacks = await db.select().from(feedbackSubmissions).where(and(eq(feedbackSubmissions.targetType, targetType), eq(feedbackSubmissions.targetId, targetId)));
+    const totalCount = feedbacks.length;
+    const avgRating = totalCount > 0 ? feedbacks.reduce((sum, f) => sum + f.rating, 0) / totalCount : 0;
+    const byCategory: Record<string, number> = {};
+    feedbacks.forEach(f => {
+      byCategory[f.category] = (byCategory[f.category] || 0) + 1;
+    });
+    return { avgRating, totalCount, byCategory };
+  }
+
+  // ==================== YOUTUBE REFERENCES ====================
+
+  async getYoutubeReferences(targetType?: string, targetId?: number): Promise<YoutubeReference[]> {
+    if (targetType && targetId) {
+      return db.select().from(youtubeReferences).where(and(eq(youtubeReferences.targetType, targetType), eq(youtubeReferences.targetId, targetId))).orderBy(desc(youtubeReferences.createdAt));
+    }
+    if (targetType) {
+      return db.select().from(youtubeReferences).where(eq(youtubeReferences.targetType, targetType)).orderBy(desc(youtubeReferences.createdAt));
+    }
+    return db.select().from(youtubeReferences).orderBy(desc(youtubeReferences.createdAt));
+  }
+
+  async getYoutubeReference(id: number): Promise<YoutubeReference | undefined> {
+    const [ref] = await db.select().from(youtubeReferences).where(eq(youtubeReferences.id, id));
+    return ref;
+  }
+
+  async getYoutubeReferencesByStringTarget(targetType: string, targetStringId: string): Promise<YoutubeReference[]> {
+    return db.select().from(youtubeReferences).where(and(eq(youtubeReferences.targetType, targetType), eq(youtubeReferences.targetStringId, targetStringId))).orderBy(desc(youtubeReferences.createdAt));
+  }
+
+  async createYoutubeReference(reference: InsertYoutubeReference): Promise<YoutubeReference> {
+    const [created] = await db.insert(youtubeReferences).values(reference).returning();
+    return created;
+  }
+
+  async updateYoutubeReference(id: number, updates: Partial<InsertYoutubeReference>): Promise<YoutubeReference | undefined> {
+    const [updated] = await db.update(youtubeReferences).set(updates).where(eq(youtubeReferences.id, id)).returning();
+    return updated;
+  }
+
+  async deleteYoutubeReference(id: number): Promise<boolean> {
+    await db.delete(youtubeReferences).where(eq(youtubeReferences.id, id));
+    return true;
+  }
+
+  // ==================== BURNDOWN SNAPSHOTS ====================
+
+  async getBurndownSnapshots(campaignId?: number, startDate?: Date, endDate?: Date): Promise<BurndownSnapshot[]> {
+    let query = db.select().from(burndownSnapshots);
+    const conditions = [];
+    if (campaignId) conditions.push(eq(burndownSnapshots.campaignId, campaignId));
+    if (startDate) conditions.push(sql`${burndownSnapshots.snapshotDate} >= ${startDate}`);
+    if (endDate) conditions.push(sql`${burndownSnapshots.snapshotDate} <= ${endDate}`);
+    if (conditions.length > 0) {
+      return db.select().from(burndownSnapshots).where(and(...conditions)).orderBy(desc(burndownSnapshots.snapshotDate));
+    }
+    return db.select().from(burndownSnapshots).orderBy(desc(burndownSnapshots.snapshotDate));
+  }
+
+  async getBurndownSnapshot(id: number): Promise<BurndownSnapshot | undefined> {
+    const [snapshot] = await db.select().from(burndownSnapshots).where(eq(burndownSnapshots.id, id));
+    return snapshot;
+  }
+
+  async getLatestBurndownSnapshot(campaignId?: number): Promise<BurndownSnapshot | undefined> {
+    if (campaignId) {
+      const [snapshot] = await db.select().from(burndownSnapshots).where(eq(burndownSnapshots.campaignId, campaignId)).orderBy(desc(burndownSnapshots.snapshotDate)).limit(1);
+      return snapshot;
+    }
+    const [snapshot] = await db.select().from(burndownSnapshots).where(isNull(burndownSnapshots.campaignId)).orderBy(desc(burndownSnapshots.snapshotDate)).limit(1);
+    return snapshot;
+  }
+
+  async createBurndownSnapshot(snapshot: InsertBurndownSnapshot): Promise<BurndownSnapshot> {
+    const [created] = await db.insert(burndownSnapshots).values(snapshot).returning();
+    return created;
+  }
+
+  async generateBurndownSnapshot(campaignId?: number): Promise<BurndownSnapshot> {
+    // Get all tasks and count by status
+    let tasks;
+    if (campaignId) {
+      tasks = await db.select().from(contentTasks).where(eq(contentTasks.campaignId, campaignId));
+    } else {
+      tasks = await db.select().from(contentTasks);
+    }
+    
+    const statusCounts = {
+      total: tasks.length,
+      completed: tasks.filter(t => t.status === "done").length,
+      inProgress: tasks.filter(t => t.status === "in_progress").length,
+      blocked: tasks.filter(t => t.status === "blocked").length,
+      pending: tasks.filter(t => t.status === "pending" || t.status === "backlog").length,
+    };
+    
+    const snapshot: InsertBurndownSnapshot = {
+      snapshotDate: new Date(),
+      totalTasks: statusCounts.total,
+      completedTasks: statusCounts.completed,
+      inProgressTasks: statusCounts.inProgress,
+      blockedTasks: statusCounts.blocked,
+      pendingTasks: statusCounts.pending,
+      campaignId: campaignId || null,
+      metadata: {
+        byPriority: {
+          urgent: tasks.filter(t => t.priority === "urgent").length,
+          high: tasks.filter(t => t.priority === "high").length,
+          medium: tasks.filter(t => t.priority === "medium").length,
+          low: tasks.filter(t => t.priority === "low").length,
+        }
+      },
+    };
+    
+    return this.createBurndownSnapshot(snapshot);
+  }
+
+  // ==================== LIBRARY ASSETS (ENHANCED) ====================
+
+  async getLibraryAssets(filters?: { category?: string; clientProfileId?: number; isPublic?: boolean; tags?: string[] }): Promise<LibraryAsset[]> {
+    const conditions = [];
+    if (filters?.category) conditions.push(eq(libraryAssets.category, filters.category));
+    if (filters?.clientProfileId) conditions.push(eq(libraryAssets.clientProfileId, filters.clientProfileId));
+    if (filters?.isPublic !== undefined) conditions.push(eq(libraryAssets.isPublic, filters.isPublic));
+    
+    if (conditions.length > 0) {
+      return db.select().from(libraryAssets).where(and(...conditions)).orderBy(desc(libraryAssets.createdAt));
+    }
+    return db.select().from(libraryAssets).orderBy(desc(libraryAssets.createdAt));
+  }
+
+  async getLibraryAsset(id: number): Promise<LibraryAsset | undefined> {
+    const [asset] = await db.select().from(libraryAssets).where(eq(libraryAssets.id, id));
+    return asset;
+  }
+
+  async searchLibraryAssets(query: string): Promise<LibraryAsset[]> {
+    const searchTerm = `%${query.toLowerCase()}%`;
+    return db.select().from(libraryAssets).where(or(sql`LOWER(${libraryAssets.name}) LIKE ${searchTerm}`, sql`LOWER(${libraryAssets.description}) LIKE ${searchTerm}`, sql`LOWER(${libraryAssets.tags}) LIKE ${searchTerm}`)).orderBy(desc(libraryAssets.createdAt));
+  }
+
+  async createLibraryAsset(asset: InsertLibraryAsset): Promise<LibraryAsset> {
+    const [created] = await db.insert(libraryAssets).values(asset).returning();
+    return created;
+  }
+
+  async updateLibraryAsset(id: number, updates: Partial<InsertLibraryAsset>): Promise<LibraryAsset | undefined> {
+    const [updated] = await db.update(libraryAssets).set({ ...updates, updatedAt: new Date() }).where(eq(libraryAssets.id, id)).returning();
+    return updated;
+  }
+
+  async deleteLibraryAsset(id: number): Promise<boolean> {
+    await db.delete(libraryAssets).where(eq(libraryAssets.id, id));
+    return true;
+  }
+
+  async incrementAssetUsage(id: number): Promise<LibraryAsset | undefined> {
+    const [updated] = await db.update(libraryAssets).set({ usageCount: sql`${libraryAssets.usageCount} + 1` }).where(eq(libraryAssets.id, id)).returning();
+    return updated;
+  }
+
+  async toggleAssetFavorite(id: number): Promise<LibraryAsset | undefined> {
+    const asset = await this.getLibraryAsset(id);
+    if (!asset) return undefined;
+    const [updated] = await db.update(libraryAssets).set({ isFavorite: !asset.isFavorite, updatedAt: new Date() }).where(eq(libraryAssets.id, id)).returning();
+    return updated;
+  }
+
+  async getAssetStats(): Promise<{ totalAssets: number; byCategory: Record<string, number>; totalSize: number; recentlyAdded: number }> {
+    const allAssets = await db.select().from(libraryAssets);
+    const oneWeekAgo = new Date();
+    oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+    
+    const byCategory: Record<string, number> = {};
+    let totalSize = 0;
+    let recentlyAdded = 0;
+    
+    allAssets.forEach(asset => {
+      byCategory[asset.category] = (byCategory[asset.category] || 0) + 1;
+      totalSize += asset.fileSize || 0;
+      if (asset.createdAt && new Date(asset.createdAt) > oneWeekAgo) {
+        recentlyAdded++;
+      }
+    });
+    
+    return { totalAssets: allAssets.length, byCategory, totalSize, recentlyAdded };
   }
 }
 

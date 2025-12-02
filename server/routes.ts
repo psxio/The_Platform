@@ -8154,6 +8154,124 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ==================== TEAM STRUCTURE TEMPLATES ROUTES ====================
+
+  // Get all team structure templates - admin only
+  app.get("/api/team-structure-templates", requireRole("admin"), async (req: any, res) => {
+    try {
+      const templates = await storage.getTeamStructureTemplates();
+      res.json(templates);
+    } catch (error) {
+      console.error("Error fetching team structure templates:", error);
+      res.status(500).json({ error: "Failed to fetch templates" });
+    }
+  });
+
+  // Get default template - admin only
+  app.get("/api/team-structure-templates/default", requireRole("admin"), async (req: any, res) => {
+    try {
+      const template = await storage.getDefaultTeamStructureTemplate();
+      res.json(template || null);
+    } catch (error) {
+      console.error("Error fetching default template:", error);
+      res.status(500).json({ error: "Failed to fetch default template" });
+    }
+  });
+
+  // Get single template - admin only
+  app.get("/api/team-structure-templates/:id", requireRole("admin"), async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const template = await storage.getTeamStructureTemplate(id);
+      if (!template) {
+        return res.status(404).json({ error: "Template not found" });
+      }
+      res.json(template);
+    } catch (error) {
+      console.error("Error fetching template:", error);
+      res.status(500).json({ error: "Failed to fetch template" });
+    }
+  });
+
+  // Save current team structure as template - admin only
+  app.post("/api/team-structure-templates", requireRole("admin"), async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const { name, description, isDefault } = req.body;
+      
+      // Get all current team members
+      const teamMembers = await storage.getInternalTeamMembers();
+      
+      const templateData = {
+        name: name || `Team Template - ${new Date().toLocaleDateString()}`,
+        description: description || "Team structure snapshot",
+        teamData: teamMembers,
+        createdBy: user.id,
+        isDefault: isDefault || false,
+      };
+      
+      const template = await storage.createTeamStructureTemplate(templateData);
+      res.status(201).json(template);
+    } catch (error) {
+      console.error("Error saving team structure template:", error);
+      res.status(500).json({ error: "Failed to save template" });
+    }
+  });
+
+  // Update template - admin only
+  app.patch("/api/team-structure-templates/:id", requireRole("admin"), async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const template = await storage.updateTeamStructureTemplate(id, req.body);
+      if (!template) {
+        return res.status(404).json({ error: "Template not found" });
+      }
+      res.json(template);
+    } catch (error) {
+      console.error("Error updating template:", error);
+      res.status(500).json({ error: "Failed to update template" });
+    }
+  });
+
+  // Set template as default - admin only
+  app.post("/api/team-structure-templates/:id/set-default", requireRole("admin"), async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const template = await storage.setDefaultTeamStructureTemplate(id);
+      if (!template) {
+        return res.status(404).json({ error: "Template not found" });
+      }
+      res.json(template);
+    } catch (error) {
+      console.error("Error setting default template:", error);
+      res.status(500).json({ error: "Failed to set default template" });
+    }
+  });
+
+  // Load template into database - admin only
+  app.post("/api/team-structure-templates/:id/load", requireRole("admin"), async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const members = await storage.loadTeamStructureTemplate(id);
+      res.json({ success: true, members, message: "Template loaded successfully" });
+    } catch (error) {
+      console.error("Error loading template:", error);
+      res.status(500).json({ error: "Failed to load template" });
+    }
+  });
+
+  // Delete template - admin only
+  app.delete("/api/team-structure-templates/:id", requireRole("admin"), async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      await storage.deleteTeamStructureTemplate(id);
+      res.status(204).end();
+    } catch (error) {
+      console.error("Error deleting template:", error);
+      res.status(500).json({ error: "Failed to delete template" });
+    }
+  });
+
   // ==================== CONTENT IDEAS (PRE-PRODUCTION APPROVAL) ROUTES ====================
 
   // Get all content ideas - content/admin only

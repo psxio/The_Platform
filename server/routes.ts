@@ -8440,6 +8440,582 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ==================== SAVED ITEMS (PINNED CONTENT) API ====================
+
+  // Get all saved items for current user
+  app.get("/api/saved-items", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const items = await storage.getSavedItems(user.id);
+      res.json(items);
+    } catch (error) {
+      console.error("Error fetching saved items:", error);
+      res.status(500).json({ error: "Failed to fetch saved items" });
+    }
+  });
+
+  // Get saved items by type
+  app.get("/api/saved-items/type/:itemType", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const items = await storage.getSavedItemsByType(user.id, req.params.itemType);
+      res.json(items);
+    } catch (error) {
+      console.error("Error fetching saved items by type:", error);
+      res.status(500).json({ error: "Failed to fetch saved items" });
+    }
+  });
+
+  // Check if item is saved
+  app.get("/api/saved-items/check/:itemType/:itemId", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const isSaved = await storage.isItemSaved(user.id, req.params.itemType, parseInt(req.params.itemId));
+      res.json({ isSaved });
+    } catch (error) {
+      console.error("Error checking saved item:", error);
+      res.status(500).json({ error: "Failed to check saved item" });
+    }
+  });
+
+  // Save an item
+  app.post("/api/saved-items", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const { itemType, itemId, notes } = req.body;
+      
+      // Check if already saved
+      const alreadySaved = await storage.isItemSaved(user.id, itemType, itemId);
+      if (alreadySaved) {
+        return res.status(400).json({ error: "Item already saved" });
+      }
+      
+      const item = await storage.createSavedItem({
+        userId: user.id,
+        itemType,
+        itemId,
+        notes: notes || null,
+      });
+      res.status(201).json(item);
+    } catch (error) {
+      console.error("Error saving item:", error);
+      res.status(500).json({ error: "Failed to save item" });
+    }
+  });
+
+  // Update saved item notes
+  app.patch("/api/saved-items/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const id = parseInt(req.params.id);
+      
+      const existing = await storage.getSavedItem(id);
+      if (!existing || existing.userId !== user.id) {
+        return res.status(404).json({ error: "Saved item not found" });
+      }
+      
+      const updated = await storage.updateSavedItem(id, { notes: req.body.notes });
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating saved item:", error);
+      res.status(500).json({ error: "Failed to update saved item" });
+    }
+  });
+
+  // Remove saved item
+  app.delete("/api/saved-items/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const id = parseInt(req.params.id);
+      
+      const existing = await storage.getSavedItem(id);
+      if (!existing || existing.userId !== user.id) {
+        return res.status(404).json({ error: "Saved item not found" });
+      }
+      
+      await storage.deleteSavedItem(id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error removing saved item:", error);
+      res.status(500).json({ error: "Failed to remove saved item" });
+    }
+  });
+
+  // Toggle save status (save or unsave)
+  app.post("/api/saved-items/toggle", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const { itemType, itemId, notes } = req.body;
+      
+      const isSaved = await storage.isItemSaved(user.id, itemType, itemId);
+      if (isSaved) {
+        await storage.deleteSavedItemByTarget(user.id, itemType, itemId);
+        res.json({ saved: false });
+      } else {
+        const item = await storage.createSavedItem({
+          userId: user.id,
+          itemType,
+          itemId,
+          notes: notes || null,
+        });
+        res.json({ saved: true, item });
+      }
+    } catch (error) {
+      console.error("Error toggling saved item:", error);
+      res.status(500).json({ error: "Failed to toggle saved item" });
+    }
+  });
+
+  // ==================== FEEDBACK SUBMISSIONS API ====================
+
+  // Get all feedback (admin/content only)
+  app.get("/api/feedback", requireRole("content", "admin"), async (req: any, res) => {
+    try {
+      const { targetType, targetId } = req.query;
+      const feedback = await storage.getFeedbackSubmissions(
+        targetType as string | undefined,
+        targetId ? parseInt(targetId as string) : undefined
+      );
+      res.json(feedback);
+    } catch (error) {
+      console.error("Error fetching feedback:", error);
+      res.status(500).json({ error: "Failed to fetch feedback" });
+    }
+  });
+
+  // Get feedback for a specific target
+  app.get("/api/feedback/:targetType/:targetId", isAuthenticated, async (req: any, res) => {
+    try {
+      const feedback = await storage.getFeedbackSubmissions(
+        req.params.targetType,
+        parseInt(req.params.targetId)
+      );
+      res.json(feedback);
+    } catch (error) {
+      console.error("Error fetching feedback:", error);
+      res.status(500).json({ error: "Failed to fetch feedback" });
+    }
+  });
+
+  // Get feedback stats for a target
+  app.get("/api/feedback/:targetType/:targetId/stats", isAuthenticated, async (req: any, res) => {
+    try {
+      const stats = await storage.getFeedbackStats(
+        req.params.targetType,
+        parseInt(req.params.targetId)
+      );
+      res.json(stats);
+    } catch (error) {
+      console.error("Error fetching feedback stats:", error);
+      res.status(500).json({ error: "Failed to fetch feedback stats" });
+    }
+  });
+
+  // Get user's own feedback
+  app.get("/api/feedback/mine", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const feedback = await storage.getFeedbackByUser(user.id);
+      res.json(feedback);
+    } catch (error) {
+      console.error("Error fetching user feedback:", error);
+      res.status(500).json({ error: "Failed to fetch feedback" });
+    }
+  });
+
+  // Submit feedback
+  app.post("/api/feedback", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const { targetType, targetId, category, rating, comment, isPublic } = req.body;
+      
+      if (!targetType || !targetId || !category || rating === undefined) {
+        return res.status(400).json({ error: "Missing required fields" });
+      }
+      
+      if (rating < 1 || rating > 5) {
+        return res.status(400).json({ error: "Rating must be between 1 and 5" });
+      }
+      
+      const feedback = await storage.createFeedbackSubmission({
+        submittedBy: user.id,
+        targetType,
+        targetId,
+        category,
+        rating,
+        comment: comment || null,
+        isPublic: isPublic || false,
+      });
+      res.status(201).json(feedback);
+    } catch (error) {
+      console.error("Error submitting feedback:", error);
+      res.status(500).json({ error: "Failed to submit feedback" });
+    }
+  });
+
+  // Respond to feedback (admin/content only)
+  app.post("/api/feedback/:id/respond", requireRole("content", "admin"), async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const id = parseInt(req.params.id);
+      const { responseText } = req.body;
+      
+      if (!responseText) {
+        return res.status(400).json({ error: "Response text is required" });
+      }
+      
+      const feedback = await storage.respondToFeedback(id, user.id, responseText);
+      if (!feedback) {
+        return res.status(404).json({ error: "Feedback not found" });
+      }
+      res.json(feedback);
+    } catch (error) {
+      console.error("Error responding to feedback:", error);
+      res.status(500).json({ error: "Failed to respond to feedback" });
+    }
+  });
+
+  // Delete feedback (admin only or own feedback)
+  app.delete("/api/feedback/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const id = parseInt(req.params.id);
+      
+      const existing = await storage.getFeedbackSubmission(id);
+      if (!existing) {
+        return res.status(404).json({ error: "Feedback not found" });
+      }
+      
+      if (existing.submittedBy !== user.id && user.role !== "admin") {
+        return res.status(403).json({ error: "Not authorized to delete this feedback" });
+      }
+      
+      await storage.deleteFeedbackSubmission(id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting feedback:", error);
+      res.status(500).json({ error: "Failed to delete feedback" });
+    }
+  });
+
+  // ==================== YOUTUBE REFERENCES API ====================
+
+  // Get all YouTube references
+  app.get("/api/youtube-references", isAuthenticated, async (req: any, res) => {
+    try {
+      const { targetType, targetId } = req.query;
+      const references = await storage.getYoutubeReferences(
+        targetType as string | undefined,
+        targetId ? parseInt(targetId as string) : undefined
+      );
+      res.json(references);
+    } catch (error) {
+      console.error("Error fetching YouTube references:", error);
+      res.status(500).json({ error: "Failed to fetch YouTube references" });
+    }
+  });
+
+  // Get YouTube references for a specific target
+  app.get("/api/youtube-references/:targetType/:targetId", isAuthenticated, async (req: any, res) => {
+    try {
+      const references = await storage.getYoutubeReferences(
+        req.params.targetType,
+        parseInt(req.params.targetId)
+      );
+      res.json(references);
+    } catch (error) {
+      console.error("Error fetching YouTube references:", error);
+      res.status(500).json({ error: "Failed to fetch YouTube references" });
+    }
+  });
+
+  // Get YouTube references by string target (for client slugs)
+  app.get("/api/youtube-references/string/:targetType/:targetStringId", isAuthenticated, async (req: any, res) => {
+    try {
+      const references = await storage.getYoutubeReferencesByStringTarget(
+        req.params.targetType,
+        req.params.targetStringId
+      );
+      res.json(references);
+    } catch (error) {
+      console.error("Error fetching YouTube references:", error);
+      res.status(500).json({ error: "Failed to fetch YouTube references" });
+    }
+  });
+
+  // Add YouTube reference
+  app.post("/api/youtube-references", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const { targetType, targetId, targetStringId, videoUrl, title, description, thumbnailUrl, category, tags } = req.body;
+      
+      if (!targetType || !videoUrl || !title) {
+        return res.status(400).json({ error: "Missing required fields" });
+      }
+      
+      // Extract video ID from YouTube URL
+      let videoId = "";
+      try {
+        const url = new URL(videoUrl);
+        if (url.hostname.includes("youtube.com")) {
+          videoId = url.searchParams.get("v") || "";
+        } else if (url.hostname.includes("youtu.be")) {
+          videoId = url.pathname.slice(1);
+        }
+      } catch {
+        return res.status(400).json({ error: "Invalid YouTube URL" });
+      }
+      
+      if (!videoId) {
+        return res.status(400).json({ error: "Could not extract video ID from URL" });
+      }
+      
+      const reference = await storage.createYoutubeReference({
+        addedBy: user.id,
+        targetType,
+        targetId: targetId || null,
+        targetStringId: targetStringId || null,
+        videoUrl,
+        videoId,
+        title,
+        description: description || null,
+        thumbnailUrl: thumbnailUrl || `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`,
+        category: category || null,
+        tags: tags || null,
+      });
+      res.status(201).json(reference);
+    } catch (error) {
+      console.error("Error adding YouTube reference:", error);
+      res.status(500).json({ error: "Failed to add YouTube reference" });
+    }
+  });
+
+  // Update YouTube reference
+  app.patch("/api/youtube-references/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const existing = await storage.getYoutubeReference(id);
+      if (!existing) {
+        return res.status(404).json({ error: "YouTube reference not found" });
+      }
+      
+      const updated = await storage.updateYoutubeReference(id, req.body);
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating YouTube reference:", error);
+      res.status(500).json({ error: "Failed to update YouTube reference" });
+    }
+  });
+
+  // Delete YouTube reference
+  app.delete("/api/youtube-references/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const existing = await storage.getYoutubeReference(id);
+      if (!existing) {
+        return res.status(404).json({ error: "YouTube reference not found" });
+      }
+      
+      await storage.deleteYoutubeReference(id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting YouTube reference:", error);
+      res.status(500).json({ error: "Failed to delete YouTube reference" });
+    }
+  });
+
+  // ==================== BURNDOWN SNAPSHOTS API ====================
+
+  // Get burndown snapshots
+  app.get("/api/burndown", requireRole("content", "admin"), async (req: any, res) => {
+    try {
+      const { campaignId, startDate, endDate } = req.query;
+      const snapshots = await storage.getBurndownSnapshots(
+        campaignId ? parseInt(campaignId as string) : undefined,
+        startDate ? new Date(startDate as string) : undefined,
+        endDate ? new Date(endDate as string) : undefined
+      );
+      res.json(snapshots);
+    } catch (error) {
+      console.error("Error fetching burndown snapshots:", error);
+      res.status(500).json({ error: "Failed to fetch burndown snapshots" });
+    }
+  });
+
+  // Get latest burndown snapshot
+  app.get("/api/burndown/latest", requireRole("content", "admin"), async (req: any, res) => {
+    try {
+      const { campaignId } = req.query;
+      const snapshot = await storage.getLatestBurndownSnapshot(
+        campaignId ? parseInt(campaignId as string) : undefined
+      );
+      res.json(snapshot || null);
+    } catch (error) {
+      console.error("Error fetching latest burndown:", error);
+      res.status(500).json({ error: "Failed to fetch latest burndown" });
+    }
+  });
+
+  // Generate new burndown snapshot
+  app.post("/api/burndown/generate", requireRole("content", "admin"), async (req: any, res) => {
+    try {
+      const { campaignId } = req.body;
+      const snapshot = await storage.generateBurndownSnapshot(
+        campaignId ? parseInt(campaignId) : undefined
+      );
+      res.status(201).json(snapshot);
+    } catch (error) {
+      console.error("Error generating burndown snapshot:", error);
+      res.status(500).json({ error: "Failed to generate burndown snapshot" });
+    }
+  });
+
+  // ==================== LIBRARY ASSETS API ====================
+
+  // Get library assets with filters
+  app.get("/api/library-assets", isAuthenticated, async (req: any, res) => {
+    try {
+      const { category, clientProfileId, isPublic, search } = req.query;
+      
+      if (search) {
+        const assets = await storage.searchLibraryAssets(search as string);
+        return res.json(assets);
+      }
+      
+      const filters: any = {};
+      if (category) filters.category = category;
+      if (clientProfileId) filters.clientProfileId = parseInt(clientProfileId as string);
+      if (isPublic !== undefined) filters.isPublic = isPublic === "true";
+      
+      const assets = await storage.getLibraryAssets(Object.keys(filters).length > 0 ? filters : undefined);
+      res.json(assets);
+    } catch (error) {
+      console.error("Error fetching library assets:", error);
+      res.status(500).json({ error: "Failed to fetch library assets" });
+    }
+  });
+
+  // Get asset stats
+  app.get("/api/library-assets/stats", requireRole("content", "admin"), async (req: any, res) => {
+    try {
+      const stats = await storage.getAssetStats();
+      res.json(stats);
+    } catch (error) {
+      console.error("Error fetching asset stats:", error);
+      res.status(500).json({ error: "Failed to fetch asset stats" });
+    }
+  });
+
+  // Get single asset
+  app.get("/api/library-assets/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const asset = await storage.getLibraryAsset(id);
+      if (!asset) {
+        return res.status(404).json({ error: "Asset not found" });
+      }
+      res.json(asset);
+    } catch (error) {
+      console.error("Error fetching asset:", error);
+      res.status(500).json({ error: "Failed to fetch asset" });
+    }
+  });
+
+  // Create library asset
+  app.post("/api/library-assets", requireRole("content", "admin"), async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const { name, description, fileUrl, thumbnailUrl, fileType, fileSize, category, tags, clientProfileId, isPublic, metadata } = req.body;
+      
+      if (!name || !fileUrl || !fileType || !category) {
+        return res.status(400).json({ error: "Missing required fields" });
+      }
+      
+      const asset = await storage.createLibraryAsset({
+        uploadedBy: user.id,
+        name,
+        description: description || null,
+        fileUrl,
+        thumbnailUrl: thumbnailUrl || null,
+        fileType,
+        fileSize: fileSize || null,
+        category,
+        tags: tags || null,
+        clientProfileId: clientProfileId || null,
+        isPublic: isPublic || false,
+        metadata: metadata || null,
+      });
+      res.status(201).json(asset);
+    } catch (error) {
+      console.error("Error creating library asset:", error);
+      res.status(500).json({ error: "Failed to create library asset" });
+    }
+  });
+
+  // Update library asset
+  app.patch("/api/library-assets/:id", requireRole("content", "admin"), async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const existing = await storage.getLibraryAsset(id);
+      if (!existing) {
+        return res.status(404).json({ error: "Asset not found" });
+      }
+      
+      const updated = await storage.updateLibraryAsset(id, req.body);
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating library asset:", error);
+      res.status(500).json({ error: "Failed to update library asset" });
+    }
+  });
+
+  // Delete library asset
+  app.delete("/api/library-assets/:id", requireRole("content", "admin"), async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const existing = await storage.getLibraryAsset(id);
+      if (!existing) {
+        return res.status(404).json({ error: "Asset not found" });
+      }
+      
+      await storage.deleteLibraryAsset(id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting library asset:", error);
+      res.status(500).json({ error: "Failed to delete library asset" });
+    }
+  });
+
+  // Increment asset usage
+  app.post("/api/library-assets/:id/use", isAuthenticated, async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const asset = await storage.incrementAssetUsage(id);
+      if (!asset) {
+        return res.status(404).json({ error: "Asset not found" });
+      }
+      res.json(asset);
+    } catch (error) {
+      console.error("Error incrementing asset usage:", error);
+      res.status(500).json({ error: "Failed to increment asset usage" });
+    }
+  });
+
+  // Toggle asset favorite
+  app.post("/api/library-assets/:id/favorite", isAuthenticated, async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const asset = await storage.toggleAssetFavorite(id);
+      if (!asset) {
+        return res.status(404).json({ error: "Asset not found" });
+      }
+      res.json(asset);
+    } catch (error) {
+      console.error("Error toggling asset favorite:", error);
+      res.status(500).json({ error: "Failed to toggle asset favorite" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

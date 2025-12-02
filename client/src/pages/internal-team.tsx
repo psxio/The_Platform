@@ -70,6 +70,10 @@ import {
   CreditCard,
   User,
   Briefcase,
+  Save,
+  Download,
+  FileUp,
+  Star,
 } from "lucide-react";
 import { SiTelegram, SiDiscord, SiX } from "react-icons/si";
 import type { InternalTeamMember, TeamPaymentHistory } from "@shared/schema";
@@ -182,6 +186,17 @@ function shortenAddress(address: string) {
   return `${address.slice(0, 6)}...${address.slice(-4)}`;
 }
 
+interface TeamStructureTemplate {
+  id: number;
+  name: string;
+  description: string | null;
+  teamData: any;
+  createdBy: string | null;
+  isDefault: boolean | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
 export default function InternalTeam() {
   const { toast } = useToast();
   const [searchQuery, setSearchQuery] = useState("");
@@ -190,6 +205,11 @@ export default function InternalTeam() {
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showEditDialog, setShowEditDialog] = useState(false);
   const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
+  const [showSaveTemplateDialog, setShowSaveTemplateDialog] = useState(false);
+  const [showLoadTemplateDialog, setShowLoadTemplateDialog] = useState(false);
+  const [templateName, setTemplateName] = useState("");
+  const [templateDescription, setTemplateDescription] = useState("");
+  const [setAsDefault, setSetAsDefault] = useState(true);
 
   const { data: members = [], isLoading } = useQuery<InternalTeamMember[]>({
     queryKey: ["/api/internal-team"],
@@ -272,6 +292,76 @@ export default function InternalTeam() {
     },
   });
 
+  // Template queries and mutations
+  const { data: templates = [], isLoading: isLoadingTemplates } = useQuery<TeamStructureTemplate[]>({
+    queryKey: ["/api/team-structure-templates"],
+  });
+
+  const saveTemplateMutation = useMutation({
+    mutationFn: async (data: { name: string; description: string; isDefault: boolean }) => {
+      const res = await apiRequest("POST", "/api/team-structure-templates", data);
+      return await res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/team-structure-templates"] });
+      setShowSaveTemplateDialog(false);
+      setTemplateName("");
+      setTemplateDescription("");
+      toast({ 
+        title: "Template saved successfully",
+        description: "Your team structure has been saved as a template. Load it in production after publishing!"
+      });
+    },
+    onError: () => {
+      toast({ title: "Failed to save template", variant: "destructive" });
+    },
+  });
+
+  const loadTemplateMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await apiRequest("POST", `/api/team-structure-templates/${id}/load`);
+      return await res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/internal-team"] });
+      setShowLoadTemplateDialog(false);
+      toast({ 
+        title: "Template loaded successfully",
+        description: `${data.members?.length || 0} team members have been loaded from the template.`
+      });
+    },
+    onError: () => {
+      toast({ title: "Failed to load template", variant: "destructive" });
+    },
+  });
+
+  const deleteTemplateMutation = useMutation({
+    mutationFn: async (id: number) => {
+      await apiRequest("DELETE", `/api/team-structure-templates/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/team-structure-templates"] });
+      toast({ title: "Template deleted successfully" });
+    },
+    onError: () => {
+      toast({ title: "Failed to delete template", variant: "destructive" });
+    },
+  });
+
+  const setDefaultTemplateMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const res = await apiRequest("POST", `/api/team-structure-templates/${id}/set-default`);
+      return await res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/team-structure-templates"] });
+      toast({ title: "Default template updated" });
+    },
+    onError: () => {
+      toast({ title: "Failed to set default template", variant: "destructive" });
+    },
+  });
+
   const filteredMembers = members.filter(member => {
     const matchesSearch = 
       member.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -345,13 +435,35 @@ export default function InternalTeam() {
               Manage team members, roles, and payment information
             </p>
           </div>
-          <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-            <DialogTrigger asChild>
-              <Button data-testid="button-add-member">
-                <Plus className="h-4 w-4 mr-2" />
-                Add Member
-              </Button>
-            </DialogTrigger>
+          <div className="flex items-center gap-2">
+            {/* Save Template Button */}
+            <Button 
+              variant="outline" 
+              onClick={() => setShowSaveTemplateDialog(true)}
+              data-testid="button-save-template"
+            >
+              <Save className="h-4 w-4 mr-2" />
+              Save as Template
+            </Button>
+            
+            {/* Load Template Button */}
+            <Button 
+              variant="outline" 
+              onClick={() => setShowLoadTemplateDialog(true)}
+              data-testid="button-load-template"
+            >
+              <Download className="h-4 w-4 mr-2" />
+              Load Template
+            </Button>
+            
+            {/* Add Member Button */}
+            <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
+              <DialogTrigger asChild>
+                <Button data-testid="button-add-member">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Member
+                </Button>
+              </DialogTrigger>
             <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Add Team Member</DialogTitle>
@@ -658,7 +770,168 @@ export default function InternalTeam() {
               </Form>
             </DialogContent>
           </Dialog>
+          </div>
         </div>
+
+        {/* Save Template Dialog */}
+        <Dialog open={showSaveTemplateDialog} onOpenChange={setShowSaveTemplateDialog}>
+          <DialogContent className="max-w-md">
+            <DialogHeader>
+              <DialogTitle>Save Team Structure as Template</DialogTitle>
+              <DialogDescription>
+                Save your current team structure so you can load it into production after publishing.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Template Name</label>
+                <Input
+                  placeholder="e.g., Main Team Structure"
+                  value={templateName}
+                  onChange={(e) => setTemplateName(e.target.value)}
+                  data-testid="input-template-name"
+                />
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Description (optional)</label>
+                <Textarea
+                  placeholder="Description of this template..."
+                  value={templateDescription}
+                  onChange={(e) => setTemplateDescription(e.target.value)}
+                  data-testid="input-template-description"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="setAsDefault"
+                  checked={setAsDefault}
+                  onChange={(e) => setSetAsDefault(e.target.checked)}
+                  className="rounded border-input"
+                />
+                <label htmlFor="setAsDefault" className="text-sm">Set as default template</label>
+              </div>
+              <div className="bg-muted/50 p-3 rounded-lg">
+                <p className="text-sm text-muted-foreground">
+                  <strong>{members.length}</strong> team members will be saved in this template.
+                </p>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowSaveTemplateDialog(false)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={() => saveTemplateMutation.mutate({
+                  name: templateName || `Team Template - ${new Date().toLocaleDateString()}`,
+                  description: templateDescription,
+                  isDefault: setAsDefault,
+                })}
+                disabled={saveTemplateMutation.isPending}
+                data-testid="button-confirm-save-template"
+              >
+                {saveTemplateMutation.isPending && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                <Save className="h-4 w-4 mr-2" />
+                Save Template
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Load Template Dialog */}
+        <Dialog open={showLoadTemplateDialog} onOpenChange={setShowLoadTemplateDialog}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Load Team Structure Template</DialogTitle>
+              <DialogDescription>
+                Select a template to load into your team structure. This will add or update team members based on the template.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              {isLoadingTemplates ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : templates.length === 0 ? (
+                <div className="text-center py-8">
+                  <FileUp className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
+                  <p className="text-muted-foreground">No templates saved yet.</p>
+                  <p className="text-sm text-muted-foreground">Save your current team structure as a template first.</p>
+                </div>
+              ) : (
+                <ScrollArea className="max-h-[300px]">
+                  <div className="space-y-2">
+                    {templates.map((template) => (
+                      <div
+                        key={template.id}
+                        className="flex items-center justify-between p-3 rounded-lg border hover-elevate"
+                      >
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="font-medium">{template.name}</span>
+                            {template.isDefault && (
+                              <Badge variant="secondary" className="text-xs">
+                                <Star className="h-3 w-3 mr-1" />
+                                Default
+                              </Badge>
+                            )}
+                          </div>
+                          {template.description && (
+                            <p className="text-sm text-muted-foreground">{template.description}</p>
+                          )}
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {(template.teamData as any[])?.length || 0} members • 
+                            Created {template.createdAt ? format(new Date(template.createdAt), "MMM d, yyyy") : "N/A"}
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          {!template.isDefault && (
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              onClick={() => setDefaultTemplateMutation.mutate(template.id)}
+                              title="Set as default"
+                            >
+                              <Star className="h-4 w-4" />
+                            </Button>
+                          )}
+                          <Button
+                            size="sm"
+                            onClick={() => loadTemplateMutation.mutate(template.id)}
+                            disabled={loadTemplateMutation.isPending}
+                            data-testid={`button-load-template-${template.id}`}
+                          >
+                            {loadTemplateMutation.isPending ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <>
+                                <Download className="h-4 w-4 mr-1" />
+                                Load
+                              </>
+                            )}
+                          </Button>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={() => deleteTemplateMutation.mutate(template.id)}
+                            className="text-destructive hover:text-destructive"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+              )}
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setShowLoadTemplateDialog(false)}>
+                Close
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">

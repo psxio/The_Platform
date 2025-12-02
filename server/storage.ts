@@ -88,6 +88,8 @@ import {
   type TeamMemberClientAssignment, type InsertTeamMemberClientAssignment, teamMemberClientAssignments,
   // Content Ideas (Pre-Production Approval) types
   type ContentIdea, type InsertContentIdea, contentIdeas,
+  // Team Structure Templates
+  type TeamStructureTemplate, type InsertTeamStructureTemplate, teamStructureTemplates,
 } from "@shared/schema";
 import { db } from "./db";
 import { desc, eq, and, sql, or, isNull } from "drizzle-orm";
@@ -589,6 +591,16 @@ export interface IStorage {
   deleteContentIdea(id: number): Promise<boolean>;
   approveContentIdea(id: number, approvedBy: string, clientNotes?: string): Promise<ContentIdea | undefined>;
   denyContentIdea(id: number, deniedBy: string, clientNotes?: string): Promise<ContentIdea | undefined>;
+  
+  // Team Structure Template methods
+  getTeamStructureTemplates(): Promise<TeamStructureTemplate[]>;
+  getTeamStructureTemplate(id: number): Promise<TeamStructureTemplate | undefined>;
+  getDefaultTeamStructureTemplate(): Promise<TeamStructureTemplate | undefined>;
+  createTeamStructureTemplate(template: InsertTeamStructureTemplate): Promise<TeamStructureTemplate>;
+  updateTeamStructureTemplate(id: number, updates: Partial<InsertTeamStructureTemplate>): Promise<TeamStructureTemplate | undefined>;
+  deleteTeamStructureTemplate(id: number): Promise<boolean>;
+  setDefaultTeamStructureTemplate(id: number): Promise<TeamStructureTemplate | undefined>;
+  loadTeamStructureTemplate(id: number): Promise<InternalTeamMember[]>;
 }
 
 export class DbStorage implements IStorage {
@@ -3773,6 +3785,117 @@ export class DbStorage implements IStorage {
       .where(eq(contentIdeas.id, id))
       .returning();
     return updated;
+  }
+
+  // ==================== TEAM STRUCTURE TEMPLATES METHODS ====================
+
+  async getTeamStructureTemplates(): Promise<TeamStructureTemplate[]> {
+    return await db
+      .select()
+      .from(teamStructureTemplates)
+      .orderBy(desc(teamStructureTemplates.createdAt));
+  }
+
+  async getTeamStructureTemplate(id: number): Promise<TeamStructureTemplate | undefined> {
+    const [template] = await db
+      .select()
+      .from(teamStructureTemplates)
+      .where(eq(teamStructureTemplates.id, id));
+    return template;
+  }
+
+  async getDefaultTeamStructureTemplate(): Promise<TeamStructureTemplate | undefined> {
+    const [template] = await db
+      .select()
+      .from(teamStructureTemplates)
+      .where(eq(teamStructureTemplates.isDefault, true));
+    return template;
+  }
+
+  async createTeamStructureTemplate(template: InsertTeamStructureTemplate): Promise<TeamStructureTemplate> {
+    // If this is set as default, clear other defaults first
+    if (template.isDefault) {
+      await db.update(teamStructureTemplates).set({ isDefault: false });
+    }
+    const [created] = await db.insert(teamStructureTemplates).values(template).returning();
+    return created;
+  }
+
+  async updateTeamStructureTemplate(id: number, updates: Partial<InsertTeamStructureTemplate>): Promise<TeamStructureTemplate | undefined> {
+    // If setting as default, clear other defaults first
+    if (updates.isDefault) {
+      await db.update(teamStructureTemplates).set({ isDefault: false });
+    }
+    const [updated] = await db
+      .update(teamStructureTemplates)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(teamStructureTemplates.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteTeamStructureTemplate(id: number): Promise<boolean> {
+    await db.delete(teamStructureTemplates).where(eq(teamStructureTemplates.id, id));
+    return true;
+  }
+
+  async setDefaultTeamStructureTemplate(id: number): Promise<TeamStructureTemplate | undefined> {
+    // Clear all defaults first
+    await db.update(teamStructureTemplates).set({ isDefault: false });
+    // Set the new default
+    const [updated] = await db
+      .update(teamStructureTemplates)
+      .set({ isDefault: true, updatedAt: new Date() })
+      .where(eq(teamStructureTemplates.id, id))
+      .returning();
+    return updated;
+  }
+
+  async loadTeamStructureTemplate(id: number): Promise<InternalTeamMember[]> {
+    const template = await this.getTeamStructureTemplate(id);
+    if (!template) {
+      throw new Error("Template not found");
+    }
+
+    // Parse the team data from JSON
+    const teamData = template.teamData as any[];
+    const createdMembers: InternalTeamMember[] = [];
+    const idMapping: Map<number, number> = new Map(); // Maps old IDs to new IDs
+
+    // First pass: Create all members without supervisor relationships
+    for (const memberData of teamData) {
+      const { id: oldId, supervisorId, createdAt, updatedAt, ...memberWithoutId } = memberData;
+      
+      // Check if member already exists by name and email
+      const existing = await this.getInternalTeamMemberByName(memberData.name);
+      if (existing) {
+        // Update existing member
+        const updated = await this.updateInternalTeamMember(existing.id, memberWithoutId);
+        if (updated) {
+          createdMembers.push(updated);
+          idMapping.set(oldId, updated.id);
+        }
+      } else {
+        // Create new member
+        const created = await this.createInternalTeamMember(memberWithoutId);
+        createdMembers.push(created);
+        idMapping.set(oldId, created.id);
+      }
+    }
+
+    // Second pass: Update supervisor relationships using the ID mapping
+    for (const memberData of teamData) {
+      if (memberData.supervisorId) {
+        const newMemberId = idMapping.get(memberData.id);
+        const newSupervisorId = idMapping.get(memberData.supervisorId);
+        if (newMemberId && newSupervisorId) {
+          await this.updateInternalTeamMember(newMemberId, { supervisorId: newSupervisorId });
+        }
+      }
+    }
+
+    // Refetch to get updated data with correct supervisor IDs
+    return await this.getInternalTeamMembers();
   }
 }
 

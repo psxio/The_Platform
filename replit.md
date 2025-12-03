@@ -50,6 +50,12 @@ The backend is a Node.js application using Express, providing APIs for Onchain T
         -   **Client Side (Client Portal > Ideas)**: Review pending ideas, approve with optional feedback, or decline with reasons
         -   **Workflow**: Pending → Approved (ready for production) or Denied
         -   **Schema**: `content_ideas` table with clientId (user), status, estimates, and notes
+    -   **Grimoria Feature Integrations** (5 enhanced features):
+        -   **YouTube Playlist Integration**: Link YouTube videos/playlists to tasks for reference during content creation. YouTubeReferences component in task details dialog allows adding video URLs with title, description, and playlist ID. Schema: `youtubeReferences` table.
+        -   **Feedback Form System**: Enhanced deliverable reviews with star ratings (1-5) and detailed comments. FeedbackForm component toggleable in each DeliverableItem. Supports feedback on tasks, deliverables, assets. Schema: `feedbackSubmissions` table with analytics aggregation.
+        -   **Asset Library Enhancements**: Extended metadata tracking for brand assets including file size, dimensions, tags, usage count, and view tracking. EnhancedAssetLibrary component with search/filter capabilities. Schema: `libraryAssets` table with comprehensive metadata.
+        -   **Saved Items/Pinned Content**: Bookmark functionality across platform entities (tasks, clients, deliverables, assets, orders). SavedItemsPanel in main navigation header, SaveButton component for quick save actions. Schema: `savedItems` table with priority and notes.
+        -   **Burndown Chart Analytics**: Task completion visualization for campaign progress tracking. Filterable by campaign and date range. BurndownChart component integrated into analytics dashboard. Schema: `burndownSnapshots` table for historical tracking.
 -   **Client Directory**: Centralized database of all client and partner profiles accessible to all team members (web3, content, admin). Features include:
     -   **Client Profiles**: Company name, industry, relationship status (active/partner/prospect/inactive/paused), key contacts with roles and emails, website and social links (X/Twitter, Discord, Telegram), project history, notes, and custom tags.
     -   **Per-Client Calendar**: Schedule and track deadlines, milestones, meetings, deliverables, launches, and reviews for each client. Events can be linked to tasks and orders.

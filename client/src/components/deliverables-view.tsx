@@ -37,12 +37,14 @@ import {
   ChevronDown,
   ChevronUp,
   Clock,
-  ArrowLeftRight
+  ArrowLeftRight,
+  MessageSquare
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
+import { FeedbackForm } from "./feedback-form";
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return '0 Bytes';
@@ -98,6 +100,7 @@ function DeliverableItem({
   versions = []
 }: DeliverableItemProps) {
   const [showVersionToggle, setShowVersionToggle] = useState(false);
+  const [showFeedback, setShowFeedback] = useState(false);
   const [selectedVersionIndex, setSelectedVersionIndex] = useState<number>(-1);
   
   const currentFile = selectedVersionIndex === -1 
@@ -238,6 +241,14 @@ function DeliverableItem({
                 {versions.length + 1} versions
               </button>
             )}
+            <button
+              onClick={() => setShowFeedback(!showFeedback)}
+              className="flex items-center gap-1 text-primary hover:underline"
+              data-testid={`button-toggle-feedback-${deliverable.id}`}
+            >
+              <MessageSquare className="w-3 h-3" />
+              Feedback
+            </button>
           </div>
 
           {showVersionToggle && versions.length > 0 && (
@@ -275,6 +286,17 @@ function DeliverableItem({
               >
                 View All
               </Button>
+            </div>
+          )}
+
+          {showFeedback && (
+            <div className="pt-3 mt-3 border-t border-border/50">
+              <FeedbackForm 
+                targetType="deliverable" 
+                targetId={deliverable.id}
+                title="Deliverable Feedback"
+                showStats={false}
+              />
             </div>
           )}
         </div>

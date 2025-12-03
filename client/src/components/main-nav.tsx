@@ -24,6 +24,7 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
 import { NotificationBell } from "@/components/notification-bell";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { SavedItemsPanel } from "@/components/saved-items";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import {
   Menu,
@@ -537,6 +538,9 @@ export function MainNav() {
         <div className="flex-1" />
 
         <div className="flex items-center gap-2">
+          <div className="hidden md:block">
+            <SavedItemsPanel />
+          </div>
           <NotificationBell />
           <ThemeToggle />
           <div className="hidden md:block">

@@ -71,6 +71,8 @@ import { TaskActivityTimeline } from "./task-activity-timeline";
 import { TaskTimeTracking } from "./task-time-tracking";
 import { TaskWatchers } from "./task-watchers";
 import { TaskApprovals } from "./task-approvals";
+import { YouTubeReferences } from "./youtube-references";
+import { SaveButton } from "./saved-items";
 
 interface TaskDetailsDialogProps {
   open: boolean;
@@ -573,21 +575,24 @@ export function TaskDetailsDialog({ open, onOpenChange, task, onEdit, currentUse
               ) : null}
             </div>
 
-            {/* Edit button for full edit dialog */}
-            {onEdit && (isAdmin || isTaskCreator) && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  onOpenChange(false);
-                  onEdit(task);
-                }}
-                data-testid="button-edit-task"
-              >
-                <Pencil className="w-4 h-4 mr-2" />
-                Full Edit
-              </Button>
-            )}
+            <div className="flex items-center gap-2">
+              <SaveButton itemType="task" itemId={task.id} />
+              {/* Edit button for full edit dialog */}
+              {onEdit && (isAdmin || isTaskCreator) && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    onOpenChange(false);
+                    onEdit(task);
+                  }}
+                  data-testid="button-edit-task"
+                >
+                  <Pencil className="w-4 h-4 mr-2" />
+                  Full Edit
+                </Button>
+              )}
+            </div>
           </div>
         </DialogHeader>
 
@@ -1127,6 +1132,16 @@ export function TaskDetailsDialog({ open, onOpenChange, task, onEdit, currentUse
             {currentUserId && (
               <TaskComments taskId={task.id} currentUserId={currentUserId} />
             )}
+
+            <Separator />
+
+            {/* YouTube References */}
+            <YouTubeReferences 
+              targetType="task" 
+              targetId={task.id} 
+              title="Reference Videos"
+              compact={false}
+            />
 
             <Separator />
 

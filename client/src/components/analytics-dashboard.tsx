@@ -6,6 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { BurndownChart } from "./burndown-chart";
 import { 
   BarChart3, 
   CheckCircle2, 
@@ -473,6 +474,8 @@ export function AnalyticsDashboard() {
           </div>
         </CardContent>
       </Card>
+
+      <BurndownChart title="Task Burndown" showControls={true} />
     </div>
   );
 }

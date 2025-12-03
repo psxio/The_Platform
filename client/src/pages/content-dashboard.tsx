@@ -27,22 +27,104 @@ import { Button } from "@/components/ui/button";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Plus, ClipboardList, Users, Upload, Settings, FolderKanban, BarChart3, LayoutGrid, Columns3, Calendar, FileText, Image, Repeat, Clock, Download, Camera, DollarSign, Package, MoreHorizontal, ChevronDown, Rocket, Lightbulb } from "lucide-react";
+import { 
+  Plus, 
+  ClipboardList, 
+  Users, 
+  Upload, 
+  Settings, 
+  FolderKanban, 
+  BarChart3, 
+  LayoutGrid, 
+  Columns3, 
+  Calendar, 
+  FileText, 
+  Image, 
+  Repeat, 
+  Clock, 
+  Download, 
+  Camera, 
+  DollarSign, 
+  Package, 
+  Rocket, 
+  Lightbulb,
+  Briefcase,
+  Library,
+  TrendingUp,
+  Cog,
+} from "lucide-react";
 import { Link } from "wouter";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
+import { cn } from "@/lib/utils";
 
 type TaskViewMode = "grid" | "kanban" | "calendar";
+type MainGroup = "work" | "team" | "library" | "reports" | "settings";
+
+const GROUP_CONFIG = {
+  work: {
+    label: "Work",
+    icon: Briefcase,
+    subTabs: ["command", "tasks", "campaigns", "ideas"] as const,
+    default: "command",
+  },
+  team: {
+    label: "Team",
+    icon: Users,
+    subTabs: ["directory", "deliverables"] as const,
+    default: "directory",
+  },
+  library: {
+    label: "Library",
+    icon: Library,
+    subTabs: ["assets", "brand-packs", "templates"] as const,
+    default: "assets",
+  },
+  reports: {
+    label: "Reports",
+    icon: TrendingUp,
+    subTabs: ["analytics", "time-reports", "payments", "recurring"] as const,
+    default: "analytics",
+  },
+  settings: {
+    label: "Settings",
+    icon: Cog,
+    subTabs: ["settings"] as const,
+    default: "settings",
+  },
+};
+
+const SUB_TAB_LABELS: Record<string, { label: string; icon: any }> = {
+  command: { label: "Command Center", icon: Rocket },
+  tasks: { label: "Tasks", icon: ClipboardList },
+  campaigns: { label: "Campaigns", icon: FolderKanban },
+  ideas: { label: "Ideas", icon: Lightbulb },
+  directory: { label: "Directory", icon: Users },
+  deliverables: { label: "Deliverables", icon: Upload },
+  assets: { label: "Assets", icon: Image },
+  "brand-packs": { label: "Brand Packs", icon: Package },
+  templates: { label: "Templates", icon: FileText },
+  analytics: { label: "Analytics", icon: BarChart3 },
+  "time-reports": { label: "Time Reports", icon: Clock },
+  payments: { label: "Payments", icon: DollarSign },
+  recurring: { label: "Recurring", icon: Repeat },
+  settings: { label: "Settings", icon: Settings },
+};
 
 export default function ContentDashboard() {
   const [isAddTaskDialogOpen, setIsAddTaskDialogOpen] = useState(false);
   const [isAddCampaignDialogOpen, setIsAddCampaignDialogOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState("command");
+  const [activeGroup, setActiveGroup] = useState<MainGroup>("work");
+  const [activeSubTab, setActiveSubTab] = useState("command");
   const [taskViewMode, setTaskViewMode] = useState<TaskViewMode>("grid");
   const { user } = useAuth();
   const { toast } = useToast();
   const isAdmin = user?.role === "admin";
+
+  const handleGroupChange = (group: MainGroup) => {
+    setActiveGroup(group);
+    setActiveSubTab(GROUP_CONFIG[group].default);
+  };
 
   const handleExport = async (format: "json" | "csv") => {
     try {
@@ -66,6 +148,9 @@ export default function ContentDashboard() {
     }
   };
 
+  const currentGroupConfig = GROUP_CONFIG[activeGroup];
+  const showSubTabs = currentGroupConfig.subTabs.length > 1;
+
   return (
     <ContentAccessGuard>
       <div className="container mx-auto py-6 px-4 max-w-7xl">
@@ -80,248 +165,216 @@ export default function ContentDashboard() {
               </p>
             </div>
             <div className="flex items-center gap-2">
-            <Link href="/content/monitoring">
-              <Button variant="outline" size="sm" data-testid="button-monitoring">
-                <Camera className="h-4 w-4 mr-2" />
-                Monitoring
-              </Button>
-            </Link>
-            {activeTab === "tasks" && (
-              <>
-                <ToggleGroup 
-                  type="single" 
-                  value={taskViewMode} 
-                  onValueChange={(value) => value && setTaskViewMode(value as TaskViewMode)}
-                  className="border rounded-md"
-                  data-testid="toggle-task-view"
-                >
-                  <ToggleGroupItem value="grid" aria-label="Grid view" data-testid="toggle-grid-view">
-                    <LayoutGrid className="h-4 w-4" />
-                  </ToggleGroupItem>
-                  <ToggleGroupItem value="kanban" aria-label="Kanban view" data-testid="toggle-kanban-view">
-                    <Columns3 className="h-4 w-4" />
-                  </ToggleGroupItem>
-                  <ToggleGroupItem value="calendar" aria-label="Calendar view" data-testid="toggle-calendar-view">
-                    <Calendar className="h-4 w-4" />
-                  </ToggleGroupItem>
-                </ToggleGroup>
-                <Button onClick={() => setIsAddTaskDialogOpen(true)} data-testid="button-add-task">
-                  <Plus className="h-4 w-4 mr-2" />
-                  Add Task
+              <Link href="/content/monitoring">
+                <Button variant="outline" size="sm" data-testid="button-monitoring">
+                  <Camera className="h-4 w-4 mr-2" />
+                  Monitoring
                 </Button>
+              </Link>
+              {activeSubTab === "tasks" && (
+                <>
+                  <ToggleGroup 
+                    type="single" 
+                    value={taskViewMode} 
+                    onValueChange={(value) => value && setTaskViewMode(value as TaskViewMode)}
+                    className="border rounded-md"
+                    data-testid="toggle-task-view"
+                  >
+                    <ToggleGroupItem value="grid" aria-label="Grid view" data-testid="toggle-grid-view">
+                      <LayoutGrid className="h-4 w-4" />
+                    </ToggleGroupItem>
+                    <ToggleGroupItem value="kanban" aria-label="Kanban view" data-testid="toggle-kanban-view">
+                      <Columns3 className="h-4 w-4" />
+                    </ToggleGroupItem>
+                    <ToggleGroupItem value="calendar" aria-label="Calendar view" data-testid="toggle-calendar-view">
+                      <Calendar className="h-4 w-4" />
+                    </ToggleGroupItem>
+                  </ToggleGroup>
+                  <Button onClick={() => setIsAddTaskDialogOpen(true)} data-testid="button-add-task">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Task
+                  </Button>
+                </>
+              )}
+              {activeSubTab === "campaigns" && (
+                <Button onClick={() => setIsAddCampaignDialogOpen(true)} data-testid="button-add-campaign">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Add Campaign
+                </Button>
+              )}
+            </div>
+          </div>
+
+          <CreditBalanceDisplay />
+
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center gap-1 p-1 bg-muted/50 rounded-lg w-fit">
+              {(Object.keys(GROUP_CONFIG) as MainGroup[]).map((group) => {
+                const config = GROUP_CONFIG[group];
+                const Icon = config.icon;
+                const isActive = activeGroup === group;
+                return (
+                  <Button
+                    key={group}
+                    variant={isActive ? "default" : "ghost"}
+                    size="sm"
+                    onClick={() => handleGroupChange(group)}
+                    className={cn(
+                      "gap-2 transition-all",
+                      isActive && "shadow-sm"
+                    )}
+                    data-testid={`group-${group}`}
+                  >
+                    <Icon className="h-4 w-4" />
+                    <span className="hidden sm:inline">{config.label}</span>
+                  </Button>
+                );
+              })}
+            </div>
+
+            {showSubTabs && (
+              <div className="flex items-center gap-1 border-b pb-2">
+                {currentGroupConfig.subTabs.map((subTab) => {
+                  const tabConfig = SUB_TAB_LABELS[subTab];
+                  const Icon = tabConfig.icon;
+                  const isActive = activeSubTab === subTab;
+                  return (
+                    <Button
+                      key={subTab}
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setActiveSubTab(subTab)}
+                      className={cn(
+                        "gap-2 relative",
+                        isActive && "text-primary"
+                      )}
+                      data-testid={`subtab-${subTab}`}
+                    >
+                      <Icon className="h-4 w-4" />
+                      <span>{tabConfig.label}</span>
+                      {isActive && (
+                        <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary -mb-2" />
+                      )}
+                    </Button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <div className="mt-2">
+            {activeSubTab === "command" && <ProductionCommandCenter />}
+
+            {activeSubTab === "tasks" && (
+              <>
+                {taskViewMode === "grid" && <ContentTasksView />}
+                {taskViewMode === "kanban" && <KanbanView />}
+                {taskViewMode === "calendar" && <CalendarView />}
               </>
             )}
-            {activeTab === "campaigns" && (
-              <Button onClick={() => setIsAddCampaignDialogOpen(true)} data-testid="button-add-campaign">
-                <Plus className="h-4 w-4 mr-2" />
-                Add Campaign
-              </Button>
+
+            {activeSubTab === "campaigns" && <CampaignsView />}
+
+            {activeSubTab === "ideas" && <ContentIdeasManageView />}
+
+            {activeSubTab === "directory" && <DirectoryTable />}
+
+            {activeSubTab === "deliverables" && <DeliverablesView />}
+
+            {activeSubTab === "assets" && <AssetsLibrary />}
+
+            {activeSubTab === "brand-packs" && <BrandPacksView />}
+
+            {activeSubTab === "templates" && <TemplatesView />}
+
+            {activeSubTab === "analytics" && <AnalyticsDashboard />}
+
+            {activeSubTab === "time-reports" && <TimeReportsView />}
+
+            {activeSubTab === "payments" && <PaymentRequestsView />}
+
+            {activeSubTab === "recurring" && <RecurringTasksView />}
+
+            {activeSubTab === "settings" && (
+              <div className="space-y-6">
+                <GoogleSheetsSync />
+                
+                <Separator />
+                
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center gap-2">
+                      <Download className="h-5 w-5" />
+                      Data Export
+                    </CardTitle>
+                    <CardDescription>
+                      Export all your task data for backup or analysis
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex gap-2">
+                      <Button 
+                        variant="outline" 
+                        onClick={() => handleExport("json")}
+                        data-testid="button-export-json"
+                      >
+                        Export JSON
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        onClick={() => handleExport("csv")}
+                        data-testid="button-export-csv"
+                      >
+                        Export CSV
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+                
+                <Separator />
+                
+                {isAdmin && (
+                  <>
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Integration Settings</CardTitle>
+                        <CardDescription>
+                          Configure external integrations for notifications
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <IntegrationSettings />
+                      </CardContent>
+                    </Card>
+                    
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>User Invites</CardTitle>
+                        <CardDescription>
+                          Manage pending user invitations
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <UserInvites />
+                      </CardContent>
+                    </Card>
+                  </>
+                )}
+              </div>
             )}
           </div>
         </div>
-
-        <CreditBalanceDisplay />
-
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <div className="flex items-center gap-2 mb-2">
-            <TabsList className="inline-flex gap-1">
-              <TabsTrigger value="command" className="gap-2" data-testid="tab-command">
-                <Rocket className="h-4 w-4" />
-                <span className="hidden sm:inline">Command</span>
-              </TabsTrigger>
-              <TabsTrigger value="tasks" className="gap-2" data-testid="tab-tasks">
-                <ClipboardList className="h-4 w-4" />
-                <span className="hidden sm:inline">Tasks</span>
-              </TabsTrigger>
-              <TabsTrigger value="campaigns" className="gap-2" data-testid="tab-campaigns">
-                <FolderKanban className="h-4 w-4" />
-                <span className="hidden sm:inline">Campaigns</span>
-              </TabsTrigger>
-              <TabsTrigger value="directory" className="gap-2" data-testid="tab-directory">
-                <Users className="h-4 w-4" />
-                <span className="hidden sm:inline">Team</span>
-              </TabsTrigger>
-              <TabsTrigger value="deliverables" className="gap-2" data-testid="tab-deliverables">
-                <Upload className="h-4 w-4" />
-                <span className="hidden sm:inline">Deliverables</span>
-              </TabsTrigger>
-            </TabsList>
-            
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button 
-                  variant={["templates", "recurring", "assets", "brand-packs", "time-reports", "payments", "analytics", "settings", "ideas"].includes(activeTab) ? "secondary" : "outline"} 
-                  size="sm" 
-                  className="gap-1"
-                  data-testid="button-more-tabs"
-                >
-                  <MoreHorizontal className="h-4 w-4" />
-                  <span className="hidden sm:inline">More</span>
-                  <ChevronDown className="h-3 w-3" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="w-48">
-                <DropdownMenuItem onClick={() => setActiveTab("ideas")} data-testid="menu-ideas">
-                  <Lightbulb className="h-4 w-4 mr-2" />
-                  Ideas
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => setActiveTab("templates")} data-testid="menu-templates">
-                  <FileText className="h-4 w-4 mr-2" />
-                  Templates
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setActiveTab("recurring")} data-testid="menu-recurring">
-                  <Repeat className="h-4 w-4 mr-2" />
-                  Recurring Tasks
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => setActiveTab("assets")} data-testid="menu-assets">
-                  <Image className="h-4 w-4 mr-2" />
-                  Assets
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setActiveTab("brand-packs")} data-testid="menu-brand-packs">
-                  <Package className="h-4 w-4 mr-2" />
-                  Brand Packs
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => setActiveTab("time-reports")} data-testid="menu-time-reports">
-                  <Clock className="h-4 w-4 mr-2" />
-                  Time Reports
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setActiveTab("payments")} data-testid="menu-payments">
-                  <DollarSign className="h-4 w-4 mr-2" />
-                  Payments
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setActiveTab("analytics")} data-testid="menu-analytics">
-                  <BarChart3 className="h-4 w-4 mr-2" />
-                  Analytics
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => setActiveTab("settings")} data-testid="menu-settings">
-                  <Settings className="h-4 w-4 mr-2" />
-                  Settings
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-
-          <TabsContent value="command" className="mt-6">
-            <ProductionCommandCenter />
-          </TabsContent>
-
-          <TabsContent value="tasks" className="mt-6">
-            {taskViewMode === "grid" && <ContentTasksView />}
-            {taskViewMode === "kanban" && <KanbanView />}
-            {taskViewMode === "calendar" && <CalendarView />}
-          </TabsContent>
-
-          <TabsContent value="campaigns" className="mt-6">
-            <CampaignsView />
-          </TabsContent>
-
-          <TabsContent value="templates" className="mt-6">
-            <TemplatesView />
-          </TabsContent>
-
-          <TabsContent value="recurring" className="mt-6">
-            <RecurringTasksView />
-          </TabsContent>
-
-          <TabsContent value="directory" className="mt-6">
-            <DirectoryTable />
-          </TabsContent>
-
-          <TabsContent value="deliverables" className="mt-6">
-            <DeliverablesView />
-          </TabsContent>
-
-          <TabsContent value="assets" className="mt-6">
-            <AssetsLibrary />
-          </TabsContent>
-
-          <TabsContent value="brand-packs" className="mt-6">
-            <BrandPacksView />
-          </TabsContent>
-
-          <TabsContent value="time-reports" className="mt-6">
-            <TimeReportsView />
-          </TabsContent>
-
-          <TabsContent value="payments" className="mt-6">
-            <PaymentRequestsView />
-          </TabsContent>
-
-          <TabsContent value="analytics" className="mt-6">
-            <AnalyticsDashboard />
-          </TabsContent>
-
-          <TabsContent value="ideas" className="mt-6">
-            <ContentIdeasManageView />
-          </TabsContent>
-
-          <TabsContent value="settings" className="mt-6">
-            <div className="space-y-6">
-              <GoogleSheetsSync />
-              
-              <Separator />
-              
-              {/* Data Export */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Download className="h-5 w-5" />
-                    Data Export
-                  </CardTitle>
-                  <CardDescription>
-                    Export all your task data for backup or analysis
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex gap-2">
-                    <Button 
-                      variant="outline" 
-                      onClick={() => handleExport("csv")}
-                      data-testid="button-export-csv"
-                    >
-                      Export as CSV
-                    </Button>
-                    <Button 
-                      variant="outline" 
-                      onClick={() => handleExport("json")}
-                      data-testid="button-export-json"
-                    >
-                      Export as JSON
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-              
-              {/* Admin-only settings */}
-              {isAdmin && (
-                <>
-                  <Separator />
-                  <IntegrationSettings />
-                  <Separator />
-                  <UserInvites />
-                </>
-              )}
-            </div>
-          </TabsContent>
-        </Tabs>
       </div>
 
-        <AddContentTaskDialog
-          open={isAddTaskDialogOpen}
-          onOpenChange={setIsAddTaskDialogOpen}
-        />
-        
-        <AddCampaignDialog
-          open={isAddCampaignDialogOpen}
-          onOpenChange={setIsAddCampaignDialogOpen}
-        />
-        
-        <WelcomeModal />
-      </div>
+      <WelcomeModal />
+      <AddContentTaskDialog 
+        open={isAddTaskDialogOpen} 
+        onOpenChange={setIsAddTaskDialogOpen} 
+      />
+      <AddCampaignDialog
+        open={isAddCampaignDialogOpen}
+        onOpenChange={setIsAddCampaignDialogOpen}
+      />
     </ContentAccessGuard>
   );
 }

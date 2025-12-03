@@ -84,17 +84,17 @@ const spaces: Space[] = [
 
 function useSpaceStats(isAdmin: boolean) {
   const { data: pendingMembers = [] } = useQuery<any[]>({
-    queryKey: ["/api/dao/memberships/pending"],
+    queryKey: ["/api/admin/pending-content-members"],
     enabled: isAdmin,
   });
 
-  const { data: pendingPayments = [] } = useQuery<any[]>({
-    queryKey: ["/api/payment-requests/pending"],
+  const { data: pendingPaymentCount } = useQuery<{ count: number }>({
+    queryKey: ["/api/payment-requests/pending/count"],
     enabled: isAdmin,
   });
 
   const { data: pendingCredits = [] } = useQuery<any[]>({
-    queryKey: ["/api/buy-power-requests/pending"],
+    queryKey: ["/api/credit-requests/pending"],
     enabled: isAdmin,
   });
 
@@ -102,8 +102,9 @@ function useSpaceStats(isAdmin: boolean) {
     return { admin: 0 };
   }
 
+  const paymentCount = pendingPaymentCount?.count || 0;
   return {
-    admin: pendingMembers.length + pendingPayments.length + pendingCredits.length,
+    admin: pendingMembers.length + paymentCount + pendingCredits.length,
   };
 }
 

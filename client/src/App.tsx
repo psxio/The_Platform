@@ -43,6 +43,7 @@ import DaoProjectNew from "@/pages/dao-project-new";
 import AdminControlCenter from "@/pages/admin-control-center";
 import Workspace from "@/pages/workspace";
 import OnchainOps from "@/pages/onchain-ops";
+import DuplicateChecker from "@/pages/duplicate-checker";
 import NotFound from "@/pages/not-found";
 import { Web3WelcomeModal } from "@/components/web3-welcome-modal";
 import { WelcomeModal } from "@/components/welcome-modal";
@@ -132,6 +133,9 @@ function AuthenticatedRouter() {
       </Route>
       <Route path="/web3/collections">
         <Web3RouteGuard><Collections /></Web3RouteGuard>
+      </Route>
+      <Route path="/web3/duplicates">
+        <Web3RouteGuard><DuplicateChecker /></Web3RouteGuard>
       </Route>
       <Route path="/web3/history">
         <Web3RouteGuard><History /></Web3RouteGuard>

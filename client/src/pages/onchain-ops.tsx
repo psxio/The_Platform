@@ -22,6 +22,7 @@ import {
   TrendingUp,
   Upload,
   RefreshCw,
+  CopyCheck,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -253,6 +254,12 @@ export default function OnchainOps() {
                     description="Create and manage NFT address lists"
                     icon={Database}
                     href="/web3/collections"
+                  />
+                  <QuickActionCard
+                    title="Duplicate Checker"
+                    description="Find and remove duplicate addresses"
+                    icon={CopyCheck}
+                    href="/web3/duplicates"
                   />
                 </div>
               </CardContent>

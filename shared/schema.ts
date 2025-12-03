@@ -424,11 +424,15 @@ export const insertTemplateSubtaskSchema = createInsertSchema(templateSubtasks).
 export type InsertTemplateSubtask = z.infer<typeof insertTemplateSubtaskSchema>;
 export type TemplateSubtask = typeof templateSubtasks.$inferSelect;
 
-// Task Watchers - users watching task updates
+// Task Watchers - users watching task updates (supports both personal and content tasks)
 export const taskWatchers = pgTable("task_watchers", {
   id: serial("id").primaryKey(),
-  taskId: integer("task_id").notNull().references(() => contentTasks.id, { onDelete: "cascade" }),
   userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  taskType: varchar("task_type", { length: 20 }).notNull().default("content"), // "personal" or "content"
+  taskId: integer("task_id").notNull(), // References tasks.id or contentTasks.id based on taskType
+  notifyOnStatusChange: boolean("notify_on_status_change").default(true),
+  notifyOnComment: boolean("notify_on_comment").default(true),
+  notifyOnAssignment: boolean("notify_on_assignment").default(true),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -1916,3 +1920,205 @@ export const insertLibraryAssetSchema = createInsertSchema(libraryAssets).omit({
 
 export type InsertLibraryAsset = z.infer<typeof insertLibraryAssetSchema>;
 export type LibraryAsset = typeof libraryAssets.$inferSelect;
+
+// ==================== TASK SUBTASKS ====================
+// Subtasks/checklists for both personal tasks and content tasks
+
+export const taskSubtasks = pgTable("task_subtasks", {
+  id: serial("id").primaryKey(),
+  taskType: varchar("task_type", { length: 20 }).notNull(), // "personal" or "content"
+  taskId: integer("task_id").notNull(),
+  title: text("title").notNull(),
+  isCompleted: boolean("is_completed").default(false),
+  sortOrder: integer("sort_order").default(0),
+  assignedTo: varchar("assigned_to", { length: 255 }),
+  dueDate: text("due_date"),
+  createdAt: timestamp("created_at").defaultNow(),
+  completedAt: timestamp("completed_at"),
+});
+
+export const insertTaskSubtaskSchema = createInsertSchema(taskSubtasks).omit({
+  id: true,
+  createdAt: true,
+  completedAt: true,
+});
+
+export type InsertTaskSubtask = z.infer<typeof insertTaskSubtaskSchema>;
+export type TaskSubtask = typeof taskSubtasks.$inferSelect;
+
+// ==================== TASK PRIORITY & TIME TRACKING (Enhanced Personal Tasks) ====================
+
+export const taskPriorities = ["urgent", "high", "normal", "low"] as const;
+export type TaskPriority = typeof taskPriorities[number];
+
+// Enhanced fields stored in a separate table to avoid breaking existing tasks table
+export const taskEnhancements = pgTable("task_enhancements", {
+  id: serial("id").primaryKey(),
+  taskId: integer("task_id").notNull().references(() => tasks.id, { onDelete: "cascade" }),
+  priority: varchar("priority", { length: 20 }).$type<TaskPriority>().default("normal"),
+  estimatedMinutes: integer("estimated_minutes"),
+  actualMinutes: integer("actual_minutes").default(0),
+  clientProfileId: integer("client_profile_id").references(() => clientProfiles.id, { onDelete: "set null" }),
+  description: text("description"),
+  tags: text("tags"), // JSON array
+  startedAt: timestamp("started_at"),
+  completedAt: timestamp("completed_at"),
+});
+
+export const insertTaskEnhancementSchema = createInsertSchema(taskEnhancements).omit({
+  id: true,
+});
+
+export type InsertTaskEnhancement = z.infer<typeof insertTaskEnhancementSchema>;
+export type TaskEnhancement = typeof taskEnhancements.$inferSelect;
+
+// ==================== CLIENT DOCUMENTS (Docs Hub) ====================
+
+export const documentCategories = ["contract", "brief", "notes", "guidelines", "reference", "legal", "other"] as const;
+export type DocumentCategory = typeof documentCategories[number];
+
+export const clientDocuments = pgTable("client_documents", {
+  id: serial("id").primaryKey(),
+  clientProfileId: integer("client_profile_id").notNull().references(() => clientProfiles.id, { onDelete: "cascade" }),
+  uploadedBy: varchar("uploaded_by").notNull().references(() => users.id, { onDelete: "cascade" }),
+  name: varchar("name", { length: 255 }).notNull(),
+  description: text("description"),
+  fileUrl: varchar("file_url", { length: 500 }).notNull(),
+  fileType: varchar("file_type", { length: 100 }).notNull(), // MIME type
+  fileSize: integer("file_size"), // Size in bytes
+  category: varchar("category", { length: 30 }).$type<DocumentCategory>().default("other"),
+  tags: text("tags"), // JSON array
+  version: integer("version").default(1),
+  parentDocumentId: integer("parent_document_id"), // For versioning, references previous version
+  linkedBrandPackId: integer("linked_brand_pack_id").references(() => clientBrandPacks.id, { onDelete: "set null" }),
+  linkedTaskId: integer("linked_task_id").references(() => contentTasks.id, { onDelete: "set null" }),
+  isArchived: boolean("is_archived").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertClientDocumentSchema = createInsertSchema(clientDocuments).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertClientDocument = z.infer<typeof insertClientDocumentSchema>;
+export type ClientDocument = typeof clientDocuments.$inferSelect;
+
+// ==================== WHITEBOARDS ====================
+
+export const whiteboards = pgTable("whiteboards", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  description: text("description"),
+  clientProfileId: integer("client_profile_id").references(() => clientProfiles.id, { onDelete: "set null" }),
+  campaignId: integer("campaign_id").references(() => campaigns.id, { onDelete: "set null" }),
+  createdBy: varchar("created_by").notNull().references(() => users.id, { onDelete: "cascade" }),
+  thumbnail: text("thumbnail"), // Base64 or URL for preview
+  isPublic: boolean("is_public").default(false),
+  backgroundColor: varchar("background_color", { length: 20 }).default("#ffffff"),
+  gridEnabled: boolean("grid_enabled").default(true),
+  zoom: real("zoom").default(1),
+  panX: real("pan_x").default(0),
+  panY: real("pan_y").default(0),
+  lastEditedBy: varchar("last_edited_by").references(() => users.id),
+  lastEditedAt: timestamp("last_edited_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertWhiteboardSchema = createInsertSchema(whiteboards).omit({
+  id: true,
+  lastEditedBy: true,
+  lastEditedAt: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertWhiteboard = z.infer<typeof insertWhiteboardSchema>;
+export type Whiteboard = typeof whiteboards.$inferSelect;
+
+// ==================== WHITEBOARD ELEMENTS ====================
+
+export const elementTypes = ["rectangle", "ellipse", "diamond", "text", "sticky", "arrow", "line", "image", "task"] as const;
+export type ElementType = typeof elementTypes[number];
+
+export const whiteboardElements = pgTable("whiteboard_elements", {
+  id: serial("id").primaryKey(),
+  whiteboardId: integer("whiteboard_id").notNull().references(() => whiteboards.id, { onDelete: "cascade" }),
+  elementType: varchar("element_type", { length: 30 }).$type<ElementType>().notNull(),
+  x: real("x").notNull().default(0),
+  y: real("y").notNull().default(0),
+  width: real("width").notNull().default(100),
+  height: real("height").notNull().default(100),
+  rotation: real("rotation").default(0),
+  content: text("content"), // Text content for text/sticky elements
+  style: jsonb("style"), // Fill, stroke, font, etc.
+  zIndex: integer("z_index").default(0),
+  locked: boolean("locked").default(false),
+  groupId: varchar("group_id", { length: 100 }), // For grouping elements
+  linkedTaskId: integer("linked_task_id").references(() => contentTasks.id, { onDelete: "set null" }),
+  linkedPersonalTaskId: integer("linked_personal_task_id").references(() => tasks.id, { onDelete: "set null" }),
+  metadata: jsonb("metadata"), // Additional element-specific data
+  createdBy: varchar("created_by").notNull().references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertWhiteboardElementSchema = createInsertSchema(whiteboardElements).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export type InsertWhiteboardElement = z.infer<typeof insertWhiteboardElementSchema>;
+export type WhiteboardElement = typeof whiteboardElements.$inferSelect;
+
+// ==================== WHITEBOARD CONNECTORS ====================
+
+export const whiteboardConnectors = pgTable("whiteboard_connectors", {
+  id: serial("id").primaryKey(),
+  whiteboardId: integer("whiteboard_id").notNull().references(() => whiteboards.id, { onDelete: "cascade" }),
+  fromElementId: integer("from_element_id").notNull().references(() => whiteboardElements.id, { onDelete: "cascade" }),
+  toElementId: integer("to_element_id").notNull().references(() => whiteboardElements.id, { onDelete: "cascade" }),
+  fromAnchor: varchar("from_anchor", { length: 20 }).default("center"), // top, bottom, left, right, center
+  toAnchor: varchar("to_anchor", { length: 20 }).default("center"),
+  style: jsonb("style"), // Line style, arrow heads, color
+  label: text("label"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertWhiteboardConnectorSchema = createInsertSchema(whiteboardConnectors).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertWhiteboardConnector = z.infer<typeof insertWhiteboardConnectorSchema>;
+export type WhiteboardConnector = typeof whiteboardConnectors.$inferSelect;
+
+// ==================== WHITEBOARD COLLABORATORS ====================
+
+export const whiteboardCollaborators = pgTable("whiteboard_collaborators", {
+  id: serial("id").primaryKey(),
+  whiteboardId: integer("whiteboard_id").notNull().references(() => whiteboards.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  permission: varchar("permission", { length: 20 }).default("edit"), // view, comment, edit
+  cursorX: real("cursor_x"),
+  cursorY: real("cursor_y"),
+  isActive: boolean("is_active").default(false),
+  lastActiveAt: timestamp("last_active_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertWhiteboardCollaboratorSchema = createInsertSchema(whiteboardCollaborators).omit({
+  id: true,
+  cursorX: true,
+  cursorY: true,
+  isActive: true,
+  lastActiveAt: true,
+  createdAt: true,
+});
+
+export type InsertWhiteboardCollaborator = z.infer<typeof insertWhiteboardCollaboratorSchema>;
+export type WhiteboardCollaborator = typeof whiteboardCollaborators.$inferSelect;

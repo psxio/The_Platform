@@ -100,6 +100,17 @@ import {
   type BurndownSnapshot, type InsertBurndownSnapshot, burndownSnapshots,
   // Library Assets (Enhanced)
   type LibraryAsset, type InsertLibraryAsset, libraryAssets,
+  // Task Subtasks (Checklists)
+  type TaskSubtask, type InsertTaskSubtask, taskSubtasks,
+  // Task Enhancements (Priority, Time, Client linking)
+  type TaskEnhancement, type InsertTaskEnhancement, taskEnhancements,
+  // Client Documents (Docs Hub)
+  type ClientDocument, type InsertClientDocument, clientDocuments,
+  // Whiteboards
+  type Whiteboard, type InsertWhiteboard, whiteboards,
+  type WhiteboardElement, type InsertWhiteboardElement, whiteboardElements,
+  type WhiteboardConnector, type InsertWhiteboardConnector, whiteboardConnectors,
+  type WhiteboardCollaborator, type InsertWhiteboardCollaborator, whiteboardCollaborators,
 } from "@shared/schema";
 import { db } from "./db";
 import { desc, eq, and, sql, or, isNull } from "drizzle-orm";
@@ -4221,6 +4232,315 @@ export class DbStorage implements IStorage {
     });
     
     return { totalAssets: allAssets.length, byCategory, totalSize, recentlyAdded };
+  }
+
+  // ==================== TASK SUBTASKS (CHECKLISTS) ====================
+
+  async getTaskSubtasks(taskType: string, taskId: number): Promise<TaskSubtask[]> {
+    return db.select().from(taskSubtasks)
+      .where(and(eq(taskSubtasks.taskType, taskType), eq(taskSubtasks.taskId, taskId)))
+      .orderBy(taskSubtasks.sortOrder);
+  }
+
+  async createTaskSubtask(subtask: InsertTaskSubtask): Promise<TaskSubtask> {
+    const [created] = await db.insert(taskSubtasks).values(subtask).returning();
+    return created;
+  }
+
+  async updateTaskSubtask(id: number, updates: Partial<InsertTaskSubtask>): Promise<TaskSubtask | undefined> {
+    const completedAt = updates.isCompleted ? new Date() : null;
+    const [updated] = await db.update(taskSubtasks)
+      .set({ ...updates, completedAt })
+      .where(eq(taskSubtasks.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteTaskSubtask(id: number): Promise<boolean> {
+    await db.delete(taskSubtasks).where(eq(taskSubtasks.id, id));
+    return true;
+  }
+
+  async reorderTaskSubtasks(taskType: string, taskId: number, subtaskIds: number[]): Promise<void> {
+    for (let i = 0; i < subtaskIds.length; i++) {
+      await db.update(taskSubtasks)
+        .set({ sortOrder: i })
+        .where(eq(taskSubtasks.id, subtaskIds[i]));
+    }
+  }
+
+  // ==================== TASK ENHANCEMENTS (PRIORITY, TIME, CLIENT) ====================
+
+  async getTaskEnhancement(taskId: number): Promise<TaskEnhancement | undefined> {
+    const [enhancement] = await db.select().from(taskEnhancements).where(eq(taskEnhancements.taskId, taskId));
+    return enhancement;
+  }
+
+  async upsertTaskEnhancement(taskId: number, updates: Partial<InsertTaskEnhancement>): Promise<TaskEnhancement> {
+    const existing = await this.getTaskEnhancement(taskId);
+    if (existing) {
+      const [updated] = await db.update(taskEnhancements)
+        .set(updates)
+        .where(eq(taskEnhancements.taskId, taskId))
+        .returning();
+      return updated;
+    }
+    const [created] = await db.insert(taskEnhancements)
+      .values({ taskId, ...updates })
+      .returning();
+    return created;
+  }
+
+  async deleteTaskEnhancement(taskId: number): Promise<boolean> {
+    await db.delete(taskEnhancements).where(eq(taskEnhancements.taskId, taskId));
+    return true;
+  }
+
+  // ==================== CLIENT DOCUMENTS (DOCS HUB) ====================
+
+  async getClientDocuments(clientProfileId: number, includeArchived?: boolean): Promise<ClientDocument[]> {
+    const conditions = [eq(clientDocuments.clientProfileId, clientProfileId)];
+    if (!includeArchived) {
+      conditions.push(eq(clientDocuments.isArchived, false));
+    }
+    return db.select().from(clientDocuments)
+      .where(and(...conditions))
+      .orderBy(desc(clientDocuments.createdAt));
+  }
+
+  async getClientDocument(id: number): Promise<ClientDocument | undefined> {
+    const [doc] = await db.select().from(clientDocuments).where(eq(clientDocuments.id, id));
+    return doc;
+  }
+
+  async searchClientDocuments(clientProfileId: number, query: string): Promise<ClientDocument[]> {
+    const searchTerm = `%${query.toLowerCase()}%`;
+    return db.select().from(clientDocuments)
+      .where(and(
+        eq(clientDocuments.clientProfileId, clientProfileId),
+        eq(clientDocuments.isArchived, false),
+        or(
+          sql`LOWER(${clientDocuments.name}) LIKE ${searchTerm}`,
+          sql`LOWER(${clientDocuments.description}) LIKE ${searchTerm}`,
+          sql`LOWER(${clientDocuments.tags}) LIKE ${searchTerm}`
+        )
+      ))
+      .orderBy(desc(clientDocuments.createdAt));
+  }
+
+  async createClientDocument(doc: InsertClientDocument): Promise<ClientDocument> {
+    const [created] = await db.insert(clientDocuments).values(doc).returning();
+    return created;
+  }
+
+  async updateClientDocument(id: number, updates: Partial<InsertClientDocument>): Promise<ClientDocument | undefined> {
+    const [updated] = await db.update(clientDocuments)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(clientDocuments.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteClientDocument(id: number): Promise<boolean> {
+    await db.delete(clientDocuments).where(eq(clientDocuments.id, id));
+    return true;
+  }
+
+  async archiveClientDocument(id: number): Promise<ClientDocument | undefined> {
+    const [updated] = await db.update(clientDocuments)
+      .set({ isArchived: true, updatedAt: new Date() })
+      .where(eq(clientDocuments.id, id))
+      .returning();
+    return updated;
+  }
+
+  // ==================== WHITEBOARDS ====================
+
+  async getWhiteboards(filters?: { clientProfileId?: number; campaignId?: number; createdBy?: string }): Promise<Whiteboard[]> {
+    const conditions = [];
+    if (filters?.clientProfileId) conditions.push(eq(whiteboards.clientProfileId, filters.clientProfileId));
+    if (filters?.campaignId) conditions.push(eq(whiteboards.campaignId, filters.campaignId));
+    if (filters?.createdBy) conditions.push(eq(whiteboards.createdBy, filters.createdBy));
+    
+    if (conditions.length > 0) {
+      return db.select().from(whiteboards).where(and(...conditions)).orderBy(desc(whiteboards.updatedAt));
+    }
+    return db.select().from(whiteboards).orderBy(desc(whiteboards.updatedAt));
+  }
+
+  async getWhiteboard(id: number): Promise<Whiteboard | undefined> {
+    const [board] = await db.select().from(whiteboards).where(eq(whiteboards.id, id));
+    return board;
+  }
+
+  async createWhiteboard(board: InsertWhiteboard): Promise<Whiteboard> {
+    const [created] = await db.insert(whiteboards).values(board).returning();
+    return created;
+  }
+
+  async updateWhiteboard(id: number, updates: Partial<InsertWhiteboard>, userId?: string): Promise<Whiteboard | undefined> {
+    const [updated] = await db.update(whiteboards)
+      .set({ 
+        ...updates, 
+        updatedAt: new Date(),
+        lastEditedBy: userId || undefined,
+        lastEditedAt: new Date()
+      })
+      .where(eq(whiteboards.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteWhiteboard(id: number): Promise<boolean> {
+    await db.delete(whiteboards).where(eq(whiteboards.id, id));
+    return true;
+  }
+
+  // ==================== WHITEBOARD ELEMENTS ====================
+
+  async getWhiteboardElements(whiteboardId: number): Promise<WhiteboardElement[]> {
+    return db.select().from(whiteboardElements)
+      .where(eq(whiteboardElements.whiteboardId, whiteboardId))
+      .orderBy(whiteboardElements.zIndex);
+  }
+
+  async getWhiteboardElement(id: number): Promise<WhiteboardElement | undefined> {
+    const [element] = await db.select().from(whiteboardElements).where(eq(whiteboardElements.id, id));
+    return element;
+  }
+
+  async createWhiteboardElement(element: InsertWhiteboardElement): Promise<WhiteboardElement> {
+    const [created] = await db.insert(whiteboardElements).values(element).returning();
+    return created;
+  }
+
+  async updateWhiteboardElement(id: number, updates: Partial<InsertWhiteboardElement>): Promise<WhiteboardElement | undefined> {
+    const [updated] = await db.update(whiteboardElements)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(whiteboardElements.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteWhiteboardElement(id: number): Promise<boolean> {
+    await db.delete(whiteboardElements).where(eq(whiteboardElements.id, id));
+    return true;
+  }
+
+  async bulkUpdateWhiteboardElements(updates: Array<{ id: number; updates: Partial<InsertWhiteboardElement> }>): Promise<WhiteboardElement[]> {
+    const results: WhiteboardElement[] = [];
+    for (const { id, updates: u } of updates) {
+      const updated = await this.updateWhiteboardElement(id, u);
+      if (updated) results.push(updated);
+    }
+    return results;
+  }
+
+  // ==================== WHITEBOARD CONNECTORS ====================
+
+  async getWhiteboardConnectors(whiteboardId: number): Promise<WhiteboardConnector[]> {
+    return db.select().from(whiteboardConnectors).where(eq(whiteboardConnectors.whiteboardId, whiteboardId));
+  }
+
+  async createWhiteboardConnector(connector: InsertWhiteboardConnector): Promise<WhiteboardConnector> {
+    const [created] = await db.insert(whiteboardConnectors).values(connector).returning();
+    return created;
+  }
+
+  async updateWhiteboardConnector(id: number, updates: Partial<InsertWhiteboardConnector>): Promise<WhiteboardConnector | undefined> {
+    const [updated] = await db.update(whiteboardConnectors).set(updates).where(eq(whiteboardConnectors.id, id)).returning();
+    return updated;
+  }
+
+  async deleteWhiteboardConnector(id: number): Promise<boolean> {
+    await db.delete(whiteboardConnectors).where(eq(whiteboardConnectors.id, id));
+    return true;
+  }
+
+  // ==================== WHITEBOARD COLLABORATORS ====================
+
+  async getWhiteboardCollaborators(whiteboardId: number): Promise<WhiteboardCollaborator[]> {
+    return db.select().from(whiteboardCollaborators).where(eq(whiteboardCollaborators.whiteboardId, whiteboardId));
+  }
+
+  async getActiveWhiteboardCollaborators(whiteboardId: number): Promise<WhiteboardCollaborator[]> {
+    return db.select().from(whiteboardCollaborators)
+      .where(and(eq(whiteboardCollaborators.whiteboardId, whiteboardId), eq(whiteboardCollaborators.isActive, true)));
+  }
+
+  async addWhiteboardCollaborator(collab: InsertWhiteboardCollaborator): Promise<WhiteboardCollaborator> {
+    const existing = await db.select().from(whiteboardCollaborators)
+      .where(and(eq(whiteboardCollaborators.whiteboardId, collab.whiteboardId), eq(whiteboardCollaborators.userId, collab.userId)));
+    if (existing.length > 0) {
+      const [updated] = await db.update(whiteboardCollaborators)
+        .set({ permission: collab.permission })
+        .where(eq(whiteboardCollaborators.id, existing[0].id))
+        .returning();
+      return updated;
+    }
+    const [created] = await db.insert(whiteboardCollaborators).values(collab).returning();
+    return created;
+  }
+
+  async updateCollaboratorCursor(whiteboardId: number, userId: string, cursorX: number, cursorY: number): Promise<void> {
+    await db.update(whiteboardCollaborators)
+      .set({ cursorX, cursorY, isActive: true, lastActiveAt: new Date() })
+      .where(and(eq(whiteboardCollaborators.whiteboardId, whiteboardId), eq(whiteboardCollaborators.userId, userId)));
+  }
+
+  async setCollaboratorActive(whiteboardId: number, userId: string, isActive: boolean): Promise<void> {
+    await db.update(whiteboardCollaborators)
+      .set({ isActive, lastActiveAt: new Date() })
+      .where(and(eq(whiteboardCollaborators.whiteboardId, whiteboardId), eq(whiteboardCollaborators.userId, userId)));
+  }
+
+  async removeWhiteboardCollaborator(whiteboardId: number, userId: string): Promise<boolean> {
+    await db.delete(whiteboardCollaborators)
+      .where(and(eq(whiteboardCollaborators.whiteboardId, whiteboardId), eq(whiteboardCollaborators.userId, userId)));
+    return true;
+  }
+
+  // ==================== ENHANCED TASK WATCHERS (Both Types) ====================
+
+  async getTaskWatchersByType(taskType: string, taskId: number): Promise<TaskWatcher[]> {
+    return db.select().from(taskWatchers)
+      .where(and(eq(taskWatchers.taskType, taskType), eq(taskWatchers.taskId, taskId)));
+  }
+
+  async getUserWatchedTasks(userId: string, taskType?: string): Promise<TaskWatcher[]> {
+    if (taskType) {
+      return db.select().from(taskWatchers)
+        .where(and(eq(taskWatchers.userId, userId), eq(taskWatchers.taskType, taskType)));
+    }
+    return db.select().from(taskWatchers).where(eq(taskWatchers.userId, userId));
+  }
+
+  async watchTaskByType(taskType: string, taskId: number, userId: string, options?: { notifyOnStatusChange?: boolean; notifyOnComment?: boolean; notifyOnAssignment?: boolean }): Promise<TaskWatcher> {
+    const existing = await db.select().from(taskWatchers)
+      .where(and(eq(taskWatchers.taskType, taskType), eq(taskWatchers.taskId, taskId), eq(taskWatchers.userId, userId)));
+    if (existing.length > 0) {
+      return existing[0];
+    }
+    const [created] = await db.insert(taskWatchers).values({
+      taskType,
+      taskId,
+      userId,
+      notifyOnStatusChange: options?.notifyOnStatusChange ?? true,
+      notifyOnComment: options?.notifyOnComment ?? true,
+      notifyOnAssignment: options?.notifyOnAssignment ?? true,
+    }).returning();
+    return created;
+  }
+
+  async unwatchTaskByType(taskType: string, taskId: number, userId: string): Promise<boolean> {
+    await db.delete(taskWatchers)
+      .where(and(eq(taskWatchers.taskType, taskType), eq(taskWatchers.taskId, taskId), eq(taskWatchers.userId, userId)));
+    return true;
+  }
+
+  async updateWatcherPreferences(watcherId: number, prefs: { notifyOnStatusChange?: boolean; notifyOnComment?: boolean; notifyOnAssignment?: boolean }): Promise<TaskWatcher | undefined> {
+    const [updated] = await db.update(taskWatchers).set(prefs).where(eq(taskWatchers.id, watcherId)).returning();
+    return updated;
   }
 }
 

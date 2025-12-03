@@ -9016,6 +9016,410 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ==================== TASK SUBTASKS (CHECKLISTS) ====================
+
+  app.get("/api/task-subtasks/:taskType/:taskId", isAuthenticated, async (req: any, res) => {
+    try {
+      const { taskType, taskId } = req.params;
+      const subtasks = await storage.getTaskSubtasks(taskType, parseInt(taskId));
+      res.json(subtasks);
+    } catch (error) {
+      console.error("Error fetching task subtasks:", error);
+      res.status(500).json({ error: "Failed to fetch subtasks" });
+    }
+  });
+
+  app.post("/api/task-subtasks", isAuthenticated, async (req: any, res) => {
+    try {
+      const { taskType, taskId, title, assignedTo, dueDate } = req.body;
+      if (!taskType || !taskId || !title) {
+        return res.status(400).json({ error: "Missing required fields" });
+      }
+      const subtask = await storage.createTaskSubtask({ taskType, taskId, title, assignedTo, dueDate });
+      res.status(201).json(subtask);
+    } catch (error) {
+      console.error("Error creating subtask:", error);
+      res.status(500).json({ error: "Failed to create subtask" });
+    }
+  });
+
+  app.patch("/api/task-subtasks/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const updated = await storage.updateTaskSubtask(id, req.body);
+      if (!updated) {
+        return res.status(404).json({ error: "Subtask not found" });
+      }
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating subtask:", error);
+      res.status(500).json({ error: "Failed to update subtask" });
+    }
+  });
+
+  app.delete("/api/task-subtasks/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      await storage.deleteTaskSubtask(id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting subtask:", error);
+      res.status(500).json({ error: "Failed to delete subtask" });
+    }
+  });
+
+  app.post("/api/task-subtasks/reorder", isAuthenticated, async (req: any, res) => {
+    try {
+      const { taskType, taskId, subtaskIds } = req.body;
+      await storage.reorderTaskSubtasks(taskType, taskId, subtaskIds);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error reordering subtasks:", error);
+      res.status(500).json({ error: "Failed to reorder subtasks" });
+    }
+  });
+
+  // ==================== CLIENT DOCUMENTS (DOCS HUB) ====================
+
+  app.get("/api/client-documents/:clientProfileId", isAuthenticated, async (req: any, res) => {
+    try {
+      const clientProfileId = parseInt(req.params.clientProfileId);
+      const includeArchived = req.query.includeArchived === "true";
+      const docs = await storage.getClientDocuments(clientProfileId, includeArchived);
+      res.json(docs);
+    } catch (error) {
+      console.error("Error fetching client documents:", error);
+      res.status(500).json({ error: "Failed to fetch documents" });
+    }
+  });
+
+  app.get("/api/client-documents/:clientProfileId/search", isAuthenticated, async (req: any, res) => {
+    try {
+      const clientProfileId = parseInt(req.params.clientProfileId);
+      const query = req.query.q as string || "";
+      const docs = await storage.searchClientDocuments(clientProfileId, query);
+      res.json(docs);
+    } catch (error) {
+      console.error("Error searching client documents:", error);
+      res.status(500).json({ error: "Failed to search documents" });
+    }
+  });
+
+  app.post("/api/client-documents", requireRole("content", "admin"), async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const doc = await storage.createClientDocument({ ...req.body, uploadedBy: user.id });
+      res.status(201).json(doc);
+    } catch (error) {
+      console.error("Error creating client document:", error);
+      res.status(500).json({ error: "Failed to create document" });
+    }
+  });
+
+  app.patch("/api/client-documents/:id", requireRole("content", "admin"), async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const updated = await storage.updateClientDocument(id, req.body);
+      if (!updated) {
+        return res.status(404).json({ error: "Document not found" });
+      }
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating client document:", error);
+      res.status(500).json({ error: "Failed to update document" });
+    }
+  });
+
+  app.post("/api/client-documents/:id/archive", requireRole("content", "admin"), async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const archived = await storage.archiveClientDocument(id);
+      if (!archived) {
+        return res.status(404).json({ error: "Document not found" });
+      }
+      res.json(archived);
+    } catch (error) {
+      console.error("Error archiving client document:", error);
+      res.status(500).json({ error: "Failed to archive document" });
+    }
+  });
+
+  app.delete("/api/client-documents/:id", requireRole("content", "admin"), async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      await storage.deleteClientDocument(id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting client document:", error);
+      res.status(500).json({ error: "Failed to delete document" });
+    }
+  });
+
+  // ==================== WHITEBOARDS ====================
+
+  app.get("/api/whiteboards", isAuthenticated, async (req: any, res) => {
+    try {
+      const { clientProfileId, campaignId } = req.query;
+      const filters: any = {};
+      if (clientProfileId) filters.clientProfileId = parseInt(clientProfileId as string);
+      if (campaignId) filters.campaignId = parseInt(campaignId as string);
+      const boards = await storage.getWhiteboards(Object.keys(filters).length > 0 ? filters : undefined);
+      res.json(boards);
+    } catch (error) {
+      console.error("Error fetching whiteboards:", error);
+      res.status(500).json({ error: "Failed to fetch whiteboards" });
+    }
+  });
+
+  app.get("/api/whiteboards/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const board = await storage.getWhiteboard(id);
+      if (!board) {
+        return res.status(404).json({ error: "Whiteboard not found" });
+      }
+      res.json(board);
+    } catch (error) {
+      console.error("Error fetching whiteboard:", error);
+      res.status(500).json({ error: "Failed to fetch whiteboard" });
+    }
+  });
+
+  app.post("/api/whiteboards", requireRole("content", "admin"), async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const board = await storage.createWhiteboard({ ...req.body, createdBy: user.id });
+      res.status(201).json(board);
+    } catch (error) {
+      console.error("Error creating whiteboard:", error);
+      res.status(500).json({ error: "Failed to create whiteboard" });
+    }
+  });
+
+  app.patch("/api/whiteboards/:id", requireRole("content", "admin"), async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const id = parseInt(req.params.id);
+      const updated = await storage.updateWhiteboard(id, req.body, user.id);
+      if (!updated) {
+        return res.status(404).json({ error: "Whiteboard not found" });
+      }
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating whiteboard:", error);
+      res.status(500).json({ error: "Failed to update whiteboard" });
+    }
+  });
+
+  app.delete("/api/whiteboards/:id", requireRole("content", "admin"), async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      await storage.deleteWhiteboard(id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting whiteboard:", error);
+      res.status(500).json({ error: "Failed to delete whiteboard" });
+    }
+  });
+
+  // ==================== WHITEBOARD ELEMENTS ====================
+
+  app.get("/api/whiteboards/:whiteboardId/elements", isAuthenticated, async (req: any, res) => {
+    try {
+      const whiteboardId = parseInt(req.params.whiteboardId);
+      const elements = await storage.getWhiteboardElements(whiteboardId);
+      res.json(elements);
+    } catch (error) {
+      console.error("Error fetching whiteboard elements:", error);
+      res.status(500).json({ error: "Failed to fetch elements" });
+    }
+  });
+
+  app.post("/api/whiteboards/:whiteboardId/elements", requireRole("content", "admin"), async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const whiteboardId = parseInt(req.params.whiteboardId);
+      const element = await storage.createWhiteboardElement({ ...req.body, whiteboardId, createdBy: user.id });
+      res.status(201).json(element);
+    } catch (error) {
+      console.error("Error creating whiteboard element:", error);
+      res.status(500).json({ error: "Failed to create element" });
+    }
+  });
+
+  app.patch("/api/whiteboard-elements/:id", requireRole("content", "admin"), async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const updated = await storage.updateWhiteboardElement(id, req.body);
+      if (!updated) {
+        return res.status(404).json({ error: "Element not found" });
+      }
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating whiteboard element:", error);
+      res.status(500).json({ error: "Failed to update element" });
+    }
+  });
+
+  app.patch("/api/whiteboards/:whiteboardId/elements/bulk", requireRole("content", "admin"), async (req: any, res) => {
+    try {
+      const { updates } = req.body;
+      const results = await storage.bulkUpdateWhiteboardElements(updates);
+      res.json(results);
+    } catch (error) {
+      console.error("Error bulk updating whiteboard elements:", error);
+      res.status(500).json({ error: "Failed to bulk update elements" });
+    }
+  });
+
+  app.delete("/api/whiteboard-elements/:id", requireRole("content", "admin"), async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      await storage.deleteWhiteboardElement(id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting whiteboard element:", error);
+      res.status(500).json({ error: "Failed to delete element" });
+    }
+  });
+
+  // ==================== WHITEBOARD CONNECTORS ====================
+
+  app.get("/api/whiteboards/:whiteboardId/connectors", isAuthenticated, async (req: any, res) => {
+    try {
+      const whiteboardId = parseInt(req.params.whiteboardId);
+      const connectors = await storage.getWhiteboardConnectors(whiteboardId);
+      res.json(connectors);
+    } catch (error) {
+      console.error("Error fetching whiteboard connectors:", error);
+      res.status(500).json({ error: "Failed to fetch connectors" });
+    }
+  });
+
+  app.post("/api/whiteboards/:whiteboardId/connectors", requireRole("content", "admin"), async (req: any, res) => {
+    try {
+      const whiteboardId = parseInt(req.params.whiteboardId);
+      const connector = await storage.createWhiteboardConnector({ ...req.body, whiteboardId });
+      res.status(201).json(connector);
+    } catch (error) {
+      console.error("Error creating whiteboard connector:", error);
+      res.status(500).json({ error: "Failed to create connector" });
+    }
+  });
+
+  app.delete("/api/whiteboard-connectors/:id", requireRole("content", "admin"), async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      await storage.deleteWhiteboardConnector(id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting whiteboard connector:", error);
+      res.status(500).json({ error: "Failed to delete connector" });
+    }
+  });
+
+  // ==================== WHITEBOARD COLLABORATORS ====================
+
+  app.get("/api/whiteboards/:whiteboardId/collaborators", isAuthenticated, async (req: any, res) => {
+    try {
+      const whiteboardId = parseInt(req.params.whiteboardId);
+      const active = req.query.active === "true";
+      const collabs = active 
+        ? await storage.getActiveWhiteboardCollaborators(whiteboardId)
+        : await storage.getWhiteboardCollaborators(whiteboardId);
+      res.json(collabs);
+    } catch (error) {
+      console.error("Error fetching whiteboard collaborators:", error);
+      res.status(500).json({ error: "Failed to fetch collaborators" });
+    }
+  });
+
+  app.post("/api/whiteboards/:whiteboardId/collaborators", requireRole("content", "admin"), async (req: any, res) => {
+    try {
+      const whiteboardId = parseInt(req.params.whiteboardId);
+      const collab = await storage.addWhiteboardCollaborator({ ...req.body, whiteboardId });
+      res.status(201).json(collab);
+    } catch (error) {
+      console.error("Error adding whiteboard collaborator:", error);
+      res.status(500).json({ error: "Failed to add collaborator" });
+    }
+  });
+
+  app.post("/api/whiteboards/:whiteboardId/cursor", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const whiteboardId = parseInt(req.params.whiteboardId);
+      const { cursorX, cursorY } = req.body;
+      await storage.updateCollaboratorCursor(whiteboardId, user.id, cursorX, cursorY);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error updating cursor:", error);
+      res.status(500).json({ error: "Failed to update cursor" });
+    }
+  });
+
+  app.post("/api/whiteboards/:whiteboardId/presence", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const whiteboardId = parseInt(req.params.whiteboardId);
+      const { isActive } = req.body;
+      await storage.setCollaboratorActive(whiteboardId, user.id, isActive);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error updating presence:", error);
+      res.status(500).json({ error: "Failed to update presence" });
+    }
+  });
+
+  // ==================== ENHANCED TASK WATCHERS ====================
+
+  app.get("/api/task-watchers/:taskType/:taskId", isAuthenticated, async (req: any, res) => {
+    try {
+      const { taskType, taskId } = req.params;
+      const watchers = await storage.getTaskWatchersByType(taskType, parseInt(taskId));
+      res.json(watchers);
+    } catch (error) {
+      console.error("Error fetching task watchers:", error);
+      res.status(500).json({ error: "Failed to fetch watchers" });
+    }
+  });
+
+  app.get("/api/my-watched-tasks", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const taskType = req.query.taskType as string | undefined;
+      const watched = await storage.getUserWatchedTasks(user.id, taskType);
+      res.json(watched);
+    } catch (error) {
+      console.error("Error fetching watched tasks:", error);
+      res.status(500).json({ error: "Failed to fetch watched tasks" });
+    }
+  });
+
+  app.post("/api/task-watchers/:taskType/:taskId/watch", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const { taskType, taskId } = req.params;
+      const watcher = await storage.watchTaskByType(taskType, parseInt(taskId), user.id, req.body);
+      res.status(201).json(watcher);
+    } catch (error) {
+      console.error("Error watching task:", error);
+      res.status(500).json({ error: "Failed to watch task" });
+    }
+  });
+
+  app.delete("/api/task-watchers/:taskType/:taskId/watch", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const { taskType, taskId } = req.params;
+      await storage.unwatchTaskByType(taskType, parseInt(taskId), user.id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error unwatching task:", error);
+      res.status(500).json({ error: "Failed to unwatch task" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

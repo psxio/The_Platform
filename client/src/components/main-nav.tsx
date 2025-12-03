@@ -52,6 +52,7 @@ import {
   LogOut,
   ChevronDown,
   LayoutDashboard,
+  LayoutGrid,
   Shield,
   HelpCircle,
   FolderOpen,
@@ -100,6 +101,7 @@ const daoItems: NavItem[] = [
 ];
 
 const adminItems: NavItem[] = [
+  { title: "Control Center", href: "/admin/control-center", icon: LayoutGrid, description: "Unified admin dashboard" },
   { title: "Internal Team", href: "/admin/internal-team", icon: Users, description: "Team roster and payroll" },
   { title: "Team Structure", href: "/admin/team-structure", icon: Network, description: "Org chart and hierarchy" },
   { title: "Manage Users", href: "/admin/content-users", icon: Shield, description: "View and manage all users" },

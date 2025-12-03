@@ -40,6 +40,7 @@ import TeamStructure from "@/pages/team-structure";
 import DaoDashboard from "@/pages/dao-dashboard";
 import DaoCatalog from "@/pages/dao-catalog";
 import DaoProjectNew from "@/pages/dao-project-new";
+import AdminControlCenter from "@/pages/admin-control-center";
 import NotFound from "@/pages/not-found";
 import { Web3WelcomeModal } from "@/components/web3-welcome-modal";
 import { WelcomeModal } from "@/components/welcome-modal";
@@ -204,6 +205,9 @@ function AuthenticatedRouter() {
       </Route>
 
       {/* Admin Routes */}
+      <Route path="/admin/control-center">
+        <AdminRouteGuard><AdminControlCenter /></AdminRouteGuard>
+      </Route>
       <Route path="/admin/codes">
         <AdminRouteGuard><AdminCodes /></AdminRouteGuard>
       </Route>
@@ -241,7 +245,7 @@ function AuthenticatedRouter() {
         <AdminRouteGuard><TeamStructure /></AdminRouteGuard>
       </Route>
       <Route path="/admin">
-        <AdminRouteGuard><Redirect to="/admin/content-users" /></AdminRouteGuard>
+        <AdminRouteGuard><Redirect to="/admin/control-center" /></AdminRouteGuard>
       </Route>
 
       {/* Root redirect based on role */}

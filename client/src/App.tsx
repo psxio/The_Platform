@@ -41,6 +41,7 @@ import DaoDashboard from "@/pages/dao-dashboard";
 import DaoCatalog from "@/pages/dao-catalog";
 import DaoProjectNew from "@/pages/dao-project-new";
 import AdminControlCenter from "@/pages/admin-control-center";
+import Workspace from "@/pages/workspace";
 import NotFound from "@/pages/not-found";
 import { Web3WelcomeModal } from "@/components/web3-welcome-modal";
 import { WelcomeModal } from "@/components/welcome-modal";
@@ -114,6 +115,9 @@ function AuthenticatedRouter() {
   return (
     <Switch>
       <Route path="/role-select" component={RoleSelect} />
+      
+      {/* Personal Workspace */}
+      <Route path="/workspace" component={Workspace} />
 
       {/* Web3 Routes */}
       <Route path="/web3/compare">

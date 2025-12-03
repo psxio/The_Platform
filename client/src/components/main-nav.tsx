@@ -25,6 +25,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { NotificationBell } from "@/components/notification-bell";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { SavedItemsPanel } from "@/components/saved-items";
+import { SpaceSwitcher, SpaceTabs } from "@/components/space-switcher";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import {
   Menu,
@@ -576,6 +577,12 @@ export function MainNav() {
           <Wallet className="h-5 w-5" />
           <span className="hidden sm:inline-block">Platform</span>
         </Link>
+
+        <div className="md:hidden">
+          <SpaceSwitcher />
+        </div>
+
+        <SpaceTabs />
 
         <DesktopNav
           showWeb3={showWeb3}

@@ -3339,9 +3339,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ================== USER LIST ENDPOINT ==================
 
-  // Get all users (for watchers/approvals selection)
-  app.get("/api/users", requireRole("content"), async (req, res) => {
+  // Get all users (for watchers/approvals selection and DAO membership)
+  app.get("/api/users", isAuthenticated, async (req: any, res) => {
     try {
+      // Allow content users and admins to access user list
+      if (req.user.role !== "content" && req.user.role !== "admin") {
+        return res.status(403).json({ error: "Access denied" });
+      }
       const users = await storage.getAllUsers();
       // Return safe user data (no passwords)
       const safeUsers = users.map(u => ({
@@ -3349,6 +3353,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         firstName: u.firstName,
         lastName: u.lastName,
         email: u.email,
+        displayName: u.firstName && u.lastName ? `${u.firstName} ${u.lastName}` : u.email,
         profileImageUrl: u.profileImageUrl,
         role: u.role,
       }));

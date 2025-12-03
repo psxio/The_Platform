@@ -32,6 +32,7 @@ import {
 import { Link } from "wouter";
 import { DaoSafeWallets } from "@/components/dao-safe-wallets";
 import { DaoFairnessDashboard } from "@/components/dao-fairness-dashboard";
+import { AddDaoMemberDialog } from "@/components/add-dao-member-dialog";
 
 type DaoRole = {
   id: number;
@@ -115,6 +116,7 @@ function getStatusBadge(status: string) {
 export default function DaoDashboard() {
   const { user } = useAuth();
   const [activeTab, setActiveTab] = useState("overview");
+  const [isAddMemberOpen, setIsAddMemberOpen] = useState(false);
   const isAdmin = user?.role === "admin";
 
   const { data: treasury } = useQuery<DaoTreasury>({
@@ -519,9 +521,17 @@ export default function DaoDashboard() {
 
           <TabsContent value="members" className="mt-6">
             <Card>
-              <CardHeader>
-                <CardTitle>DAO Members</CardTitle>
-                <CardDescription>Member roster with ranks and revenue attribution</CardDescription>
+              <CardHeader className="flex flex-row items-center justify-between gap-2">
+                <div>
+                  <CardTitle>DAO Members</CardTitle>
+                  <CardDescription>Member roster with ranks and revenue attribution</CardDescription>
+                </div>
+                {isAdmin && (
+                  <Button size="sm" onClick={() => setIsAddMemberOpen(true)} data-testid="button-add-dao-member">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Add Member
+                  </Button>
+                )}
               </CardHeader>
               <CardContent>
                 {memberships && memberships.length > 0 ? (
@@ -560,7 +570,13 @@ export default function DaoDashboard() {
                   <div className="text-center py-12 text-muted-foreground">
                     <Users className="h-12 w-12 mx-auto mb-4" />
                     <p className="text-lg font-medium">No members yet</p>
-                    <p className="text-sm">Members will be added when they join the DAO</p>
+                    <p className="text-sm mb-4">Add members to start tracking DAO participation</p>
+                    {isAdmin && (
+                      <Button onClick={() => setIsAddMemberOpen(true)} data-testid="button-add-first-member">
+                        <Plus className="h-4 w-4 mr-2" />
+                        Add First Member
+                      </Button>
+                    )}
                   </div>
                 )}
               </CardContent>
@@ -619,6 +635,11 @@ export default function DaoDashboard() {
           </TabsContent>
         </Tabs>
       </div>
+
+      <AddDaoMemberDialog
+        open={isAddMemberOpen}
+        onOpenChange={setIsAddMemberOpen}
+      />
     </div>
   );
 }

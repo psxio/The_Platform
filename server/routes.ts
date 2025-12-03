@@ -9420,6 +9420,698 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ==================== DAO MANAGEMENT SYSTEM ROUTES ====================
+
+  // DAO Roles
+  app.get("/api/dao/roles", isAuthenticated, async (req: any, res) => {
+    try {
+      const roles = await storage.getDaoRoles();
+      res.json(roles);
+    } catch (error) {
+      console.error("Error fetching DAO roles:", error);
+      res.status(500).json({ error: "Failed to fetch roles" });
+    }
+  });
+
+  app.post("/api/dao/roles", requireRole("admin"), async (req: any, res) => {
+    try {
+      const role = await storage.createDaoRole(req.body);
+      res.status(201).json(role);
+    } catch (error) {
+      console.error("Error creating DAO role:", error);
+      res.status(500).json({ error: "Failed to create role" });
+    }
+  });
+
+  app.patch("/api/dao/roles/:id", requireRole("admin"), async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const role = await storage.updateDaoRole(id, req.body);
+      res.json(role);
+    } catch (error) {
+      console.error("Error updating DAO role:", error);
+      res.status(500).json({ error: "Failed to update role" });
+    }
+  });
+
+  // DAO Memberships
+  app.get("/api/dao/memberships", isAuthenticated, async (req: any, res) => {
+    try {
+      const memberships = await storage.getDaoMemberships();
+      res.json(memberships);
+    } catch (error) {
+      console.error("Error fetching DAO memberships:", error);
+      res.status(500).json({ error: "Failed to fetch memberships" });
+    }
+  });
+
+  app.get("/api/dao/memberships/council", isAuthenticated, async (req: any, res) => {
+    try {
+      const council = await storage.getCouncilMembers();
+      res.json(council);
+    } catch (error) {
+      console.error("Error fetching council members:", error);
+      res.status(500).json({ error: "Failed to fetch council members" });
+    }
+  });
+
+  app.get("/api/dao/memberships/me", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const membership = await storage.getDaoMembershipByUserId(user.id);
+      res.json(membership || null);
+    } catch (error) {
+      console.error("Error fetching my DAO membership:", error);
+      res.status(500).json({ error: "Failed to fetch membership" });
+    }
+  });
+
+  app.get("/api/dao/memberships/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const membership = await storage.getDaoMembership(id);
+      res.json(membership);
+    } catch (error) {
+      console.error("Error fetching DAO membership:", error);
+      res.status(500).json({ error: "Failed to fetch membership" });
+    }
+  });
+
+  app.post("/api/dao/memberships", requireRole("admin"), async (req: any, res) => {
+    try {
+      const membership = await storage.createDaoMembership(req.body);
+      res.status(201).json(membership);
+    } catch (error) {
+      console.error("Error creating DAO membership:", error);
+      res.status(500).json({ error: "Failed to create membership" });
+    }
+  });
+
+  app.patch("/api/dao/memberships/:id", requireRole("admin"), async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const membership = await storage.updateDaoMembership(id, req.body);
+      res.json(membership);
+    } catch (error) {
+      console.error("Error updating DAO membership:", error);
+      res.status(500).json({ error: "Failed to update membership" });
+    }
+  });
+
+  // DAO Service Catalog
+  app.get("/api/dao/services", isAuthenticated, async (req: any, res) => {
+    try {
+      const activeOnly = req.query.activeOnly !== "false";
+      const services = await storage.getDaoServiceCatalog(activeOnly);
+      res.json(services);
+    } catch (error) {
+      console.error("Error fetching DAO services:", error);
+      res.status(500).json({ error: "Failed to fetch services" });
+    }
+  });
+
+  app.get("/api/dao/services/category/:category", isAuthenticated, async (req: any, res) => {
+    try {
+      const services = await storage.getDaoServicesByCategory(req.params.category);
+      res.json(services);
+    } catch (error) {
+      console.error("Error fetching services by category:", error);
+      res.status(500).json({ error: "Failed to fetch services" });
+    }
+  });
+
+  app.get("/api/dao/services/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const service = await storage.getDaoService(id);
+      res.json(service);
+    } catch (error) {
+      console.error("Error fetching DAO service:", error);
+      res.status(500).json({ error: "Failed to fetch service" });
+    }
+  });
+
+  app.post("/api/dao/services", requireRole("admin"), async (req: any, res) => {
+    try {
+      const service = await storage.createDaoService(req.body);
+      res.status(201).json(service);
+    } catch (error) {
+      console.error("Error creating DAO service:", error);
+      res.status(500).json({ error: "Failed to create service" });
+    }
+  });
+
+  app.patch("/api/dao/services/:id", requireRole("admin"), async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const service = await storage.updateDaoService(id, req.body);
+      res.json(service);
+    } catch (error) {
+      console.error("Error updating DAO service:", error);
+      res.status(500).json({ error: "Failed to update service" });
+    }
+  });
+
+  app.delete("/api/dao/services/:id", requireRole("admin"), async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      await storage.deleteDaoService(id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting DAO service:", error);
+      res.status(500).json({ error: "Failed to delete service" });
+    }
+  });
+
+  // DAO Discounts
+  app.get("/api/dao/discounts", isAuthenticated, async (req: any, res) => {
+    try {
+      const activeOnly = req.query.activeOnly !== "false";
+      const discounts = await storage.getDaoDiscounts(activeOnly);
+      res.json(discounts);
+    } catch (error) {
+      console.error("Error fetching DAO discounts:", error);
+      res.status(500).json({ error: "Failed to fetch discounts" });
+    }
+  });
+
+  app.post("/api/dao/discounts", requireRole("admin"), async (req: any, res) => {
+    try {
+      const discount = await storage.createDaoDiscount(req.body);
+      res.status(201).json(discount);
+    } catch (error) {
+      console.error("Error creating DAO discount:", error);
+      res.status(500).json({ error: "Failed to create discount" });
+    }
+  });
+
+  app.patch("/api/dao/discounts/:id", requireRole("admin"), async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const discount = await storage.updateDaoDiscount(id, req.body);
+      res.json(discount);
+    } catch (error) {
+      console.error("Error updating DAO discount:", error);
+      res.status(500).json({ error: "Failed to update discount" });
+    }
+  });
+
+  app.delete("/api/dao/discounts/:id", requireRole("admin"), async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      await storage.deleteDaoDiscount(id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting DAO discount:", error);
+      res.status(500).json({ error: "Failed to delete discount" });
+    }
+  });
+
+  // DAO Projects
+  app.get("/api/dao/projects", isAuthenticated, async (req: any, res) => {
+    try {
+      const filters: { status?: string; clientProfileId?: number } = {};
+      if (req.query.status) filters.status = req.query.status as string;
+      if (req.query.clientProfileId) filters.clientProfileId = parseInt(req.query.clientProfileId);
+      const projects = await storage.getDaoProjects(filters);
+      res.json(projects);
+    } catch (error) {
+      console.error("Error fetching DAO projects:", error);
+      res.status(500).json({ error: "Failed to fetch projects" });
+    }
+  });
+
+  app.get("/api/dao/projects/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const project = await storage.getDaoProject(id);
+      res.json(project);
+    } catch (error) {
+      console.error("Error fetching DAO project:", error);
+      res.status(500).json({ error: "Failed to fetch project" });
+    }
+  });
+
+  app.post("/api/dao/projects", requireRole("content", "admin"), async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const project = await storage.createDaoProject({ ...req.body, createdBy: user.id });
+      res.status(201).json(project);
+    } catch (error) {
+      console.error("Error creating DAO project:", error);
+      res.status(500).json({ error: "Failed to create project" });
+    }
+  });
+
+  app.patch("/api/dao/projects/:id", requireRole("content", "admin"), async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const project = await storage.updateDaoProject(id, req.body);
+      res.json(project);
+    } catch (error) {
+      console.error("Error updating DAO project:", error);
+      res.status(500).json({ error: "Failed to update project" });
+    }
+  });
+
+  app.delete("/api/dao/projects/:id", requireRole("admin"), async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      await storage.deleteDaoProject(id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting DAO project:", error);
+      res.status(500).json({ error: "Failed to delete project" });
+    }
+  });
+
+  // DAO Project Services
+  app.get("/api/dao/projects/:projectId/services", isAuthenticated, async (req: any, res) => {
+    try {
+      const projectId = parseInt(req.params.projectId);
+      const services = await storage.getDaoProjectServices(projectId);
+      res.json(services);
+    } catch (error) {
+      console.error("Error fetching project services:", error);
+      res.status(500).json({ error: "Failed to fetch project services" });
+    }
+  });
+
+  app.post("/api/dao/projects/:projectId/services", requireRole("content", "admin"), async (req: any, res) => {
+    try {
+      const projectId = parseInt(req.params.projectId);
+      const service = await storage.createDaoProjectService({ ...req.body, projectId });
+      res.status(201).json(service);
+    } catch (error) {
+      console.error("Error adding project service:", error);
+      res.status(500).json({ error: "Failed to add project service" });
+    }
+  });
+
+  app.delete("/api/dao/project-services/:id", requireRole("content", "admin"), async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      await storage.deleteDaoProjectService(id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error removing project service:", error);
+      res.status(500).json({ error: "Failed to remove project service" });
+    }
+  });
+
+  // DAO Revenue Attributions
+  app.get("/api/dao/projects/:projectId/attributions", isAuthenticated, async (req: any, res) => {
+    try {
+      const projectId = parseInt(req.params.projectId);
+      const attributions = await storage.getDaoRevenueAttributions(projectId);
+      res.json(attributions);
+    } catch (error) {
+      console.error("Error fetching revenue attributions:", error);
+      res.status(500).json({ error: "Failed to fetch attributions" });
+    }
+  });
+
+  app.get("/api/dao/memberships/:membershipId/attributions", isAuthenticated, async (req: any, res) => {
+    try {
+      const membershipId = parseInt(req.params.membershipId);
+      const attributions = await storage.getDaoRevenueAttributionsByMember(membershipId);
+      res.json(attributions);
+    } catch (error) {
+      console.error("Error fetching member attributions:", error);
+      res.status(500).json({ error: "Failed to fetch attributions" });
+    }
+  });
+
+  app.post("/api/dao/projects/:projectId/attributions", requireRole("content", "admin"), async (req: any, res) => {
+    try {
+      const projectId = parseInt(req.params.projectId);
+      const attribution = await storage.createDaoRevenueAttribution({ ...req.body, projectId });
+      res.status(201).json(attribution);
+    } catch (error) {
+      console.error("Error creating attribution:", error);
+      res.status(500).json({ error: "Failed to create attribution" });
+    }
+  });
+
+  app.post("/api/dao/attributions", requireRole("content", "admin"), async (req: any, res) => {
+    try {
+      const { projectId, ...data } = req.body;
+      if (!projectId) {
+        return res.status(400).json({ error: "projectId is required" });
+      }
+      const attribution = await storage.createDaoRevenueAttribution({ ...data, projectId });
+      res.status(201).json(attribution);
+    } catch (error) {
+      console.error("Error creating attribution:", error);
+      res.status(500).json({ error: "Failed to create attribution" });
+    }
+  });
+
+  app.post("/api/dao/projects/:projectId/attributions/apply-template", requireRole("content", "admin"), async (req: any, res) => {
+    try {
+      const projectId = parseInt(req.params.projectId);
+      const { leadId, pmId, coreContributors, supportContributors } = req.body;
+      const attributions = await storage.applyDefaultAttributionTemplate(
+        projectId, leadId, pmId, coreContributors || [], supportContributors || []
+      );
+      res.status(201).json(attributions);
+    } catch (error) {
+      console.error("Error applying attribution template:", error);
+      res.status(500).json({ error: "Failed to apply template" });
+    }
+  });
+
+  app.post("/api/dao/attributions/:id/approve", requireRole("admin"), async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const id = parseInt(req.params.id);
+      const attribution = await storage.approveDaoRevenueAttribution(id, user.id);
+      res.json(attribution);
+    } catch (error) {
+      console.error("Error approving attribution:", error);
+      res.status(500).json({ error: "Failed to approve attribution" });
+    }
+  });
+
+  // DAO Debriefs
+  app.get("/api/dao/debriefs", isAuthenticated, async (req: any, res) => {
+    try {
+      const projectId = req.query.projectId ? parseInt(req.query.projectId) : undefined;
+      const debriefs = await storage.getDaoDebriefs(projectId);
+      res.json(debriefs);
+    } catch (error) {
+      console.error("Error fetching debriefs:", error);
+      res.status(500).json({ error: "Failed to fetch debriefs" });
+    }
+  });
+
+  app.get("/api/dao/projects/:projectId/debriefs", isAuthenticated, async (req: any, res) => {
+    try {
+      const projectId = parseInt(req.params.projectId);
+      const debriefs = await storage.getDaoDebriefs(projectId);
+      res.json(debriefs);
+    } catch (error) {
+      console.error("Error fetching project debriefs:", error);
+      res.status(500).json({ error: "Failed to fetch debriefs" });
+    }
+  });
+
+  app.get("/api/dao/debriefs/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const debrief = await storage.getDaoDebrief(id);
+      res.json(debrief);
+    } catch (error) {
+      console.error("Error fetching debrief:", error);
+      res.status(500).json({ error: "Failed to fetch debrief" });
+    }
+  });
+
+  app.post("/api/dao/debriefs", requireRole("content", "admin"), async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const debrief = await storage.createDaoDebrief({ ...req.body, submittedBy: user.id });
+      res.status(201).json(debrief);
+    } catch (error) {
+      console.error("Error creating debrief:", error);
+      res.status(500).json({ error: "Failed to create debrief" });
+    }
+  });
+
+  app.patch("/api/dao/debriefs/:id", requireRole("content", "admin"), async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const debrief = await storage.updateDaoDebrief(id, req.body);
+      res.json(debrief);
+    } catch (error) {
+      console.error("Error updating debrief:", error);
+      res.status(500).json({ error: "Failed to update debrief" });
+    }
+  });
+
+  // DAO Treasury
+  app.get("/api/dao/treasury", isAuthenticated, async (req: any, res) => {
+    try {
+      let treasury = await storage.getDaoTreasury();
+      if (!treasury) {
+        treasury = await storage.initializeDaoTreasury();
+      }
+      res.json(treasury);
+    } catch (error) {
+      console.error("Error fetching treasury:", error);
+      res.status(500).json({ error: "Failed to fetch treasury" });
+    }
+  });
+
+  app.get("/api/dao/treasury/transactions", isAuthenticated, async (req: any, res) => {
+    try {
+      const limit = req.query.limit ? parseInt(req.query.limit) : 50;
+      const transactions = await storage.getDaoTreasuryTransactions(limit);
+      res.json(transactions);
+    } catch (error) {
+      console.error("Error fetching treasury transactions:", error);
+      res.status(500).json({ error: "Failed to fetch transactions" });
+    }
+  });
+
+  app.post("/api/dao/treasury/transactions", requireRole("admin"), async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const transaction = await storage.createDaoTreasuryTransaction({ ...req.body, createdBy: user.id });
+      res.status(201).json(transaction);
+    } catch (error) {
+      console.error("Error creating treasury transaction:", error);
+      res.status(500).json({ error: "Failed to create transaction" });
+    }
+  });
+
+  // DAO Bonus Runs
+  app.get("/api/dao/bonus-runs", isAuthenticated, async (req: any, res) => {
+    try {
+      const runs = await storage.getDaoBonusRuns();
+      res.json(runs);
+    } catch (error) {
+      console.error("Error fetching bonus runs:", error);
+      res.status(500).json({ error: "Failed to fetch bonus runs" });
+    }
+  });
+
+  app.get("/api/dao/bonus-runs/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const run = await storage.getDaoBonusRun(id);
+      const recipients = await storage.getDaoBonusRunRecipients(id);
+      res.json({ ...run, recipients });
+    } catch (error) {
+      console.error("Error fetching bonus run:", error);
+      res.status(500).json({ error: "Failed to fetch bonus run" });
+    }
+  });
+
+  app.get("/api/dao/bonus-runs/simulate", isAuthenticated, async (req: any, res) => {
+    try {
+      const simulation = await storage.simulateBonusDistribution();
+      res.json(simulation);
+    } catch (error) {
+      console.error("Error simulating bonus distribution:", error);
+      res.status(500).json({ error: "Failed to simulate distribution" });
+    }
+  });
+
+  app.post("/api/dao/bonus-runs", requireRole("admin"), async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const membership = await storage.getDaoMembershipByUserId(user.id);
+      if (!membership?.isCouncil) {
+        return res.status(403).json({ error: "Only council members can trigger bonus distributions" });
+      }
+      const run = await storage.executeBonusDistribution(user.id);
+      if (!run) {
+        return res.status(400).json({ error: "Bonus distribution not eligible or failed" });
+      }
+      res.status(201).json(run);
+    } catch (error) {
+      console.error("Error triggering bonus distribution:", error);
+      res.status(500).json({ error: "Failed to trigger distribution" });
+    }
+  });
+
+  app.post("/api/dao/bonus-runs/execute", requireRole("admin"), async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      // Verify council membership for bonus execution
+      const membership = await storage.getDaoMembershipByUserId(user.id);
+      if (!membership?.isCouncil) {
+        return res.status(403).json({ error: "Only council members can execute bonus distributions" });
+      }
+      const run = await storage.executeBonusDistribution(user.id);
+      if (!run) {
+        return res.status(400).json({ error: "Bonus distribution not eligible or failed" });
+      }
+      res.status(201).json(run);
+    } catch (error) {
+      console.error("Error executing bonus distribution:", error);
+      res.status(500).json({ error: "Failed to execute distribution" });
+    }
+  });
+
+  // DAO Invoices
+  app.get("/api/dao/invoices", isAuthenticated, async (req: any, res) => {
+    try {
+      const projectId = req.query.projectId ? parseInt(req.query.projectId) : undefined;
+      const invoices = await storage.getDaoInvoices(projectId);
+      res.json(invoices);
+    } catch (error) {
+      console.error("Error fetching invoices:", error);
+      res.status(500).json({ error: "Failed to fetch invoices" });
+    }
+  });
+
+  app.get("/api/dao/invoices/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const invoice = await storage.getDaoInvoice(id);
+      res.json(invoice);
+    } catch (error) {
+      console.error("Error fetching invoice:", error);
+      res.status(500).json({ error: "Failed to fetch invoice" });
+    }
+  });
+
+  app.post("/api/dao/projects/:projectId/invoices/generate", requireRole("content", "admin"), async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const projectId = parseInt(req.params.projectId);
+      const invoices = await storage.generateProjectInvoices(projectId, user.id);
+      res.status(201).json(invoices);
+    } catch (error) {
+      console.error("Error generating invoices:", error);
+      res.status(500).json({ error: "Failed to generate invoices" });
+    }
+  });
+
+  app.patch("/api/dao/invoices/:id", requireRole("content", "admin"), async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const invoice = await storage.updateDaoInvoice(id, req.body);
+      res.json(invoice);
+    } catch (error) {
+      console.error("Error updating invoice:", error);
+      res.status(500).json({ error: "Failed to update invoice" });
+    }
+  });
+
+  app.post("/api/dao/invoices/:id/mark-paid", requireRole("admin"), async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const { paymentMethod, paymentReference } = req.body;
+      const invoice = await storage.markDaoInvoicePaid(id, paymentMethod, paymentReference);
+      
+      // Record treasury contribution (15% of paid amount)
+      if (invoice) {
+        const user = req.user as User;
+        const treasuryContribution = Math.round(invoice.amount * 0.15);
+        await storage.recordProjectTreasuryContribution(invoice.projectId, treasuryContribution, user.id);
+      }
+      
+      res.json(invoice);
+    } catch (error) {
+      console.error("Error marking invoice paid:", error);
+      res.status(500).json({ error: "Failed to mark invoice paid" });
+    }
+  });
+
+  // DAO Rank Progressions
+  app.get("/api/dao/rank-progressions", isAuthenticated, async (req: any, res) => {
+    try {
+      const membershipId = req.query.membershipId ? parseInt(req.query.membershipId) : undefined;
+      const progressions = await storage.getDaoRankProgressions(membershipId);
+      res.json(progressions);
+    } catch (error) {
+      console.error("Error fetching rank progressions:", error);
+      res.status(500).json({ error: "Failed to fetch progressions" });
+    }
+  });
+
+  app.post("/api/dao/memberships/:membershipId/check-promotion", requireRole("admin"), async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const membershipId = parseInt(req.params.membershipId);
+      const progression = await storage.checkAndPromoteMember(membershipId, user.id);
+      res.json(progression || { promoted: false });
+    } catch (error) {
+      console.error("Error checking promotion:", error);
+      res.status(500).json({ error: "Failed to check promotion" });
+    }
+  });
+
+  // DAO Project Links
+  app.get("/api/dao/projects/:projectId/links", isAuthenticated, async (req: any, res) => {
+    try {
+      const projectId = parseInt(req.params.projectId);
+      const links = await storage.getDaoProjectLinks(projectId);
+      res.json(links);
+    } catch (error) {
+      console.error("Error fetching project links:", error);
+      res.status(500).json({ error: "Failed to fetch links" });
+    }
+  });
+
+  app.post("/api/dao/projects/:projectId/links", requireRole("content", "admin"), async (req: any, res) => {
+    try {
+      const projectId = parseInt(req.params.projectId);
+      const link = await storage.createDaoProjectLink({ ...req.body, projectId });
+      res.status(201).json(link);
+    } catch (error) {
+      console.error("Error creating project link:", error);
+      res.status(500).json({ error: "Failed to create link" });
+    }
+  });
+
+  app.delete("/api/dao/project-links/:id", requireRole("content", "admin"), async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      await storage.deleteDaoProjectLink(id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting project link:", error);
+      res.status(500).json({ error: "Failed to delete link" });
+    }
+  });
+
+  // DAO Permissions
+  app.get("/api/dao/memberships/:membershipId/permissions", isAuthenticated, async (req: any, res) => {
+    try {
+      const membershipId = parseInt(req.params.membershipId);
+      const permissions = await storage.getDaoPermissions(membershipId);
+      res.json(permissions);
+    } catch (error) {
+      console.error("Error fetching permissions:", error);
+      res.status(500).json({ error: "Failed to fetch permissions" });
+    }
+  });
+
+  app.post("/api/dao/permissions", requireRole("admin"), async (req: any, res) => {
+    try {
+      const permission = await storage.createDaoPermission(req.body);
+      res.status(201).json(permission);
+    } catch (error) {
+      console.error("Error creating permission:", error);
+      res.status(500).json({ error: "Failed to create permission" });
+    }
+  });
+
+  app.patch("/api/dao/permissions/:id", requireRole("admin"), async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const permission = await storage.updateDaoPermission(id, req.body);
+      res.json(permission);
+    } catch (error) {
+      console.error("Error updating permission:", error);
+      res.status(500).json({ error: "Failed to update permission" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

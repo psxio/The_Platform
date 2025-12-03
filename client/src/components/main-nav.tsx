@@ -58,6 +58,8 @@ import {
   Radio,
   Building2,
   Network,
+  Crown,
+  Briefcase,
 } from "lucide-react";
 
 type NavSection = "web3" | "content" | "client" | "admin";
@@ -90,6 +92,11 @@ const clientItems: NavItem[] = [
 
 const sharedItems: NavItem[] = [
   { title: "Client Directory", href: "/client-directory", icon: Building2, description: "All client & partner profiles" },
+];
+
+const daoItems: NavItem[] = [
+  { title: "DAO Dashboard", href: "/dao", icon: Crown, description: "Treasury, projects, and ranks" },
+  { title: "Service Catalog", href: "/dao/catalog", icon: Briefcase, description: "Manage service offerings" },
 ];
 
 const adminItems: NavItem[] = [
@@ -236,6 +243,31 @@ function DesktopNav({
           </Link>
         </NavigationMenuItem>
 
+        {/* DAO Management - visible to content and admin users */}
+        {showContent && (
+          <NavigationMenuItem>
+            <NavigationMenuTrigger 
+              className={cn(
+                "gap-2",
+                location.startsWith("/dao") && "bg-accent"
+              )}
+              data-testid="nav-dao-trigger"
+            >
+              <Crown className="h-4 w-4" />
+              DAO
+            </NavigationMenuTrigger>
+            <NavigationMenuContent>
+              <div className="grid w-[300px] gap-1 p-2">
+                {daoItems.map((item) => (
+                  <NavigationMenuLink key={item.href} asChild>
+                    <NavDropdownItem item={item} />
+                  </NavigationMenuLink>
+                ))}
+              </div>
+            </NavigationMenuContent>
+          </NavigationMenuItem>
+        )}
+
         {showAdmin && (
           <NavigationMenuItem>
             <NavigationMenuTrigger 
@@ -358,6 +390,21 @@ function MobileNav({
               ))}
             </div>
           </div>
+
+          {/* DAO Management - visible to content and admin users */}
+          {showContent && (
+            <div className="space-y-2">
+              <h4 className="flex items-center gap-2 text-sm font-semibold text-muted-foreground px-2">
+                <Crown className="h-4 w-4" />
+                DAO Management
+              </h4>
+              <div className="space-y-1">
+                {daoItems.map((item) => (
+                  <NavDropdownItem key={item.href} item={item} onClick={handleItemClick} />
+                ))}
+              </div>
+            </div>
+          )}
 
           {showAdmin && (
             <div className="space-y-2">

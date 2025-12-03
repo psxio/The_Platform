@@ -111,6 +111,23 @@ import {
   type WhiteboardElement, type InsertWhiteboardElement, whiteboardElements,
   type WhiteboardConnector, type InsertWhiteboardConnector, whiteboardConnectors,
   type WhiteboardCollaborator, type InsertWhiteboardCollaborator, whiteboardCollaborators,
+  // DAO Management System
+  type DaoRole, type InsertDaoRole, daoRoles,
+  type DaoMembership, type InsertDaoMembership, daoMemberships,
+  type DaoServiceCatalog, type InsertDaoServiceCatalog, daoServiceCatalog,
+  type DaoDiscount, type InsertDaoDiscount, daoDiscounts,
+  type DaoProject, type InsertDaoProject, daoProjects,
+  type DaoProjectService, type InsertDaoProjectService, daoProjectServices,
+  type DaoRevenueAttribution, type InsertDaoRevenueAttribution, daoRevenueAttributions,
+  type DaoDebrief, type InsertDaoDebrief, daoDebriefs,
+  type DaoTreasury, daoTreasury,
+  type DaoTreasuryTransaction, type InsertDaoTreasuryTransaction, daoTreasuryTransactions,
+  type DaoBonusRun, type InsertDaoBonusRun, daoBonusRuns,
+  type DaoBonusRunRecipient, type InsertDaoBonusRunRecipient, daoBonusRunRecipients,
+  type DaoInvoice, type InsertDaoInvoice, daoInvoices,
+  type DaoRankProgression, type InsertDaoRankProgression, daoRankProgressions,
+  type DaoProjectLink, type InsertDaoProjectLink, daoProjectLinks,
+  type DaoPermission, type InsertDaoPermission, daoPermissions,
 } from "@shared/schema";
 import { db } from "./db";
 import { desc, eq, and, sql, or, isNull } from "drizzle-orm";
@@ -672,6 +689,110 @@ export interface IStorage {
   incrementAssetUsage(id: number): Promise<LibraryAsset | undefined>;
   toggleAssetFavorite(id: number): Promise<LibraryAsset | undefined>;
   getAssetStats(): Promise<{ totalAssets: number; byCategory: Record<string, number>; totalSize: number; recentlyAdded: number }>;
+
+  // ==================== DAO MANAGEMENT SYSTEM ====================
+
+  // DAO Roles
+  getDaoRoles(): Promise<DaoRole[]>;
+  getDaoRole(id: number): Promise<DaoRole | undefined>;
+  createDaoRole(role: InsertDaoRole): Promise<DaoRole>;
+  updateDaoRole(id: number, updates: Partial<InsertDaoRole>): Promise<DaoRole | undefined>;
+
+  // DAO Memberships
+  getDaoMemberships(): Promise<DaoMembership[]>;
+  getDaoMembership(id: number): Promise<DaoMembership | undefined>;
+  getDaoMembershipByUserId(userId: string): Promise<DaoMembership | undefined>;
+  getDaoMembershipByTeamMemberId(teamMemberId: number): Promise<DaoMembership | undefined>;
+  getCouncilMembers(): Promise<DaoMembership[]>;
+  createDaoMembership(membership: InsertDaoMembership): Promise<DaoMembership>;
+  updateDaoMembership(id: number, updates: Partial<InsertDaoMembership>): Promise<DaoMembership | undefined>;
+  updateMemberCumulativeRevenue(id: number, amount: number): Promise<DaoMembership | undefined>;
+
+  // DAO Service Catalog
+  getDaoServiceCatalog(activeOnly?: boolean): Promise<DaoServiceCatalog[]>;
+  getDaoService(id: number): Promise<DaoServiceCatalog | undefined>;
+  getDaoServicesByCategory(category: string): Promise<DaoServiceCatalog[]>;
+  createDaoService(service: InsertDaoServiceCatalog): Promise<DaoServiceCatalog>;
+  updateDaoService(id: number, updates: Partial<InsertDaoServiceCatalog>): Promise<DaoServiceCatalog | undefined>;
+  deleteDaoService(id: number): Promise<boolean>;
+
+  // DAO Discounts
+  getDaoDiscounts(activeOnly?: boolean): Promise<DaoDiscount[]>;
+  getDaoDiscount(id: number): Promise<DaoDiscount | undefined>;
+  createDaoDiscount(discount: InsertDaoDiscount): Promise<DaoDiscount>;
+  updateDaoDiscount(id: number, updates: Partial<InsertDaoDiscount>): Promise<DaoDiscount | undefined>;
+  deleteDaoDiscount(id: number): Promise<boolean>;
+
+  // DAO Projects
+  getDaoProjects(filters?: { status?: string; clientProfileId?: number }): Promise<DaoProject[]>;
+  getDaoProject(id: number): Promise<DaoProject | undefined>;
+  createDaoProject(project: InsertDaoProject): Promise<DaoProject>;
+  updateDaoProject(id: number, updates: Partial<InsertDaoProject>): Promise<DaoProject | undefined>;
+  deleteDaoProject(id: number): Promise<boolean>;
+
+  // DAO Project Services
+  getDaoProjectServices(projectId: number): Promise<DaoProjectService[]>;
+  createDaoProjectService(service: InsertDaoProjectService): Promise<DaoProjectService>;
+  updateDaoProjectService(id: number, updates: Partial<InsertDaoProjectService>): Promise<DaoProjectService | undefined>;
+  deleteDaoProjectService(id: number): Promise<boolean>;
+
+  // DAO Revenue Attributions
+  getDaoRevenueAttributions(projectId: number): Promise<DaoRevenueAttribution[]>;
+  getDaoRevenueAttributionsByMember(membershipId: number): Promise<DaoRevenueAttribution[]>;
+  createDaoRevenueAttribution(attribution: InsertDaoRevenueAttribution): Promise<DaoRevenueAttribution>;
+  updateDaoRevenueAttribution(id: number, updates: Partial<InsertDaoRevenueAttribution>): Promise<DaoRevenueAttribution | undefined>;
+  approveDaoRevenueAttribution(id: number, approvedBy: string): Promise<DaoRevenueAttribution | undefined>;
+  applyDefaultAttributionTemplate(projectId: number, leadId: number, pmId: number, coreContributors: number[], supportContributors: number[]): Promise<DaoRevenueAttribution[]>;
+
+  // DAO Debriefs
+  getDaoDebriefs(projectId?: number): Promise<DaoDebrief[]>;
+  getDaoDebrief(id: number): Promise<DaoDebrief | undefined>;
+  createDaoDebrief(debrief: InsertDaoDebrief): Promise<DaoDebrief>;
+  updateDaoDebrief(id: number, updates: Partial<InsertDaoDebrief>): Promise<DaoDebrief | undefined>;
+
+  // DAO Treasury
+  getDaoTreasury(): Promise<DaoTreasury | undefined>;
+  initializeDaoTreasury(): Promise<DaoTreasury>;
+  updateDaoTreasuryBalance(amount: number): Promise<DaoTreasury | undefined>;
+
+  // DAO Treasury Transactions
+  getDaoTreasuryTransactions(limit?: number): Promise<DaoTreasuryTransaction[]>;
+  createDaoTreasuryTransaction(txn: InsertDaoTreasuryTransaction): Promise<DaoTreasuryTransaction>;
+  recordProjectTreasuryContribution(projectId: number, amount: number, createdBy: string): Promise<DaoTreasuryTransaction>;
+
+  // DAO Bonus Runs
+  getDaoBonusRuns(): Promise<DaoBonusRun[]>;
+  getDaoBonusRun(id: number): Promise<DaoBonusRun | undefined>;
+  createDaoBonusRun(run: InsertDaoBonusRun): Promise<DaoBonusRun>;
+  getDaoBonusRunRecipients(bonusRunId: number): Promise<DaoBonusRunRecipient[]>;
+  createDaoBonusRunRecipient(recipient: InsertDaoBonusRunRecipient): Promise<DaoBonusRunRecipient>;
+  simulateBonusDistribution(): Promise<{ members: { membershipId: number; multiplier: number; share: number }[]; totalToDistribute: number; eligible: boolean }>;
+  executeBonusDistribution(triggeredBy: string): Promise<DaoBonusRun | undefined>;
+
+  // DAO Invoices
+  getDaoInvoices(projectId?: number): Promise<DaoInvoice[]>;
+  getDaoInvoice(id: number): Promise<DaoInvoice | undefined>;
+  createDaoInvoice(invoice: InsertDaoInvoice): Promise<DaoInvoice>;
+  updateDaoInvoice(id: number, updates: Partial<InsertDaoInvoice>): Promise<DaoInvoice | undefined>;
+  markDaoInvoicePaid(id: number, paymentMethod: string, paymentReference?: string): Promise<DaoInvoice | undefined>;
+  generateProjectInvoices(projectId: number, createdBy: string): Promise<DaoInvoice[]>;
+
+  // DAO Rank Progressions
+  getDaoRankProgressions(membershipId?: number): Promise<DaoRankProgression[]>;
+  createDaoRankProgression(progression: InsertDaoRankProgression): Promise<DaoRankProgression>;
+  checkAndPromoteMember(membershipId: number, approvedBy?: string): Promise<DaoRankProgression | undefined>;
+
+  // DAO Project Links
+  getDaoProjectLinks(projectId: number): Promise<DaoProjectLink[]>;
+  createDaoProjectLink(link: InsertDaoProjectLink): Promise<DaoProjectLink>;
+  deleteDaoProjectLink(id: number): Promise<boolean>;
+
+  // DAO Permissions
+  getDaoPermissions(membershipId: number): Promise<DaoPermission[]>;
+  getDaoPermissionByScope(membershipId: number, scope: string): Promise<DaoPermission | undefined>;
+  createDaoPermission(permission: InsertDaoPermission): Promise<DaoPermission>;
+  updateDaoPermission(id: number, updates: Partial<InsertDaoPermission>): Promise<DaoPermission | undefined>;
+  hasCouncilPermission(membershipId: number, scope: string): Promise<boolean>;
 }
 
 export class DbStorage implements IStorage {
@@ -4541,6 +4662,648 @@ export class DbStorage implements IStorage {
   async updateWatcherPreferences(watcherId: number, prefs: { notifyOnStatusChange?: boolean; notifyOnComment?: boolean; notifyOnAssignment?: boolean }): Promise<TaskWatcher | undefined> {
     const [updated] = await db.update(taskWatchers).set(prefs).where(eq(taskWatchers.id, watcherId)).returning();
     return updated;
+  }
+
+  // ==================== DAO MANAGEMENT SYSTEM IMPLEMENTATIONS ====================
+
+  // DAO Roles
+  async getDaoRoles(): Promise<DaoRole[]> {
+    return db.select().from(daoRoles).orderBy(daoRoles.tier);
+  }
+
+  async getDaoRole(id: number): Promise<DaoRole | undefined> {
+    const [role] = await db.select().from(daoRoles).where(eq(daoRoles.id, id));
+    return role;
+  }
+
+  async createDaoRole(role: InsertDaoRole): Promise<DaoRole> {
+    const [created] = await db.insert(daoRoles).values(role).returning();
+    return created;
+  }
+
+  async updateDaoRole(id: number, updates: Partial<InsertDaoRole>): Promise<DaoRole | undefined> {
+    const [updated] = await db.update(daoRoles).set(updates).where(eq(daoRoles.id, id)).returning();
+    return updated;
+  }
+
+  // DAO Memberships
+  async getDaoMemberships(): Promise<DaoMembership[]> {
+    return db.select().from(daoMemberships).orderBy(desc(daoMemberships.createdAt));
+  }
+
+  async getDaoMembership(id: number): Promise<DaoMembership | undefined> {
+    const [membership] = await db.select().from(daoMemberships).where(eq(daoMemberships.id, id));
+    return membership;
+  }
+
+  async getDaoMembershipByUserId(userId: string): Promise<DaoMembership | undefined> {
+    const [membership] = await db.select().from(daoMemberships)
+      .where(and(eq(daoMemberships.userId, userId), isNull(daoMemberships.activeTo)));
+    return membership;
+  }
+
+  async getDaoMembershipByTeamMemberId(teamMemberId: number): Promise<DaoMembership | undefined> {
+    const [membership] = await db.select().from(daoMemberships)
+      .where(and(eq(daoMemberships.internalTeamMemberId, teamMemberId), isNull(daoMemberships.activeTo)));
+    return membership;
+  }
+
+  async getCouncilMembers(): Promise<DaoMembership[]> {
+    return db.select().from(daoMemberships)
+      .where(and(eq(daoMemberships.isCouncil, true), isNull(daoMemberships.activeTo)));
+  }
+
+  async createDaoMembership(membership: InsertDaoMembership): Promise<DaoMembership> {
+    const [created] = await db.insert(daoMemberships).values(membership).returning();
+    return created;
+  }
+
+  async updateDaoMembership(id: number, updates: Partial<InsertDaoMembership>): Promise<DaoMembership | undefined> {
+    const [updated] = await db.update(daoMemberships)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(daoMemberships.id, id)).returning();
+    return updated;
+  }
+
+  async updateMemberCumulativeRevenue(id: number, amount: number): Promise<DaoMembership | undefined> {
+    const membership = await this.getDaoMembership(id);
+    if (!membership) return undefined;
+    const newTotal = (membership.cumulativeRevenue || 0) + amount;
+    const [updated] = await db.update(daoMemberships)
+      .set({ cumulativeRevenue: newTotal, updatedAt: new Date() })
+      .where(eq(daoMemberships.id, id)).returning();
+    return updated;
+  }
+
+  // DAO Service Catalog
+  async getDaoServiceCatalog(activeOnly: boolean = true): Promise<DaoServiceCatalog[]> {
+    if (activeOnly) {
+      return db.select().from(daoServiceCatalog)
+        .where(eq(daoServiceCatalog.isActive, true))
+        .orderBy(daoServiceCatalog.category, daoServiceCatalog.sortOrder);
+    }
+    return db.select().from(daoServiceCatalog).orderBy(daoServiceCatalog.category, daoServiceCatalog.sortOrder);
+  }
+
+  async getDaoService(id: number): Promise<DaoServiceCatalog | undefined> {
+    const [service] = await db.select().from(daoServiceCatalog).where(eq(daoServiceCatalog.id, id));
+    return service;
+  }
+
+  async getDaoServicesByCategory(category: string): Promise<DaoServiceCatalog[]> {
+    return db.select().from(daoServiceCatalog)
+      .where(and(eq(daoServiceCatalog.category, category), eq(daoServiceCatalog.isActive, true)))
+      .orderBy(daoServiceCatalog.sortOrder);
+  }
+
+  async createDaoService(service: InsertDaoServiceCatalog): Promise<DaoServiceCatalog> {
+    const [created] = await db.insert(daoServiceCatalog).values(service).returning();
+    return created;
+  }
+
+  async updateDaoService(id: number, updates: Partial<InsertDaoServiceCatalog>): Promise<DaoServiceCatalog | undefined> {
+    const [updated] = await db.update(daoServiceCatalog)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(daoServiceCatalog.id, id)).returning();
+    return updated;
+  }
+
+  async deleteDaoService(id: number): Promise<boolean> {
+    await db.delete(daoServiceCatalog).where(eq(daoServiceCatalog.id, id));
+    return true;
+  }
+
+  // DAO Discounts
+  async getDaoDiscounts(activeOnly: boolean = true): Promise<DaoDiscount[]> {
+    if (activeOnly) {
+      return db.select().from(daoDiscounts).where(eq(daoDiscounts.isActive, true));
+    }
+    return db.select().from(daoDiscounts);
+  }
+
+  async getDaoDiscount(id: number): Promise<DaoDiscount | undefined> {
+    const [discount] = await db.select().from(daoDiscounts).where(eq(daoDiscounts.id, id));
+    return discount;
+  }
+
+  async createDaoDiscount(discount: InsertDaoDiscount): Promise<DaoDiscount> {
+    const [created] = await db.insert(daoDiscounts).values(discount).returning();
+    return created;
+  }
+
+  async updateDaoDiscount(id: number, updates: Partial<InsertDaoDiscount>): Promise<DaoDiscount | undefined> {
+    const [updated] = await db.update(daoDiscounts).set(updates).where(eq(daoDiscounts.id, id)).returning();
+    return updated;
+  }
+
+  async deleteDaoDiscount(id: number): Promise<boolean> {
+    await db.delete(daoDiscounts).where(eq(daoDiscounts.id, id));
+    return true;
+  }
+
+  // DAO Projects
+  async getDaoProjects(filters?: { status?: string; clientProfileId?: number }): Promise<DaoProject[]> {
+    let query = db.select().from(daoProjects);
+    if (filters?.status) {
+      query = query.where(eq(daoProjects.status, filters.status)) as any;
+    }
+    if (filters?.clientProfileId) {
+      query = query.where(eq(daoProjects.clientProfileId, filters.clientProfileId)) as any;
+    }
+    return query.orderBy(desc(daoProjects.createdAt));
+  }
+
+  async getDaoProject(id: number): Promise<DaoProject | undefined> {
+    const [project] = await db.select().from(daoProjects).where(eq(daoProjects.id, id));
+    return project;
+  }
+
+  async createDaoProject(project: InsertDaoProject): Promise<DaoProject> {
+    const [created] = await db.insert(daoProjects).values(project).returning();
+    return created;
+  }
+
+  async updateDaoProject(id: number, updates: Partial<InsertDaoProject>): Promise<DaoProject | undefined> {
+    const [updated] = await db.update(daoProjects)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(daoProjects.id, id)).returning();
+    return updated;
+  }
+
+  async deleteDaoProject(id: number): Promise<boolean> {
+    await db.delete(daoProjects).where(eq(daoProjects.id, id));
+    return true;
+  }
+
+  // DAO Project Services
+  async getDaoProjectServices(projectId: number): Promise<DaoProjectService[]> {
+    return db.select().from(daoProjectServices).where(eq(daoProjectServices.projectId, projectId));
+  }
+
+  async createDaoProjectService(service: InsertDaoProjectService): Promise<DaoProjectService> {
+    const [created] = await db.insert(daoProjectServices).values(service).returning();
+    return created;
+  }
+
+  async updateDaoProjectService(id: number, updates: Partial<InsertDaoProjectService>): Promise<DaoProjectService | undefined> {
+    const [updated] = await db.update(daoProjectServices).set(updates).where(eq(daoProjectServices.id, id)).returning();
+    return updated;
+  }
+
+  async deleteDaoProjectService(id: number): Promise<boolean> {
+    await db.delete(daoProjectServices).where(eq(daoProjectServices.id, id));
+    return true;
+  }
+
+  // DAO Revenue Attributions
+  async getDaoRevenueAttributions(projectId: number): Promise<DaoRevenueAttribution[]> {
+    return db.select().from(daoRevenueAttributions).where(eq(daoRevenueAttributions.projectId, projectId));
+  }
+
+  async getDaoRevenueAttributionsByMember(membershipId: number): Promise<DaoRevenueAttribution[]> {
+    return db.select().from(daoRevenueAttributions).where(eq(daoRevenueAttributions.membershipId, membershipId));
+  }
+
+  async createDaoRevenueAttribution(attribution: InsertDaoRevenueAttribution): Promise<DaoRevenueAttribution> {
+    const [created] = await db.insert(daoRevenueAttributions).values(attribution).returning();
+    return created;
+  }
+
+  async updateDaoRevenueAttribution(id: number, updates: Partial<InsertDaoRevenueAttribution>): Promise<DaoRevenueAttribution | undefined> {
+    const [updated] = await db.update(daoRevenueAttributions)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(daoRevenueAttributions.id, id)).returning();
+    return updated;
+  }
+
+  async approveDaoRevenueAttribution(id: number, approvedBy: string): Promise<DaoRevenueAttribution | undefined> {
+    const [updated] = await db.update(daoRevenueAttributions)
+      .set({ isApproved: true, approvedBy, approvedAt: new Date(), updatedAt: new Date() })
+      .where(eq(daoRevenueAttributions.id, id)).returning();
+    return updated;
+  }
+
+  async applyDefaultAttributionTemplate(projectId: number, leadId: number, pmId: number, coreContributors: number[], supportContributors: number[]): Promise<DaoRevenueAttribution[]> {
+    const project = await this.getDaoProject(projectId);
+    if (!project || !project.finalAmount) return [];
+    
+    const results: DaoRevenueAttribution[] = [];
+    const finalAmount = project.finalAmount;
+    
+    // Lead: 30%
+    const leadAttribution = await this.createDaoRevenueAttribution({
+      projectId,
+      membershipId: leadId,
+      roleSlot: "lead",
+      percentAllocation: 30,
+      attributedAmount: Math.round(finalAmount * 0.30),
+    });
+    results.push(leadAttribution);
+    
+    // PM: 15%
+    const pmAttribution = await this.createDaoRevenueAttribution({
+      projectId,
+      membershipId: pmId,
+      roleSlot: "pm",
+      percentAllocation: 15,
+      attributedAmount: Math.round(finalAmount * 0.15),
+    });
+    results.push(pmAttribution);
+    
+    // Core Contributors: 40% split
+    if (coreContributors.length > 0) {
+      const corePercent = 40 / coreContributors.length;
+      for (const memberId of coreContributors) {
+        const coreAttribution = await this.createDaoRevenueAttribution({
+          projectId,
+          membershipId: memberId,
+          roleSlot: "core",
+          percentAllocation: corePercent,
+          attributedAmount: Math.round(finalAmount * (corePercent / 100)),
+        });
+        results.push(coreAttribution);
+      }
+    }
+    
+    // Support Contributors: 10% split
+    if (supportContributors.length > 0) {
+      const supportPercent = 10 / supportContributors.length;
+      for (const memberId of supportContributors) {
+        const supportAttribution = await this.createDaoRevenueAttribution({
+          projectId,
+          membershipId: memberId,
+          roleSlot: "support",
+          percentAllocation: supportPercent,
+          attributedAmount: Math.round(finalAmount * (supportPercent / 100)),
+        });
+        results.push(supportAttribution);
+      }
+    }
+    
+    // Overhead: 5%
+    const overheadAttribution = await this.createDaoRevenueAttribution({
+      projectId,
+      membershipId: leadId, // Assign overhead to lead
+      roleSlot: "overhead",
+      percentAllocation: 5,
+      attributedAmount: Math.round(finalAmount * 0.05),
+    });
+    results.push(overheadAttribution);
+    
+    return results;
+  }
+
+  // DAO Debriefs
+  async getDaoDebriefs(projectId?: number): Promise<DaoDebrief[]> {
+    if (projectId) {
+      return db.select().from(daoDebriefs).where(eq(daoDebriefs.projectId, projectId));
+    }
+    return db.select().from(daoDebriefs).orderBy(desc(daoDebriefs.createdAt));
+  }
+
+  async getDaoDebrief(id: number): Promise<DaoDebrief | undefined> {
+    const [debrief] = await db.select().from(daoDebriefs).where(eq(daoDebriefs.id, id));
+    return debrief;
+  }
+
+  async createDaoDebrief(debrief: InsertDaoDebrief): Promise<DaoDebrief> {
+    const [created] = await db.insert(daoDebriefs).values(debrief).returning();
+    return created;
+  }
+
+  async updateDaoDebrief(id: number, updates: Partial<InsertDaoDebrief>): Promise<DaoDebrief | undefined> {
+    const [updated] = await db.update(daoDebriefs).set(updates).where(eq(daoDebriefs.id, id)).returning();
+    return updated;
+  }
+
+  // DAO Treasury
+  async getDaoTreasury(): Promise<DaoTreasury | undefined> {
+    const [treasury] = await db.select().from(daoTreasury);
+    return treasury;
+  }
+
+  async initializeDaoTreasury(): Promise<DaoTreasury> {
+    const existing = await this.getDaoTreasury();
+    if (existing) return existing;
+    const [created] = await db.insert(daoTreasury).values({
+      balance: 0,
+      lastBonusTriggerBalance: 0,
+      bonusTriggerThreshold: 10000000, // $100,000 in cents
+    }).returning();
+    return created;
+  }
+
+  async updateDaoTreasuryBalance(amount: number): Promise<DaoTreasury | undefined> {
+    const treasury = await this.getDaoTreasury();
+    if (!treasury) return undefined;
+    const [updated] = await db.update(daoTreasury)
+      .set({ balance: treasury.balance + amount, updatedAt: new Date() })
+      .where(eq(daoTreasury.id, treasury.id)).returning();
+    return updated;
+  }
+
+  // DAO Treasury Transactions
+  async getDaoTreasuryTransactions(limit: number = 50): Promise<DaoTreasuryTransaction[]> {
+    return db.select().from(daoTreasuryTransactions)
+      .orderBy(desc(daoTreasuryTransactions.createdAt))
+      .limit(limit);
+  }
+
+  async createDaoTreasuryTransaction(txn: InsertDaoTreasuryTransaction): Promise<DaoTreasuryTransaction> {
+    const [created] = await db.insert(daoTreasuryTransactions).values(txn).returning();
+    await this.updateDaoTreasuryBalance(txn.amount);
+    return created;
+  }
+
+  async recordProjectTreasuryContribution(projectId: number, amount: number, createdBy: string): Promise<DaoTreasuryTransaction> {
+    return this.createDaoTreasuryTransaction({
+      txnType: "project_inflow",
+      amount,
+      projectId,
+      memo: "15% treasury contribution from project",
+      createdBy,
+    });
+  }
+
+  // DAO Bonus Runs
+  async getDaoBonusRuns(): Promise<DaoBonusRun[]> {
+    return db.select().from(daoBonusRuns).orderBy(desc(daoBonusRuns.executedAt));
+  }
+
+  async getDaoBonusRun(id: number): Promise<DaoBonusRun | undefined> {
+    const [run] = await db.select().from(daoBonusRuns).where(eq(daoBonusRuns.id, id));
+    return run;
+  }
+
+  async createDaoBonusRun(run: InsertDaoBonusRun): Promise<DaoBonusRun> {
+    const [created] = await db.insert(daoBonusRuns).values(run).returning();
+    return created;
+  }
+
+  async getDaoBonusRunRecipients(bonusRunId: number): Promise<DaoBonusRunRecipient[]> {
+    return db.select().from(daoBonusRunRecipients).where(eq(daoBonusRunRecipients.bonusRunId, bonusRunId));
+  }
+
+  async createDaoBonusRunRecipient(recipient: InsertDaoBonusRunRecipient): Promise<DaoBonusRunRecipient> {
+    const [created] = await db.insert(daoBonusRunRecipients).values(recipient).returning();
+    return created;
+  }
+
+  async simulateBonusDistribution(): Promise<{ members: { membershipId: number; multiplier: number; share: number }[]; totalToDistribute: number; eligible: boolean }> {
+    const treasury = await this.getDaoTreasury();
+    if (!treasury) {
+      return { members: [], totalToDistribute: 0, eligible: false };
+    }
+    
+    const eligible = treasury.balance >= treasury.bonusTriggerThreshold;
+    if (!eligible) {
+      return { members: [], totalToDistribute: 0, eligible: false };
+    }
+    
+    const memberships = await db.select().from(daoMemberships)
+      .where(isNull(daoMemberships.activeTo));
+    
+    const roles = await this.getDaoRoles();
+    const roleMap = new Map(roles.map(r => [r.id, r]));
+    
+    let totalMultiplier = 0;
+    const memberData: { membershipId: number; multiplier: number }[] = [];
+    
+    for (const member of memberships) {
+      const role = roleMap.get(member.daoRoleId);
+      const multiplier = role?.multiplier || 1.0;
+      totalMultiplier += multiplier;
+      memberData.push({ membershipId: member.id, multiplier });
+    }
+    
+    const totalToDistribute = treasury.balance - treasury.lastBonusTriggerBalance;
+    const members = memberData.map(m => ({
+      ...m,
+      share: Math.round((m.multiplier / totalMultiplier) * totalToDistribute),
+    }));
+    
+    return { members, totalToDistribute, eligible: true };
+  }
+
+  async executeBonusDistribution(triggeredBy: string): Promise<DaoBonusRun | undefined> {
+    const simulation = await this.simulateBonusDistribution();
+    if (!simulation.eligible || simulation.members.length === 0) {
+      return undefined;
+    }
+    
+    const treasury = await this.getDaoTreasury();
+    if (!treasury) return undefined;
+    
+    const bonusRun = await this.createDaoBonusRun({
+      treasuryBalanceBefore: treasury.balance,
+      totalDistributed: simulation.totalToDistribute,
+      treasuryBalanceAfter: treasury.balance - simulation.totalToDistribute,
+      recipientCount: simulation.members.length,
+      triggeredBy,
+    });
+    
+    for (const member of simulation.members) {
+      await this.createDaoBonusRunRecipient({
+        bonusRunId: bonusRun.id,
+        membershipId: member.membershipId,
+        multiplier: member.multiplier,
+        baseShare: Math.round(member.share / member.multiplier),
+        finalAmount: member.share,
+      });
+    }
+    
+    await this.createDaoTreasuryTransaction({
+      txnType: "bonus_outflow",
+      amount: -simulation.totalToDistribute,
+      bonusRunId: bonusRun.id,
+      memo: `Bonus distribution to ${simulation.members.length} members`,
+      createdBy: triggeredBy,
+    });
+    
+    await db.update(daoTreasury)
+      .set({ lastBonusTriggerBalance: treasury.balance - simulation.totalToDistribute })
+      .where(eq(daoTreasury.id, treasury.id));
+    
+    return bonusRun;
+  }
+
+  // DAO Invoices
+  async getDaoInvoices(projectId?: number): Promise<DaoInvoice[]> {
+    if (projectId) {
+      return db.select().from(daoInvoices)
+        .where(eq(daoInvoices.projectId, projectId))
+        .orderBy(daoInvoices.phase);
+    }
+    return db.select().from(daoInvoices).orderBy(desc(daoInvoices.createdAt));
+  }
+
+  async getDaoInvoice(id: number): Promise<DaoInvoice | undefined> {
+    const [invoice] = await db.select().from(daoInvoices).where(eq(daoInvoices.id, id));
+    return invoice;
+  }
+
+  async createDaoInvoice(invoice: InsertDaoInvoice): Promise<DaoInvoice> {
+    const [created] = await db.insert(daoInvoices).values(invoice).returning();
+    return created;
+  }
+
+  async updateDaoInvoice(id: number, updates: Partial<InsertDaoInvoice>): Promise<DaoInvoice | undefined> {
+    const [updated] = await db.update(daoInvoices)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(daoInvoices.id, id)).returning();
+    return updated;
+  }
+
+  async markDaoInvoicePaid(id: number, paymentMethod: string, paymentReference?: string): Promise<DaoInvoice | undefined> {
+    const [updated] = await db.update(daoInvoices)
+      .set({
+        status: "paid",
+        paidAt: new Date(),
+        paymentMethod,
+        paymentReference,
+        updatedAt: new Date(),
+      })
+      .where(eq(daoInvoices.id, id)).returning();
+    return updated;
+  }
+
+  async generateProjectInvoices(projectId: number, createdBy: string): Promise<DaoInvoice[]> {
+    const project = await this.getDaoProject(projectId);
+    if (!project || !project.finalAmount) return [];
+    
+    const invoices: DaoInvoice[] = [];
+    const prefix = `INV-${project.id}-`;
+    
+    // Deposit invoice
+    const depositAmount = Math.round(project.finalAmount * ((project.depositPercent || 30) / 100));
+    const depositInvoice = await this.createDaoInvoice({
+      projectId,
+      invoiceNumber: `${prefix}DEP`,
+      phase: "deposit",
+      amount: depositAmount,
+      status: "draft",
+      createdBy,
+    });
+    invoices.push(depositInvoice);
+    
+    // Midpoint invoice
+    const midpointAmount = Math.round(project.finalAmount * ((project.midpointPercent || 40) / 100));
+    const midpointInvoice = await this.createDaoInvoice({
+      projectId,
+      invoiceNumber: `${prefix}MID`,
+      phase: "midpoint",
+      amount: midpointAmount,
+      status: "draft",
+      createdBy,
+    });
+    invoices.push(midpointInvoice);
+    
+    // Completion invoice
+    const completionAmount = Math.round(project.finalAmount * ((project.completionPercent || 30) / 100));
+    const completionInvoice = await this.createDaoInvoice({
+      projectId,
+      invoiceNumber: `${prefix}FIN`,
+      phase: "completion",
+      amount: completionAmount,
+      status: "draft",
+      createdBy,
+    });
+    invoices.push(completionInvoice);
+    
+    return invoices;
+  }
+
+  // DAO Rank Progressions
+  async getDaoRankProgressions(membershipId?: number): Promise<DaoRankProgression[]> {
+    if (membershipId) {
+      return db.select().from(daoRankProgressions)
+        .where(eq(daoRankProgressions.membershipId, membershipId))
+        .orderBy(desc(daoRankProgressions.promotedAt));
+    }
+    return db.select().from(daoRankProgressions).orderBy(desc(daoRankProgressions.promotedAt));
+  }
+
+  async createDaoRankProgression(progression: InsertDaoRankProgression): Promise<DaoRankProgression> {
+    const [created] = await db.insert(daoRankProgressions).values(progression).returning();
+    return created;
+  }
+
+  async checkAndPromoteMember(membershipId: number, approvedBy?: string): Promise<DaoRankProgression | undefined> {
+    const membership = await this.getDaoMembership(membershipId);
+    if (!membership) return undefined;
+    
+    const currentRole = await this.getDaoRole(membership.daoRoleId);
+    if (!currentRole) return undefined;
+    
+    const roles = await this.getDaoRoles();
+    const nextRole = roles.find(r => r.tier === currentRole.tier + 1);
+    
+    if (!nextRole) return undefined; // Already at max tier
+    
+    const cumulativeRevenue = membership.cumulativeRevenue || 0;
+    if (cumulativeRevenue < nextRole.cumulativeRevenueRequired) {
+      return undefined; // Not enough revenue
+    }
+    
+    // Create progression record
+    const progression = await this.createDaoRankProgression({
+      membershipId,
+      fromRoleId: currentRole.id,
+      toRoleId: nextRole.id,
+      cumulativeRevenueAtPromotion: cumulativeRevenue,
+      approvedBy,
+    });
+    
+    // Update membership with new role
+    await this.updateDaoMembership(membershipId, { daoRoleId: nextRole.id });
+    
+    return progression;
+  }
+
+  // DAO Project Links
+  async getDaoProjectLinks(projectId: number): Promise<DaoProjectLink[]> {
+    return db.select().from(daoProjectLinks).where(eq(daoProjectLinks.projectId, projectId));
+  }
+
+  async createDaoProjectLink(link: InsertDaoProjectLink): Promise<DaoProjectLink> {
+    const [created] = await db.insert(daoProjectLinks).values(link).returning();
+    return created;
+  }
+
+  async deleteDaoProjectLink(id: number): Promise<boolean> {
+    await db.delete(daoProjectLinks).where(eq(daoProjectLinks.id, id));
+    return true;
+  }
+
+  // DAO Permissions
+  async getDaoPermissions(membershipId: number): Promise<DaoPermission[]> {
+    return db.select().from(daoPermissions).where(eq(daoPermissions.membershipId, membershipId));
+  }
+
+  async getDaoPermissionByScope(membershipId: number, scope: string): Promise<DaoPermission | undefined> {
+    const [permission] = await db.select().from(daoPermissions)
+      .where(and(eq(daoPermissions.membershipId, membershipId), eq(daoPermissions.scope, scope)));
+    return permission;
+  }
+
+  async createDaoPermission(permission: InsertDaoPermission): Promise<DaoPermission> {
+    const [created] = await db.insert(daoPermissions).values(permission).returning();
+    return created;
+  }
+
+  async updateDaoPermission(id: number, updates: Partial<InsertDaoPermission>): Promise<DaoPermission | undefined> {
+    const [updated] = await db.update(daoPermissions).set(updates).where(eq(daoPermissions.id, id)).returning();
+    return updated;
+  }
+
+  async hasCouncilPermission(membershipId: number, scope: string): Promise<boolean> {
+    const membership = await this.getDaoMembership(membershipId);
+    if (!membership || !membership.isCouncil) return false;
+    
+    const permission = await this.getDaoPermissionByScope(membershipId, scope);
+    if (!permission) return true; // Council members have access by default
+    
+    return permission.canApprove;
   }
 }
 

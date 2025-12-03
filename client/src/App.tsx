@@ -37,6 +37,9 @@ import HelpPage from "@/pages/help";
 import ClientDirectory from "@/pages/client-directory";
 import InternalTeam from "@/pages/internal-team";
 import TeamStructure from "@/pages/team-structure";
+import DaoDashboard from "@/pages/dao-dashboard";
+import DaoCatalog from "@/pages/dao-catalog";
+import DaoProjectNew from "@/pages/dao-project-new";
 import NotFound from "@/pages/not-found";
 import { Web3WelcomeModal } from "@/components/web3-welcome-modal";
 import { WelcomeModal } from "@/components/welcome-modal";
@@ -184,6 +187,20 @@ function AuthenticatedRouter() {
       {/* Client Directory - accessible to all team members */}
       <Route path="/client-directory">
         <ClientDirectory />
+      </Route>
+
+      {/* DAO Routes - accessible to content and admin users */}
+      <Route path="/dao">
+        <ContentRouteGuard><DaoDashboard /></ContentRouteGuard>
+      </Route>
+      <Route path="/dao/dashboard">
+        <ContentRouteGuard><DaoDashboard /></ContentRouteGuard>
+      </Route>
+      <Route path="/dao/catalog">
+        <ContentRouteGuard><DaoCatalog /></ContentRouteGuard>
+      </Route>
+      <Route path="/dao/projects/new">
+        <ContentRouteGuard><DaoProjectNew /></ContentRouteGuard>
       </Route>
 
       {/* Admin Routes */}

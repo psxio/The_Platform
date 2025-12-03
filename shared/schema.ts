@@ -2122,3 +2122,337 @@ export const insertWhiteboardCollaboratorSchema = createInsertSchema(whiteboardC
 
 export type InsertWhiteboardCollaborator = z.infer<typeof insertWhiteboardCollaboratorSchema>;
 export type WhiteboardCollaborator = typeof whiteboardCollaborators.$inferSelect;
+
+// ==================== DAO MANAGEMENT SYSTEM ====================
+
+// DAO Roles (6 tiers: Contributor → Senior Partner)
+export const daoRoles = pgTable("dao_roles", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 50 }).notNull().unique(),
+  tier: integer("tier").notNull(), // 1-6
+  multiplier: real("multiplier").notNull().default(1.0), // Performance multiplier for bonuses
+  cumulativeRevenueRequired: integer("cumulative_revenue_required").notNull().default(0), // USD threshold
+  description: text("description"),
+  isCouncilEligible: boolean("is_council_eligible").default(false), // Only Senior Partners can be council
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertDaoRoleSchema = createInsertSchema(daoRoles).omit({ id: true, createdAt: true });
+export type InsertDaoRole = z.infer<typeof insertDaoRoleSchema>;
+export type DaoRole = typeof daoRoles.$inferSelect;
+
+// DAO Memberships (links users/team members to DAO roles)
+export const daoMemberships = pgTable("dao_memberships", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }),
+  internalTeamMemberId: integer("internal_team_member_id").references(() => internalTeamMembers.id, { onDelete: "cascade" }),
+  daoRoleId: integer("dao_role_id").notNull().references(() => daoRoles.id),
+  isCouncil: boolean("is_council").default(false), // One of the 6 council members
+  cumulativeRevenue: integer("cumulative_revenue").default(0), // Total attributed revenue in cents
+  activeFrom: timestamp("active_from").defaultNow(),
+  activeTo: timestamp("active_to"), // null = still active
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertDaoMembershipSchema = createInsertSchema(daoMemberships).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertDaoMembership = z.infer<typeof insertDaoMembershipSchema>;
+export type DaoMembership = typeof daoMemberships.$inferSelect;
+
+// Service Categories
+export const daoServiceCategories = ["strategy_consulting", "development", "design_ux", "marketing_growth", "retainers"] as const;
+export type DaoServiceCategory = typeof daoServiceCategories[number];
+
+// DAO Service Catalog (all 15+ standardized services)
+export const daoServiceCatalog = pgTable("dao_service_catalog", {
+  id: serial("id").primaryKey(),
+  category: varchar("category", { length: 30 }).$type<DaoServiceCategory>().notNull(),
+  serviceName: varchar("service_name", { length: 100 }).notNull(),
+  description: text("description"),
+  scope: text("scope"), // What's included
+  deliverables: text("deliverables"), // What client receives
+  idealFor: text("ideal_for"), // Target audience
+  pricingTier1Name: varchar("pricing_tier1_name", { length: 50 }), // e.g., "Foundation", "Startup", "Basic"
+  pricingTier1Min: integer("pricing_tier1_min"), // In cents
+  pricingTier1Max: integer("pricing_tier1_max"),
+  pricingTier1Duration: varchar("pricing_tier1_duration", { length: 50 }), // e.g., "2-3 weeks"
+  pricingTier2Name: varchar("pricing_tier2_name", { length: 50 }),
+  pricingTier2Min: integer("pricing_tier2_min"),
+  pricingTier2Max: integer("pricing_tier2_max"),
+  pricingTier2Duration: varchar("pricing_tier2_duration", { length: 50 }),
+  pricingTier3Name: varchar("pricing_tier3_name", { length: 50 }),
+  pricingTier3Min: integer("pricing_tier3_min"),
+  pricingTier3Max: integer("pricing_tier3_max"),
+  pricingTier3Duration: varchar("pricing_tier3_duration", { length: 50 }),
+  isRetainer: boolean("is_retainer").default(false), // Monthly pricing
+  depositPercent: integer("deposit_percent").default(30),
+  midpointPercent: integer("midpoint_percent").default(40),
+  completionPercent: integer("completion_percent").default(30),
+  isActive: boolean("is_active").default(true),
+  sortOrder: integer("sort_order").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertDaoServiceCatalogSchema = createInsertSchema(daoServiceCatalog).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertDaoServiceCatalog = z.infer<typeof insertDaoServiceCatalogSchema>;
+export type DaoServiceCatalog = typeof daoServiceCatalog.$inferSelect;
+
+// DAO Discounts
+export const daoDiscountTypes = ["dao_to_dao", "multi_service_bundle", "long_term_retainer", "referral", "custom"] as const;
+export type DaoDiscountType = typeof daoDiscountTypes[number];
+
+export const daoDiscounts = pgTable("dao_discounts", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 100 }).notNull(),
+  discountType: varchar("discount_type", { length: 30 }).$type<DaoDiscountType>().notNull(),
+  percentOff: integer("percent_off").notNull(), // e.g., 10, 15, 20
+  conditions: text("conditions"), // Requirements to qualify
+  isActive: boolean("is_active").default(true),
+  validFrom: timestamp("valid_from"),
+  validTo: timestamp("valid_to"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertDaoDiscountSchema = createInsertSchema(daoDiscounts).omit({ id: true, createdAt: true });
+export type InsertDaoDiscount = z.infer<typeof insertDaoDiscountSchema>;
+export type DaoDiscount = typeof daoDiscounts.$inferSelect;
+
+// DAO Project Statuses
+export const daoProjectStatuses = ["proposal", "negotiation", "contract_pending", "active", "on_hold", "completed", "cancelled"] as const;
+export type DaoProjectStatus = typeof daoProjectStatuses[number];
+
+// DAO Projects (client engagements)
+export const daoProjects = pgTable("dao_projects", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  description: text("description"),
+  clientProfileId: integer("client_profile_id").references(() => clientProfiles.id, { onDelete: "set null" }),
+  status: varchar("status", { length: 30 }).$type<DaoProjectStatus>().default("proposal"),
+  leadMembershipId: integer("lead_membership_id").references(() => daoMemberships.id), // Team Lead (30%)
+  pmMembershipId: integer("pm_membership_id").references(() => daoMemberships.id), // Project Manager (15%)
+  discountId: integer("discount_id").references(() => daoDiscounts.id, { onDelete: "set null" }),
+  totalQuotedAmount: integer("total_quoted_amount"), // In cents before discount
+  discountAmount: integer("discount_amount").default(0), // Discount applied
+  finalAmount: integer("final_amount"), // Total after discount
+  currency: varchar("currency", { length: 10 }).default("USD"),
+  depositPercent: integer("deposit_percent").default(30),
+  midpointPercent: integer("midpoint_percent").default(40),
+  completionPercent: integer("completion_percent").default(30),
+  kickoffDate: timestamp("kickoff_date"),
+  targetCompletionDate: timestamp("target_completion_date"),
+  actualCompletionDate: timestamp("actual_completion_date"),
+  treasuryContribution: integer("treasury_contribution"), // 15% of final amount
+  notes: text("notes"),
+  createdBy: varchar("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertDaoProjectSchema = createInsertSchema(daoProjects).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertDaoProject = z.infer<typeof insertDaoProjectSchema>;
+export type DaoProject = typeof daoProjects.$inferSelect;
+
+// DAO Project Services (links projects to catalog services)
+export const daoProjectServices = pgTable("dao_project_services", {
+  id: serial("id").primaryKey(),
+  projectId: integer("project_id").notNull().references(() => daoProjects.id, { onDelete: "cascade" }),
+  serviceCatalogId: integer("service_catalog_id").notNull().references(() => daoServiceCatalog.id),
+  selectedTier: integer("selected_tier").default(1), // 1, 2, or 3
+  customPrice: integer("custom_price"), // Override catalog price if negotiated
+  quantity: integer("quantity").default(1),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertDaoProjectServiceSchema = createInsertSchema(daoProjectServices).omit({ id: true, createdAt: true });
+export type InsertDaoProjectService = z.infer<typeof insertDaoProjectServiceSchema>;
+export type DaoProjectService = typeof daoProjectServices.$inferSelect;
+
+// Revenue Attribution Role Slots
+export const attributionRoleSlots = ["lead", "pm", "core", "support", "overhead"] as const;
+export type AttributionRoleSlot = typeof attributionRoleSlots[number];
+
+// DAO Revenue Attributions (per-member revenue allocation)
+export const daoRevenueAttributions = pgTable("dao_revenue_attributions", {
+  id: serial("id").primaryKey(),
+  projectId: integer("project_id").notNull().references(() => daoProjects.id, { onDelete: "cascade" }),
+  membershipId: integer("membership_id").notNull().references(() => daoMemberships.id),
+  roleSlot: varchar("role_slot", { length: 20 }).$type<AttributionRoleSlot>().notNull(),
+  percentAllocation: real("percent_allocation").notNull(), // e.g., 30 for lead, 15 for PM
+  attributedAmount: integer("attributed_amount"), // Calculated from project final amount
+  performanceMultiplier: real("performance_multiplier").default(1.0),
+  notes: text("notes"),
+  isApproved: boolean("is_approved").default(false),
+  approvedBy: varchar("approved_by").references(() => users.id),
+  approvedAt: timestamp("approved_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertDaoRevenueAttributionSchema = createInsertSchema(daoRevenueAttributions).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertDaoRevenueAttribution = z.infer<typeof insertDaoRevenueAttributionSchema>;
+export type DaoRevenueAttribution = typeof daoRevenueAttributions.$inferSelect;
+
+// DAO Project Debriefs
+export const daoDebriefs = pgTable("dao_debriefs", {
+  id: serial("id").primaryKey(),
+  projectId: integer("project_id").notNull().references(() => daoProjects.id, { onDelete: "cascade" }),
+  submittedBy: varchar("submitted_by").notNull().references(() => users.id),
+  whatWentWell: text("what_went_well"),
+  whatCouldImprove: text("what_could_improve"),
+  lessonsLearned: text("lessons_learned"),
+  attributionConfirmed: boolean("attribution_confirmed").default(false),
+  attendees: text("attendees"), // JSON array of membership IDs
+  attachmentUrl: text("attachment_url"),
+  completedAt: timestamp("completed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertDaoDebriefSchema = createInsertSchema(daoDebriefs).omit({ id: true, createdAt: true });
+export type InsertDaoDebrief = z.infer<typeof insertDaoDebriefSchema>;
+export type DaoDebrief = typeof daoDebriefs.$inferSelect;
+
+// DAO Treasury
+export const daoTreasury = pgTable("dao_treasury", {
+  id: serial("id").primaryKey(),
+  balance: integer("balance").notNull().default(0), // Current balance in cents
+  lastBonusTriggerBalance: integer("last_bonus_trigger_balance").default(0),
+  bonusTriggerThreshold: integer("bonus_trigger_threshold").default(10000000), // $100,000 in cents
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export type DaoTreasury = typeof daoTreasury.$inferSelect;
+
+// Treasury Transaction Types
+export const treasuryTxnTypes = ["project_inflow", "bonus_outflow", "adjustment", "expense"] as const;
+export type TreasuryTxnType = typeof treasuryTxnTypes[number];
+
+// DAO Treasury Transactions
+export const daoTreasuryTransactions = pgTable("dao_treasury_transactions", {
+  id: serial("id").primaryKey(),
+  txnType: varchar("txn_type", { length: 30 }).$type<TreasuryTxnType>().notNull(),
+  amount: integer("amount").notNull(), // Positive for inflows, negative for outflows
+  projectId: integer("project_id").references(() => daoProjects.id, { onDelete: "set null" }),
+  bonusRunId: integer("bonus_run_id"), // References bonus runs
+  memo: text("memo"),
+  createdBy: varchar("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertDaoTreasuryTransactionSchema = createInsertSchema(daoTreasuryTransactions).omit({ id: true, createdAt: true });
+export type InsertDaoTreasuryTransaction = z.infer<typeof insertDaoTreasuryTransactionSchema>;
+export type DaoTreasuryTransaction = typeof daoTreasuryTransactions.$inferSelect;
+
+// DAO Bonus Runs (triggered when treasury hits threshold)
+export const daoBonusRuns = pgTable("dao_bonus_runs", {
+  id: serial("id").primaryKey(),
+  treasuryBalanceBefore: integer("treasury_balance_before").notNull(),
+  totalDistributed: integer("total_distributed").notNull(),
+  treasuryBalanceAfter: integer("treasury_balance_after").notNull(),
+  recipientCount: integer("recipient_count").notNull(),
+  triggeredBy: varchar("triggered_by").references(() => users.id),
+  notes: text("notes"),
+  executedAt: timestamp("executed_at").defaultNow(),
+});
+
+export const insertDaoBonusRunSchema = createInsertSchema(daoBonusRuns).omit({ id: true, executedAt: true });
+export type InsertDaoBonusRun = z.infer<typeof insertDaoBonusRunSchema>;
+export type DaoBonusRun = typeof daoBonusRuns.$inferSelect;
+
+// DAO Bonus Run Recipients
+export const daoBonusRunRecipients = pgTable("dao_bonus_run_recipients", {
+  id: serial("id").primaryKey(),
+  bonusRunId: integer("bonus_run_id").notNull().references(() => daoBonusRuns.id, { onDelete: "cascade" }),
+  membershipId: integer("membership_id").notNull().references(() => daoMemberships.id),
+  multiplier: real("multiplier").notNull(),
+  baseShare: integer("base_share").notNull(), // Before multiplier
+  finalAmount: integer("final_amount").notNull(), // After multiplier
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertDaoBonusRunRecipientSchema = createInsertSchema(daoBonusRunRecipients).omit({ id: true, createdAt: true });
+export type InsertDaoBonusRunRecipient = z.infer<typeof insertDaoBonusRunRecipientSchema>;
+export type DaoBonusRunRecipient = typeof daoBonusRunRecipients.$inferSelect;
+
+// Invoice Phases
+export const daoInvoicePhases = ["deposit", "midpoint", "completion", "custom"] as const;
+export type DaoInvoicePhase = typeof daoInvoicePhases[number];
+
+// Invoice Statuses
+export const daoInvoiceStatuses = ["draft", "sent", "paid", "overdue", "cancelled"] as const;
+export type DaoInvoiceStatus = typeof daoInvoiceStatuses[number];
+
+// DAO Invoices
+export const daoInvoices = pgTable("dao_invoices", {
+  id: serial("id").primaryKey(),
+  projectId: integer("project_id").notNull().references(() => daoProjects.id, { onDelete: "cascade" }),
+  invoiceNumber: varchar("invoice_number", { length: 50 }),
+  phase: varchar("phase", { length: 20 }).$type<DaoInvoicePhase>().notNull(),
+  amount: integer("amount").notNull(), // In cents
+  status: varchar("status", { length: 20 }).$type<DaoInvoiceStatus>().default("draft"),
+  dueDate: timestamp("due_date"),
+  sentAt: timestamp("sent_at"),
+  paidAt: timestamp("paid_at"),
+  paymentMethod: varchar("payment_method", { length: 50 }),
+  paymentReference: varchar("payment_reference", { length: 255 }),
+  paymentRequestId: integer("payment_request_id").references(() => paymentRequests.id, { onDelete: "set null" }),
+  notes: text("notes"),
+  createdBy: varchar("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertDaoInvoiceSchema = createInsertSchema(daoInvoices).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertDaoInvoice = z.infer<typeof insertDaoInvoiceSchema>;
+export type DaoInvoice = typeof daoInvoices.$inferSelect;
+
+// DAO Rank Progression (tracks milestone achievements)
+export const daoRankProgressions = pgTable("dao_rank_progressions", {
+  id: serial("id").primaryKey(),
+  membershipId: integer("membership_id").notNull().references(() => daoMemberships.id, { onDelete: "cascade" }),
+  fromRoleId: integer("from_role_id").references(() => daoRoles.id),
+  toRoleId: integer("to_role_id").notNull().references(() => daoRoles.id),
+  cumulativeRevenueAtPromotion: integer("cumulative_revenue_at_promotion").notNull(),
+  promotedAt: timestamp("promoted_at").defaultNow(),
+  approvedBy: varchar("approved_by").references(() => users.id),
+  notes: text("notes"),
+});
+
+export const insertDaoRankProgressionSchema = createInsertSchema(daoRankProgressions).omit({ id: true, promotedAt: true });
+export type InsertDaoRankProgression = z.infer<typeof insertDaoRankProgressionSchema>;
+export type DaoRankProgression = typeof daoRankProgressions.$inferSelect;
+
+// DAO Project Links (connect to content tasks/campaigns)
+export const daoProjectLinks = pgTable("dao_project_links", {
+  id: serial("id").primaryKey(),
+  projectId: integer("project_id").notNull().references(() => daoProjects.id, { onDelete: "cascade" }),
+  contentTaskId: integer("content_task_id").references(() => contentTasks.id, { onDelete: "cascade" }),
+  campaignId: integer("campaign_id").references(() => campaigns.id, { onDelete: "cascade" }),
+  linkType: varchar("link_type", { length: 30 }).default("execution"), // execution, reference
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertDaoProjectLinkSchema = createInsertSchema(daoProjectLinks).omit({ id: true, createdAt: true });
+export type InsertDaoProjectLink = z.infer<typeof insertDaoProjectLinkSchema>;
+export type DaoProjectLink = typeof daoProjectLinks.$inferSelect;
+
+// DAO Council Permissions
+export const daoPermissionScopes = ["treasury", "catalog", "projects", "invoices", "attribution", "bonuses", "memberships"] as const;
+export type DaoPermissionScope = typeof daoPermissionScopes[number];
+
+export const daoPermissions = pgTable("dao_permissions", {
+  id: serial("id").primaryKey(),
+  membershipId: integer("membership_id").notNull().references(() => daoMemberships.id, { onDelete: "cascade" }),
+  scope: varchar("scope", { length: 30 }).$type<DaoPermissionScope>().notNull(),
+  canRead: boolean("can_read").default(true),
+  canWrite: boolean("can_write").default(false),
+  canApprove: boolean("can_approve").default(false),
+  councilOnly: boolean("council_only").default(false), // Requires council membership
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertDaoPermissionSchema = createInsertSchema(daoPermissions).omit({ id: true, createdAt: true });
+export type InsertDaoPermission = z.infer<typeof insertDaoPermissionSchema>;
+export type DaoPermission = typeof daoPermissions.$inferSelect;

@@ -12,14 +12,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  NavigationMenu,
-  NavigationMenuContent,
-  NavigationMenuItem,
-  NavigationMenuLink,
-  NavigationMenuList,
-  NavigationMenuTrigger,
-} from "@/components/ui/navigation-menu";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/hooks/useAuth";
 import { NotificationBell } from "@/components/notification-bell";
@@ -141,162 +133,6 @@ function NavDropdownItem({ item, onClick }: { item: NavItem; onClick?: () => voi
         </div>
       </div>
     </Link>
-  );
-}
-
-function DesktopNav({ 
-  showWeb3, 
-  showContent, 
-  showAdmin,
-  hasActiveSession 
-}: { 
-  showWeb3: boolean; 
-  showContent: boolean; 
-  showAdmin: boolean;
-  hasActiveSession: boolean;
-}) {
-  const [location] = useLocation();
-
-  const isWeb3Active = location.startsWith("/web3");
-  const isContentActive = location.startsWith("/content") || location === "/content-dashboard";
-  const isClientActive = location === "/client-portal";
-  const isAdminActive = location.startsWith("/admin");
-
-  return (
-    <NavigationMenu className="hidden md:flex">
-      <NavigationMenuList className="gap-1">
-        {showWeb3 && (
-          <NavigationMenuItem>
-            <NavigationMenuTrigger 
-              className={cn(
-                "gap-2",
-                isWeb3Active && "bg-accent"
-              )}
-              data-testid="nav-web3-trigger"
-            >
-              <Wallet className="h-4 w-4" />
-              Onchain Tools
-            </NavigationMenuTrigger>
-            <NavigationMenuContent>
-              <div className="grid w-[400px] gap-1 p-2 md:w-[500px] md:grid-cols-2">
-                {web3Items.map((item) => (
-                  <NavigationMenuLink key={item.href} asChild>
-                    <NavDropdownItem item={item} />
-                  </NavigationMenuLink>
-                ))}
-              </div>
-            </NavigationMenuContent>
-          </NavigationMenuItem>
-        )}
-
-        {showContent && (
-          <NavigationMenuItem>
-            <NavigationMenuTrigger 
-              className={cn(
-                "gap-2",
-                isContentActive && "bg-accent"
-              )}
-              data-testid="nav-content-trigger"
-            >
-              <ClipboardList className="h-4 w-4" />
-              Content Studio
-              {hasActiveSession && (
-                <span className="ml-1 h-2 w-2 rounded-full bg-green-500 animate-pulse" />
-              )}
-            </NavigationMenuTrigger>
-            <NavigationMenuContent>
-              <div className="grid w-[300px] gap-1 p-2">
-                {contentItems.map((item) => (
-                  <NavigationMenuLink key={item.href} asChild>
-                    <NavDropdownItem item={item} />
-                  </NavigationMenuLink>
-                ))}
-              </div>
-            </NavigationMenuContent>
-          </NavigationMenuItem>
-        )}
-
-        {showContent && (
-          <NavigationMenuItem>
-            <Link href="/client-portal">
-              <Button
-                variant={isClientActive ? "secondary" : "ghost"}
-                size="sm"
-                className="gap-2"
-                data-testid="nav-client-portal"
-              >
-                <CreditCard className="h-4 w-4" />
-                Client Portal
-              </Button>
-            </Link>
-          </NavigationMenuItem>
-        )}
-
-        {/* Client Directory - visible to all authenticated users */}
-        <NavigationMenuItem>
-          <Link href="/client-directory">
-            <Button 
-              variant={location === "/client-directory" ? "secondary" : "ghost"}
-              size="sm"
-              className="gap-2"
-              data-testid="nav-client-directory"
-            >
-              <Building2 className="h-4 w-4" />
-              Clients
-            </Button>
-          </Link>
-        </NavigationMenuItem>
-
-        {/* DAO Management - visible to content and admin users */}
-        {showContent && (
-          <NavigationMenuItem>
-            <NavigationMenuTrigger 
-              className={cn(
-                "gap-2",
-                location.startsWith("/dao") && "bg-accent"
-              )}
-              data-testid="nav-dao-trigger"
-            >
-              <Crown className="h-4 w-4" />
-              DAO
-            </NavigationMenuTrigger>
-            <NavigationMenuContent>
-              <div className="grid w-[300px] gap-1 p-2">
-                {daoItems.map((item) => (
-                  <NavigationMenuLink key={item.href} asChild>
-                    <NavDropdownItem item={item} />
-                  </NavigationMenuLink>
-                ))}
-              </div>
-            </NavigationMenuContent>
-          </NavigationMenuItem>
-        )}
-
-        {showAdmin && (
-          <NavigationMenuItem>
-            <NavigationMenuTrigger 
-              className={cn(
-                "gap-2",
-                isAdminActive && "bg-accent"
-              )}
-              data-testid="nav-admin-trigger"
-            >
-              <Shield className="h-4 w-4" />
-              Admin
-            </NavigationMenuTrigger>
-            <NavigationMenuContent>
-              <div className="grid w-[400px] gap-1 p-2 md:w-[550px] md:grid-cols-2 lg:w-[600px] lg:grid-cols-3">
-                {adminItems.map((item) => (
-                  <NavigationMenuLink key={item.href} asChild>
-                    <NavDropdownItem item={item} />
-                  </NavigationMenuLink>
-                ))}
-              </div>
-            </NavigationMenuContent>
-          </NavigationMenuItem>
-        )}
-      </NavigationMenuList>
-    </NavigationMenu>
   );
 }
 
@@ -584,13 +420,6 @@ export function MainNav() {
         </div>
 
         <SpaceTabs />
-
-        <DesktopNav
-          showWeb3={showWeb3}
-          showContent={showContent}
-          showAdmin={showAdmin}
-          hasActiveSession={hasActiveSession}
-        />
 
         <div className="flex-1" />
 

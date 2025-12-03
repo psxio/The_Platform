@@ -26,6 +26,7 @@ import { NotificationBell } from "@/components/notification-bell";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { SavedItemsPanel } from "@/components/saved-items";
 import { SpaceSwitcher, SpaceTabs } from "@/components/space-switcher";
+import { SpotlightSearch } from "@/components/spotlight-search";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import {
   Menu,
@@ -594,6 +595,9 @@ export function MainNav() {
         <div className="flex-1" />
 
         <div className="flex items-center gap-2">
+          <div className="hidden md:block">
+            <SpotlightSearch />
+          </div>
           <div className="hidden md:block">
             <SavedItemsPanel />
           </div>

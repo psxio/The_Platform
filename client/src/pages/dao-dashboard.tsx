@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Skeleton } from "@/components/ui/skeleton";
 import { 
   Wallet, 
   TrendingUp, 
@@ -15,6 +16,7 @@ import {
   FileText, 
   Plus, 
   ArrowUpRight, 
+  ArrowRight,
   Clock, 
   DollarSign,
   Building2,
@@ -27,7 +29,12 @@ import {
   Settings,
   BarChart3,
   Vault,
-  Scale
+  Scale,
+  AlertTriangle,
+  Zap,
+  Hand,
+  CheckCircle2,
+  LightbulbIcon
 } from "lucide-react";
 import { Link } from "wouter";
 import { DaoSafeWallets } from "@/components/dao-safe-wallets";
@@ -82,6 +89,40 @@ type DaoTreasury = {
 type ServiceCategory = {
   category: string;
   count: number;
+};
+
+type DaoProjectOpportunity = {
+  id: number;
+  title: string;
+  description: string | null;
+  estimatedValue: number | null;
+  requiredServices: string[] | null;
+  rolesNeeded: string[] | null;
+  priority: string;
+  status: string;
+  bidDeadline: string | null;
+  expectedStartDate: string | null;
+};
+
+type DaoConsistencyMetrics = {
+  membershipId: number;
+  leadRoleCount: number | null;
+  pmRoleCount: number | null;
+  coreRoleCount: number | null;
+  supportRoleCount: number | null;
+  overallReliabilityScore: number | null;
+};
+
+type FairnessSummary = {
+  openOpportunities: DaoProjectOpportunity[];
+  workloadImbalances: { memberId: number; memberName: string; totalRoles: number; isOverloaded: boolean }[];
+  memberStanding: {
+    membership: DaoMembership;
+    currentRole: DaoRole;
+    nextRole: DaoRole | null;
+    progressToNext: number;
+    revenueToNext: number;
+  } | null;
 };
 
 function formatCurrency(cents: number): string {
@@ -143,6 +184,18 @@ export default function DaoDashboard() {
     queryKey: ["/api/dao/catalog"],
   });
 
+  const { data: opportunities } = useQuery<DaoProjectOpportunity[]>({
+    queryKey: ["/api/dao/project-opportunities"],
+  });
+
+  const { data: myMembership } = useQuery<DaoMembership>({
+    queryKey: ["/api/dao/memberships/me"],
+  });
+
+  const { data: consistencyMetrics } = useQuery<DaoConsistencyMetrics[]>({
+    queryKey: ["/api/dao/consistency-metrics"],
+  });
+
   const activeProjects = projects?.filter(p => p.status === "active") || [];
   const pendingInvoices = invoices?.filter(i => i.status === "pending" || i.status === "sent") || [];
   const councilMembers = memberships?.filter(m => m.isCouncilMember) || [];
@@ -159,6 +212,36 @@ export default function DaoDashboard() {
         }, {} as Record<string, number>)
       ).map(([category, count]) => ({ category, count: count as number }))
     : [];
+
+  const openOpportunities = opportunities?.filter(o => o.status === "open" || o.status === "accepting_bids") || [];
+  
+  const workloadByMember = consistencyMetrics?.reduce((acc, m) => {
+    const total = (m.leadRoleCount || 0) + (m.pmRoleCount || 0) + (m.coreRoleCount || 0) + (m.supportRoleCount || 0);
+    acc[m.membershipId] = total;
+    return acc;
+  }, {} as Record<number, number>) || {};
+
+  const workloadImbalances = memberships?.map(m => {
+    const total = workloadByMember[m.id] || 0;
+    const memberName = m.user?.username || `Member ${m.id}`;
+    return {
+      memberId: m.id,
+      memberName,
+      totalRoles: total,
+      isOverloaded: total > 5,
+      isUnderutilized: total === 0
+    };
+  }).filter(w => w.isOverloaded || w.isUnderutilized) || [];
+
+  const myCurrentRole = myMembership?.role || null;
+  const myCurrentRevenue = myMembership?.cumulativeRevenue || 0;
+  const sortedRoles = roles?.slice().sort((a, b) => a.tier - b.tier) || [];
+  const nextRoleIndex = sortedRoles.findIndex(r => r.cumulativeRevenueRequired > myCurrentRevenue);
+  const nextRole = nextRoleIndex >= 0 ? sortedRoles[nextRoleIndex] : null;
+  const progressToNext = nextRole 
+    ? Math.min(100, (myCurrentRevenue / nextRole.cumulativeRevenueRequired) * 100)
+    : 100;
+  const revenueToNext = nextRole ? nextRole.cumulativeRevenueRequired - myCurrentRevenue : 0;
 
   return (
     <div className="container mx-auto py-6 px-4 max-w-7xl">
@@ -286,12 +369,166 @@ export default function DaoDashboard() {
           </TabsList>
 
           <TabsContent value="overview" className="mt-6">
-            <div className="grid gap-6 md:grid-cols-2">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">Recent Projects</CardTitle>
-                  <CardDescription>Latest project activity</CardDescription>
-                </CardHeader>
+            <div className="space-y-6">
+              {(openOpportunities.length > 0 || workloadImbalances.length > 0 || myMembership) && (
+                <div className="grid gap-4 md:grid-cols-3">
+                  <Card className="border-l-4 border-l-blue-500" data-testid="card-opportunities">
+                    <CardHeader className="pb-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <CardTitle className="text-sm font-medium flex items-center gap-2">
+                          <Hand className="h-4 w-4 text-blue-500" />
+                          Open Opportunities
+                        </CardTitle>
+                        <Badge variant="secondary">{openOpportunities.length}</Badge>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      {openOpportunities.length > 0 ? (
+                        <div className="space-y-2">
+                          {openOpportunities.slice(0, 3).map((opp) => (
+                            <div
+                              key={opp.id}
+                              className="flex items-center justify-between gap-2 p-2 rounded-md bg-muted/50"
+                              data-testid={`opportunity-${opp.id}`}
+                            >
+                              <div className="min-w-0 flex-1">
+                                <p className="text-sm font-medium truncate">{opp.title}</p>
+                                {opp.estimatedValue && (
+                                  <p className="text-xs text-muted-foreground">
+                                    {formatCurrency(opp.estimatedValue)}
+                                  </p>
+                                )}
+                              </div>
+                              <Badge 
+                                variant={opp.priority === "high" ? "destructive" : "outline"} 
+                                className="shrink-0"
+                              >
+                                {opp.priority}
+                              </Badge>
+                            </div>
+                          ))}
+                          {openOpportunities.length > 3 && (
+                            <Button variant="ghost" size="sm" className="w-full mt-1" onClick={() => setActiveTab("fairness")}>
+                              View all {openOpportunities.length} opportunities
+                              <ArrowRight className="h-3 w-3 ml-1" />
+                            </Button>
+                          )}
+                        </div>
+                      ) : (
+                        <p className="text-sm text-muted-foreground text-center py-2">
+                          No open opportunities
+                        </p>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  <Card className={`border-l-4 ${workloadImbalances.length > 0 ? 'border-l-yellow-500' : 'border-l-green-500'}`} data-testid="card-workload-alerts">
+                    <CardHeader className="pb-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <CardTitle className="text-sm font-medium flex items-center gap-2">
+                          {workloadImbalances.length > 0 ? (
+                            <AlertTriangle className="h-4 w-4 text-yellow-500" />
+                          ) : (
+                            <CheckCircle2 className="h-4 w-4 text-green-500" />
+                          )}
+                          Workload Balance
+                        </CardTitle>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      {workloadImbalances.length > 0 ? (
+                        <div className="space-y-2">
+                          {workloadImbalances.slice(0, 3).map((w) => (
+                            <div
+                              key={w.memberId}
+                              className="flex items-center justify-between gap-2 p-2 rounded-md bg-muted/50"
+                              data-testid={`workload-${w.memberId}`}
+                            >
+                              <span className="text-sm truncate">{w.memberName}</span>
+                              <Badge variant={w.isOverloaded ? "destructive" : "secondary"}>
+                                {w.isOverloaded ? "Overloaded" : "Available"}
+                              </Badge>
+                            </div>
+                          ))}
+                          <Button variant="ghost" size="sm" className="w-full mt-1" onClick={() => setActiveTab("fairness")}>
+                            View fairness dashboard
+                            <ArrowRight className="h-3 w-3 ml-1" />
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="text-center py-2">
+                          <CheckCircle2 className="h-8 w-8 text-green-500 mx-auto mb-2" />
+                          <p className="text-sm text-muted-foreground">
+                            Workloads are balanced
+                          </p>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+
+                  <Card className="border-l-4 border-l-purple-500" data-testid="card-member-standing">
+                    <CardHeader className="pb-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <CardTitle className="text-sm font-medium flex items-center gap-2">
+                          <TrendingUp className="h-4 w-4 text-purple-500" />
+                          Your Standing
+                        </CardTitle>
+                        {myCurrentRole && (
+                          <div className="flex items-center gap-1">
+                            {getRoleIcon(myCurrentRole.tier)}
+                            <span className="text-xs font-medium">{myCurrentRole.name}</span>
+                          </div>
+                        )}
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      {myMembership ? (
+                        <div className="space-y-3">
+                          <div>
+                            <div className="flex justify-between text-xs text-muted-foreground mb-1">
+                              <span>Revenue earned</span>
+                              <span>{formatCurrency(myCurrentRevenue)}</span>
+                            </div>
+                            {nextRole ? (
+                              <>
+                                <Progress value={progressToNext} className="h-2" />
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  {formatCurrency(revenueToNext)} to {nextRole.name} ({nextRole.multiplier}x)
+                                </p>
+                              </>
+                            ) : (
+                              <div className="flex items-center gap-2 text-sm">
+                                <Crown className="h-4 w-4 text-yellow-500" />
+                                <span>Maximum rank achieved!</span>
+                              </div>
+                            )}
+                          </div>
+                          {myMembership.isCouncilMember && (
+                            <Badge className="bg-yellow-500/10 text-yellow-600 border-yellow-500/20">
+                              <Crown className="h-3 w-3 mr-1" />
+                              Council Member
+                            </Badge>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="text-center py-2">
+                          <Users className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                          <p className="text-sm text-muted-foreground">
+                            Not a DAO member yet
+                          </p>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
+
+              <div className="grid gap-6 md:grid-cols-2">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="text-lg">Recent Projects</CardTitle>
+                    <CardDescription>Latest project activity</CardDescription>
+                  </CardHeader>
                 <CardContent>
                   <ScrollArea className="h-[300px]">
                     {projects && projects.length > 0 ? (
@@ -423,6 +660,7 @@ export default function DaoDashboard() {
                   </div>
                 </CardContent>
               </Card>
+            </div>
             </div>
           </TabsContent>
 

@@ -58,8 +58,8 @@ const spaces: Space[] = [
     name: "Onchain Ops",
     icon: Wallet,
     description: "Web3 tools and wallets",
-    homeRoute: "/web3/compare",
-    pathPrefix: ["/web3"],
+    homeRoute: "/onchain-ops",
+    pathPrefix: ["/web3", "/onchain"],
     roles: ["web3", "admin"],
   },
   {

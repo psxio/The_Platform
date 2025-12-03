@@ -42,6 +42,7 @@ import DaoCatalog from "@/pages/dao-catalog";
 import DaoProjectNew from "@/pages/dao-project-new";
 import AdminControlCenter from "@/pages/admin-control-center";
 import Workspace from "@/pages/workspace";
+import OnchainOps from "@/pages/onchain-ops";
 import NotFound from "@/pages/not-found";
 import { Web3WelcomeModal } from "@/components/web3-welcome-modal";
 import { WelcomeModal } from "@/components/welcome-modal";
@@ -52,7 +53,7 @@ function getDefaultRoute(role: string | null | undefined): string {
     case "content":
       return "/content-dashboard";
     case "web3":
-      return "/web3/compare";
+      return "/onchain-ops";
     case "admin":
       return "/content-dashboard";
     default:
@@ -140,6 +141,11 @@ function AuthenticatedRouter() {
       </Route>
       <Route path="/web3">
         <Web3RouteGuard><Home /></Web3RouteGuard>
+      </Route>
+      
+      {/* Onchain Ops Home */}
+      <Route path="/onchain-ops">
+        <Web3RouteGuard><OnchainOps /></Web3RouteGuard>
       </Route>
 
       {/* Legacy Web3 routes - redirect to new paths */}

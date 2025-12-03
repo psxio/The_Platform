@@ -131,6 +131,16 @@ import {
   type DaoSafeWallet, type InsertDaoSafeWallet, daoSafeWallets,
   type DaoSafeBalance, type InsertDaoSafeBalance, daoSafeBalances,
   type DaoSafePendingTx, type InsertDaoSafePendingTx, daoSafePendingTxs,
+  // DAO Enhanced Fairness & Assignment
+  type DaoMemberSkill, type InsertDaoMemberSkill, daoMemberSkills,
+  type DaoMemberAvailability, type InsertDaoMemberAvailability, daoMemberAvailability,
+  type DaoConsistencyMetrics, type InsertDaoConsistencyMetrics, daoConsistencyMetrics,
+  type DaoPeerFeedback, type InsertDaoPeerFeedback, daoPeerFeedback,
+  type DaoProjectOpportunity, type InsertDaoProjectOpportunity, daoProjectOpportunities,
+  type DaoRoleBid, type InsertDaoRoleBid, daoRoleBids,
+  type DaoInboundDeal, type InsertDaoInboundDeal, daoInboundDeals,
+  type DaoIpContribution, type InsertDaoIpContribution, daoIpContributions,
+  type DaoRoleAssignmentHistory, type InsertDaoRoleAssignmentHistory, daoRoleAssignmentHistory,
 } from "@shared/schema";
 import { db } from "./db";
 import { desc, eq, and, sql, or, isNull } from "drizzle-orm";
@@ -809,6 +819,60 @@ export interface IStorage {
   getDaoSafePendingTxs(walletId?: number): Promise<DaoSafePendingTx[]>;
   upsertDaoSafePendingTx(tx: InsertDaoSafePendingTx): Promise<DaoSafePendingTx>;
   deleteDaoSafePendingTx(id: number): Promise<boolean>;
+
+  // DAO Member Skills
+  getDaoMemberSkills(membershipId?: number): Promise<DaoMemberSkill[]>;
+  getDaoMemberSkill(id: number): Promise<DaoMemberSkill | undefined>;
+  createDaoMemberSkill(skill: InsertDaoMemberSkill): Promise<DaoMemberSkill>;
+  updateDaoMemberSkill(id: number, updates: Partial<InsertDaoMemberSkill>): Promise<DaoMemberSkill | undefined>;
+  deleteDaoMemberSkill(id: number): Promise<boolean>;
+
+  // DAO Member Availability
+  getDaoMemberAvailability(membershipId: number): Promise<DaoMemberAvailability | undefined>;
+  upsertDaoMemberAvailability(availability: InsertDaoMemberAvailability): Promise<DaoMemberAvailability>;
+  getAllMemberAvailability(): Promise<DaoMemberAvailability[]>;
+
+  // DAO Consistency Metrics
+  getDaoConsistencyMetrics(membershipId: number): Promise<DaoConsistencyMetrics | undefined>;
+  upsertDaoConsistencyMetrics(metrics: InsertDaoConsistencyMetrics): Promise<DaoConsistencyMetrics>;
+  getAllConsistencyMetrics(): Promise<DaoConsistencyMetrics[]>;
+  updateConsistencyFromProject(projectId: number): Promise<void>;
+
+  // DAO Peer Feedback
+  getDaoPeerFeedback(debriefId: number): Promise<DaoPeerFeedback[]>;
+  createDaoPeerFeedback(feedback: InsertDaoPeerFeedback): Promise<DaoPeerFeedback>;
+  getFeedbackForMember(membershipId: number): Promise<DaoPeerFeedback[]>;
+
+  // DAO Project Opportunities
+  getDaoProjectOpportunities(status?: string): Promise<DaoProjectOpportunity[]>;
+  getDaoProjectOpportunity(id: number): Promise<DaoProjectOpportunity | undefined>;
+  createDaoProjectOpportunity(opportunity: InsertDaoProjectOpportunity): Promise<DaoProjectOpportunity>;
+  updateDaoProjectOpportunity(id: number, updates: Partial<InsertDaoProjectOpportunity>): Promise<DaoProjectOpportunity | undefined>;
+
+  // DAO Role Bids
+  getDaoRoleBids(opportunityId?: number): Promise<DaoRoleBid[]>;
+  getDaoRoleBid(id: number): Promise<DaoRoleBid | undefined>;
+  createDaoRoleBid(bid: InsertDaoRoleBid): Promise<DaoRoleBid>;
+  updateDaoRoleBid(id: number, updates: Partial<InsertDaoRoleBid>): Promise<DaoRoleBid | undefined>;
+  getMemberRoleBids(membershipId: number): Promise<DaoRoleBid[]>;
+
+  // DAO Inbound Deals
+  getDaoInboundDeals(status?: string): Promise<DaoInboundDeal[]>;
+  getDaoInboundDeal(id: number): Promise<DaoInboundDeal | undefined>;
+  createDaoInboundDeal(deal: InsertDaoInboundDeal): Promise<DaoInboundDeal>;
+  updateDaoInboundDeal(id: number, updates: Partial<InsertDaoInboundDeal>): Promise<DaoInboundDeal | undefined>;
+  getDealsByMember(membershipId: number): Promise<DaoInboundDeal[]>;
+
+  // DAO IP Contributions
+  getDaoIpContributions(membershipId?: number): Promise<DaoIpContribution[]>;
+  getDaoIpContribution(id: number): Promise<DaoIpContribution | undefined>;
+  createDaoIpContribution(contribution: InsertDaoIpContribution): Promise<DaoIpContribution>;
+  updateDaoIpContribution(id: number, updates: Partial<InsertDaoIpContribution>): Promise<DaoIpContribution | undefined>;
+
+  // DAO Role Assignment History
+  getDaoRoleAssignmentHistory(projectId?: number): Promise<DaoRoleAssignmentHistory[]>;
+  createDaoRoleAssignmentHistory(history: InsertDaoRoleAssignmentHistory): Promise<DaoRoleAssignmentHistory>;
+  getMemberAssignmentHistory(membershipId: number): Promise<DaoRoleAssignmentHistory[]>;
 }
 
 export class DbStorage implements IStorage {
@@ -5408,6 +5472,313 @@ export class DbStorage implements IStorage {
   async deleteDaoSafePendingTx(id: number): Promise<boolean> {
     await db.delete(daoSafePendingTxs).where(eq(daoSafePendingTxs.id, id));
     return true;
+  }
+
+  // DAO Member Skills
+  async getDaoMemberSkills(membershipId?: number): Promise<DaoMemberSkill[]> {
+    if (membershipId) {
+      return db.select().from(daoMemberSkills)
+        .where(eq(daoMemberSkills.membershipId, membershipId))
+        .orderBy(daoMemberSkills.serviceCategory);
+    }
+    return db.select().from(daoMemberSkills).orderBy(daoMemberSkills.serviceCategory);
+  }
+
+  async getDaoMemberSkill(id: number): Promise<DaoMemberSkill | undefined> {
+    const [skill] = await db.select().from(daoMemberSkills).where(eq(daoMemberSkills.id, id));
+    return skill;
+  }
+
+  async createDaoMemberSkill(skill: InsertDaoMemberSkill): Promise<DaoMemberSkill> {
+    const [created] = await db.insert(daoMemberSkills).values(skill).returning();
+    return created;
+  }
+
+  async updateDaoMemberSkill(id: number, updates: Partial<InsertDaoMemberSkill>): Promise<DaoMemberSkill | undefined> {
+    const [updated] = await db.update(daoMemberSkills)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(daoMemberSkills.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteDaoMemberSkill(id: number): Promise<boolean> {
+    await db.delete(daoMemberSkills).where(eq(daoMemberSkills.id, id));
+    return true;
+  }
+
+  // DAO Member Availability
+  async getDaoMemberAvailability(membershipId: number): Promise<DaoMemberAvailability | undefined> {
+    const [availability] = await db.select().from(daoMemberAvailability)
+      .where(eq(daoMemberAvailability.membershipId, membershipId));
+    return availability;
+  }
+
+  async upsertDaoMemberAvailability(availability: InsertDaoMemberAvailability): Promise<DaoMemberAvailability> {
+    const [existing] = await db.select().from(daoMemberAvailability)
+      .where(eq(daoMemberAvailability.membershipId, availability.membershipId));
+    
+    if (existing) {
+      const [updated] = await db.update(daoMemberAvailability)
+        .set({ ...availability, updatedAt: new Date() })
+        .where(eq(daoMemberAvailability.id, existing.id))
+        .returning();
+      return updated;
+    }
+    
+    const [created] = await db.insert(daoMemberAvailability).values(availability).returning();
+    return created;
+  }
+
+  async getAllMemberAvailability(): Promise<DaoMemberAvailability[]> {
+    return db.select().from(daoMemberAvailability);
+  }
+
+  // DAO Consistency Metrics
+  async getDaoConsistencyMetrics(membershipId: number): Promise<DaoConsistencyMetrics | undefined> {
+    const [metrics] = await db.select().from(daoConsistencyMetrics)
+      .where(eq(daoConsistencyMetrics.membershipId, membershipId));
+    return metrics;
+  }
+
+  async upsertDaoConsistencyMetrics(metrics: InsertDaoConsistencyMetrics): Promise<DaoConsistencyMetrics> {
+    const [existing] = await db.select().from(daoConsistencyMetrics)
+      .where(eq(daoConsistencyMetrics.membershipId, metrics.membershipId));
+    
+    if (existing) {
+      const [updated] = await db.update(daoConsistencyMetrics)
+        .set({ ...metrics, lastUpdatedAt: new Date() })
+        .where(eq(daoConsistencyMetrics.id, existing.id))
+        .returning();
+      return updated;
+    }
+    
+    const [created] = await db.insert(daoConsistencyMetrics).values(metrics).returning();
+    return created;
+  }
+
+  async getAllConsistencyMetrics(): Promise<DaoConsistencyMetrics[]> {
+    return db.select().from(daoConsistencyMetrics);
+  }
+
+  async updateConsistencyFromProject(projectId: number): Promise<void> {
+    // Get all attributions for this project
+    const attributions = await db.select().from(daoRevenueAttributions)
+      .where(eq(daoRevenueAttributions.projectId, projectId));
+    
+    // Update metrics for each member
+    for (const attr of attributions) {
+      let existingMetrics = await this.getDaoConsistencyMetrics(attr.membershipId);
+      
+      if (!existingMetrics) {
+        existingMetrics = await this.upsertDaoConsistencyMetrics({
+          membershipId: attr.membershipId,
+        });
+      }
+      
+      // Increment role counts based on roleSlot
+      const updates: Partial<InsertDaoConsistencyMetrics> = {
+        totalProjectsCompleted: (existingMetrics.totalProjectsCompleted || 0) + 1,
+      };
+      
+      if (attr.roleSlot === "lead") {
+        updates.leadRoleCount = (existingMetrics.leadRoleCount || 0) + 1;
+      } else if (attr.roleSlot === "pm") {
+        updates.pmRoleCount = (existingMetrics.pmRoleCount || 0) + 1;
+      } else if (attr.roleSlot === "core") {
+        updates.coreRoleCount = (existingMetrics.coreRoleCount || 0) + 1;
+      } else if (attr.roleSlot === "support") {
+        updates.supportRoleCount = (existingMetrics.supportRoleCount || 0) + 1;
+      }
+      
+      await db.update(daoConsistencyMetrics)
+        .set({ ...updates, lastUpdatedAt: new Date() })
+        .where(eq(daoConsistencyMetrics.membershipId, attr.membershipId));
+    }
+  }
+
+  // DAO Peer Feedback
+  async getDaoPeerFeedback(debriefId: number): Promise<DaoPeerFeedback[]> {
+    return db.select().from(daoPeerFeedback).where(eq(daoPeerFeedback.debriefId, debriefId));
+  }
+
+  async createDaoPeerFeedback(feedback: InsertDaoPeerFeedback): Promise<DaoPeerFeedback> {
+    const [created] = await db.insert(daoPeerFeedback).values(feedback).returning();
+    
+    // Update consistency metrics for the recipient
+    const allFeedback = await this.getFeedbackForMember(feedback.toMembershipId);
+    if (allFeedback.length > 0) {
+      const avgCollab = allFeedback.reduce((sum, f) => sum + (f.collaborationRating || 0), 0) / allFeedback.length;
+      const avgQuality = allFeedback.reduce((sum, f) => sum + (f.qualityRating || 0), 0) / allFeedback.length;
+      const avgReliability = allFeedback.reduce((sum, f) => sum + (f.reliabilityRating || 0), 0) / allFeedback.length;
+      const avgOverall = allFeedback.reduce((sum, f) => sum + (f.overallRating || 0), 0) / allFeedback.length;
+      
+      await this.upsertDaoConsistencyMetrics({
+        membershipId: feedback.toMembershipId,
+        collaborationScore: avgCollab,
+        qualityScore: avgQuality,
+        responsibilityScore: avgReliability,
+        avgPeerRating: avgOverall,
+        totalPeerRatings: allFeedback.length,
+        overallReliabilityScore: (avgCollab + avgQuality + avgReliability) / 3,
+      });
+    }
+    
+    return created;
+  }
+
+  async getFeedbackForMember(membershipId: number): Promise<DaoPeerFeedback[]> {
+    return db.select().from(daoPeerFeedback).where(eq(daoPeerFeedback.toMembershipId, membershipId));
+  }
+
+  // DAO Project Opportunities
+  async getDaoProjectOpportunities(status?: string): Promise<DaoProjectOpportunity[]> {
+    if (status) {
+      return db.select().from(daoProjectOpportunities)
+        .where(eq(daoProjectOpportunities.status, status as any))
+        .orderBy(desc(daoProjectOpportunities.createdAt));
+    }
+    return db.select().from(daoProjectOpportunities).orderBy(desc(daoProjectOpportunities.createdAt));
+  }
+
+  async getDaoProjectOpportunity(id: number): Promise<DaoProjectOpportunity | undefined> {
+    const [opportunity] = await db.select().from(daoProjectOpportunities)
+      .where(eq(daoProjectOpportunities.id, id));
+    return opportunity;
+  }
+
+  async createDaoProjectOpportunity(opportunity: InsertDaoProjectOpportunity): Promise<DaoProjectOpportunity> {
+    const [created] = await db.insert(daoProjectOpportunities).values(opportunity).returning();
+    return created;
+  }
+
+  async updateDaoProjectOpportunity(id: number, updates: Partial<InsertDaoProjectOpportunity>): Promise<DaoProjectOpportunity | undefined> {
+    const [updated] = await db.update(daoProjectOpportunities)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(daoProjectOpportunities.id, id))
+      .returning();
+    return updated;
+  }
+
+  // DAO Role Bids
+  async getDaoRoleBids(opportunityId?: number): Promise<DaoRoleBid[]> {
+    if (opportunityId) {
+      return db.select().from(daoRoleBids)
+        .where(eq(daoRoleBids.opportunityId, opportunityId))
+        .orderBy(desc(daoRoleBids.createdAt));
+    }
+    return db.select().from(daoRoleBids).orderBy(desc(daoRoleBids.createdAt));
+  }
+
+  async getDaoRoleBid(id: number): Promise<DaoRoleBid | undefined> {
+    const [bid] = await db.select().from(daoRoleBids).where(eq(daoRoleBids.id, id));
+    return bid;
+  }
+
+  async createDaoRoleBid(bid: InsertDaoRoleBid): Promise<DaoRoleBid> {
+    const [created] = await db.insert(daoRoleBids).values(bid).returning();
+    return created;
+  }
+
+  async updateDaoRoleBid(id: number, updates: Partial<InsertDaoRoleBid>): Promise<DaoRoleBid | undefined> {
+    const [updated] = await db.update(daoRoleBids)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(daoRoleBids.id, id))
+      .returning();
+    return updated;
+  }
+
+  async getMemberRoleBids(membershipId: number): Promise<DaoRoleBid[]> {
+    return db.select().from(daoRoleBids)
+      .where(eq(daoRoleBids.membershipId, membershipId))
+      .orderBy(desc(daoRoleBids.createdAt));
+  }
+
+  // DAO Inbound Deals
+  async getDaoInboundDeals(status?: string): Promise<DaoInboundDeal[]> {
+    if (status) {
+      return db.select().from(daoInboundDeals)
+        .where(eq(daoInboundDeals.status, status as any))
+        .orderBy(desc(daoInboundDeals.createdAt));
+    }
+    return db.select().from(daoInboundDeals).orderBy(desc(daoInboundDeals.createdAt));
+  }
+
+  async getDaoInboundDeal(id: number): Promise<DaoInboundDeal | undefined> {
+    const [deal] = await db.select().from(daoInboundDeals).where(eq(daoInboundDeals.id, id));
+    return deal;
+  }
+
+  async createDaoInboundDeal(deal: InsertDaoInboundDeal): Promise<DaoInboundDeal> {
+    const [created] = await db.insert(daoInboundDeals).values(deal).returning();
+    return created;
+  }
+
+  async updateDaoInboundDeal(id: number, updates: Partial<InsertDaoInboundDeal>): Promise<DaoInboundDeal | undefined> {
+    const [updated] = await db.update(daoInboundDeals)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(daoInboundDeals.id, id))
+      .returning();
+    return updated;
+  }
+
+  async getDealsByMember(membershipId: number): Promise<DaoInboundDeal[]> {
+    return db.select().from(daoInboundDeals)
+      .where(or(
+        eq(daoInboundDeals.broughtByMembershipId, membershipId),
+        eq(daoInboundDeals.referredByMembershipId, membershipId)
+      ))
+      .orderBy(desc(daoInboundDeals.createdAt));
+  }
+
+  // DAO IP Contributions
+  async getDaoIpContributions(membershipId?: number): Promise<DaoIpContribution[]> {
+    if (membershipId) {
+      return db.select().from(daoIpContributions)
+        .where(eq(daoIpContributions.contributorMembershipId, membershipId))
+        .orderBy(desc(daoIpContributions.createdAt));
+    }
+    return db.select().from(daoIpContributions).orderBy(desc(daoIpContributions.createdAt));
+  }
+
+  async getDaoIpContribution(id: number): Promise<DaoIpContribution | undefined> {
+    const [contribution] = await db.select().from(daoIpContributions)
+      .where(eq(daoIpContributions.id, id));
+    return contribution;
+  }
+
+  async createDaoIpContribution(contribution: InsertDaoIpContribution): Promise<DaoIpContribution> {
+    const [created] = await db.insert(daoIpContributions).values(contribution).returning();
+    return created;
+  }
+
+  async updateDaoIpContribution(id: number, updates: Partial<InsertDaoIpContribution>): Promise<DaoIpContribution | undefined> {
+    const [updated] = await db.update(daoIpContributions)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(daoIpContributions.id, id))
+      .returning();
+    return updated;
+  }
+
+  // DAO Role Assignment History
+  async getDaoRoleAssignmentHistory(projectId?: number): Promise<DaoRoleAssignmentHistory[]> {
+    if (projectId) {
+      return db.select().from(daoRoleAssignmentHistory)
+        .where(eq(daoRoleAssignmentHistory.projectId, projectId))
+        .orderBy(desc(daoRoleAssignmentHistory.assignedAt));
+    }
+    return db.select().from(daoRoleAssignmentHistory).orderBy(desc(daoRoleAssignmentHistory.assignedAt));
+  }
+
+  async createDaoRoleAssignmentHistory(history: InsertDaoRoleAssignmentHistory): Promise<DaoRoleAssignmentHistory> {
+    const [created] = await db.insert(daoRoleAssignmentHistory).values(history).returning();
+    return created;
+  }
+
+  async getMemberAssignmentHistory(membershipId: number): Promise<DaoRoleAssignmentHistory[]> {
+    return db.select().from(daoRoleAssignmentHistory)
+      .where(eq(daoRoleAssignmentHistory.membershipId, membershipId))
+      .orderBy(desc(daoRoleAssignmentHistory.assignedAt));
   }
 }
 

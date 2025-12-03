@@ -26,10 +26,12 @@ import {
   Target,
   Settings,
   BarChart3,
-  Vault
+  Vault,
+  Scale
 } from "lucide-react";
 import { Link } from "wouter";
 import { DaoSafeWallets } from "@/components/dao-safe-wallets";
+import { DaoFairnessDashboard } from "@/components/dao-fairness-dashboard";
 
 type DaoRole = {
   id: number;
@@ -274,6 +276,10 @@ export default function DaoDashboard() {
             <TabsTrigger value="safe-wallets" className="gap-2" data-testid="tab-safe-wallets">
               <Vault className="h-4 w-4" />
               <span className="hidden sm:inline">Safe Wallets</span>
+            </TabsTrigger>
+            <TabsTrigger value="fairness" className="gap-2" data-testid="tab-fairness">
+              <Scale className="h-4 w-4" />
+              <span className="hidden sm:inline">Fairness</span>
             </TabsTrigger>
           </TabsList>
 
@@ -606,6 +612,10 @@ export default function DaoDashboard() {
 
           <TabsContent value="safe-wallets" className="mt-6">
             <DaoSafeWallets />
+          </TabsContent>
+
+          <TabsContent value="fairness" className="mt-6">
+            <DaoFairnessDashboard />
           </TabsContent>
         </Tabs>
       </div>

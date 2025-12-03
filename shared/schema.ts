@@ -2537,3 +2537,237 @@ export const daoSafePendingTxs = pgTable("dao_safe_pending_txs", {
 export const insertDaoSafePendingTxSchema = createInsertSchema(daoSafePendingTxs).omit({ id: true, lastSyncedAt: true });
 export type InsertDaoSafePendingTx = z.infer<typeof insertDaoSafePendingTxSchema>;
 export type DaoSafePendingTx = typeof daoSafePendingTxs.$inferSelect;
+
+// ============================================
+// DAO ENHANCED FAIRNESS & ASSIGNMENT SYSTEM
+// ============================================
+
+// Skill Proficiency Levels
+export const skillProficiencyLevels = ["beginner", "intermediate", "advanced", "expert", "master"] as const;
+export type SkillProficiencyLevel = typeof skillProficiencyLevels[number];
+
+// Member Skills - Links members to service categories with proficiency
+export const daoMemberSkills = pgTable("dao_member_skills", {
+  id: serial("id").primaryKey(),
+  membershipId: integer("membership_id").notNull().references(() => daoMemberships.id, { onDelete: "cascade" }),
+  serviceCategory: varchar("service_category", { length: 30 }).$type<DaoServiceCategory>().notNull(),
+  proficiency: varchar("proficiency", { length: 20 }).$type<SkillProficiencyLevel>().default("beginner"),
+  yearsExperience: real("years_experience").default(0),
+  projectsCompleted: integer("projects_completed").default(0), // Auto-tracked from completed projects
+  notes: text("notes"), // Specific skills within category
+  verifiedBy: integer("verified_by").references(() => daoMemberships.id), // Council/senior member verification
+  verifiedAt: timestamp("verified_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertDaoMemberSkillSchema = createInsertSchema(daoMemberSkills).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertDaoMemberSkill = z.infer<typeof insertDaoMemberSkillSchema>;
+export type DaoMemberSkill = typeof daoMemberSkills.$inferSelect;
+
+// Member Availability Status
+export const availabilityStatuses = ["available", "limited", "busy", "unavailable"] as const;
+export type AvailabilityStatus = typeof availabilityStatuses[number];
+
+// Member Availability - Track when members can take on work
+export const daoMemberAvailability = pgTable("dao_member_availability", {
+  id: serial("id").primaryKey(),
+  membershipId: integer("membership_id").notNull().references(() => daoMemberships.id, { onDelete: "cascade" }),
+  status: varchar("status", { length: 20 }).$type<AvailabilityStatus>().default("available"),
+  hoursPerWeek: integer("hours_per_week").default(40), // Available hours
+  currentActiveProjects: integer("current_active_projects").default(0), // Auto-tracked
+  maxConcurrentProjects: integer("max_concurrent_projects").default(3), // Self-set limit
+  availableFrom: timestamp("available_from"), // Future availability
+  unavailableUntil: timestamp("unavailable_until"), // Vacation/leave
+  notes: text("notes"),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertDaoMemberAvailabilitySchema = createInsertSchema(daoMemberAvailability).omit({ id: true, updatedAt: true });
+export type InsertDaoMemberAvailability = z.infer<typeof insertDaoMemberAvailabilitySchema>;
+export type DaoMemberAvailability = typeof daoMemberAvailability.$inferSelect;
+
+// Workload Tracking - Historical record of member project assignments
+export const daoWorkloadHistory = pgTable("dao_workload_history", {
+  id: serial("id").primaryKey(),
+  membershipId: integer("membership_id").notNull().references(() => daoMemberships.id, { onDelete: "cascade" }),
+  projectId: integer("project_id").notNull().references(() => daoProjects.id, { onDelete: "cascade" }),
+  roleSlot: varchar("role_slot", { length: 20 }).$type<AttributionRoleSlot>().notNull(),
+  startDate: timestamp("start_date").defaultNow(),
+  endDate: timestamp("end_date"),
+  estimatedHours: integer("estimated_hours"),
+  actualHours: integer("actual_hours"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertDaoWorkloadHistorySchema = createInsertSchema(daoWorkloadHistory).omit({ id: true, createdAt: true });
+export type InsertDaoWorkloadHistory = z.infer<typeof insertDaoWorkloadHistorySchema>;
+export type DaoWorkloadHistory = typeof daoWorkloadHistory.$inferSelect;
+
+// Consistency Metrics - Track reliability separate from revenue
+export const daoConsistencyMetrics = pgTable("dao_consistency_metrics", {
+  id: serial("id").primaryKey(),
+  membershipId: integer("membership_id").notNull().references(() => daoMemberships.id, { onDelete: "cascade" }).unique(),
+  totalProjectsCompleted: integer("total_projects_completed").default(0),
+  onTimeDeliveryCount: integer("on_time_delivery_count").default(0),
+  lateDeliveryCount: integer("late_delivery_count").default(0),
+  onTimeDeliveryRate: real("on_time_delivery_rate").default(100), // Percentage
+  avgPeerRating: real("avg_peer_rating").default(5.0), // 1-5 scale from debriefs
+  totalPeerRatings: integer("total_peer_ratings").default(0),
+  collaborationScore: real("collaboration_score").default(5.0), // 1-5 from peer feedback
+  responsibilityScore: real("responsibility_score").default(5.0), // Meeting deadlines, communication
+  qualityScore: real("quality_score").default(5.0), // Work quality feedback
+  overallReliabilityScore: real("overall_reliability_score").default(5.0), // Weighted composite
+  leadRoleCount: integer("lead_role_count").default(0), // Times assigned as lead
+  pmRoleCount: integer("pm_role_count").default(0), // Times assigned as PM
+  coreRoleCount: integer("core_role_count").default(0), // Times as core contributor
+  supportRoleCount: integer("support_role_count").default(0), // Times as support
+  lastUpdatedAt: timestamp("last_updated_at").defaultNow(),
+});
+
+export const insertDaoConsistencyMetricsSchema = createInsertSchema(daoConsistencyMetrics).omit({ id: true, lastUpdatedAt: true });
+export type InsertDaoConsistencyMetrics = z.infer<typeof insertDaoConsistencyMetricsSchema>;
+export type DaoConsistencyMetrics = typeof daoConsistencyMetrics.$inferSelect;
+
+// Peer Feedback - Collected during debriefs
+export const daoPeerFeedback = pgTable("dao_peer_feedback", {
+  id: serial("id").primaryKey(),
+  debriefId: integer("debrief_id").notNull().references(() => daoDebriefs.id, { onDelete: "cascade" }),
+  projectId: integer("project_id").notNull().references(() => daoProjects.id, { onDelete: "cascade" }),
+  fromMembershipId: integer("from_membership_id").notNull().references(() => daoMemberships.id),
+  toMembershipId: integer("to_membership_id").notNull().references(() => daoMemberships.id),
+  collaborationRating: integer("collaboration_rating"), // 1-5
+  qualityRating: integer("quality_rating"), // 1-5
+  reliabilityRating: integer("reliability_rating"), // 1-5
+  communicationRating: integer("communication_rating"), // 1-5
+  overallRating: integer("overall_rating"), // 1-5
+  strengths: text("strengths"),
+  improvements: text("improvements"),
+  isAnonymous: boolean("is_anonymous").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertDaoPeerFeedbackSchema = createInsertSchema(daoPeerFeedback).omit({ id: true, createdAt: true });
+export type InsertDaoPeerFeedback = z.infer<typeof insertDaoPeerFeedbackSchema>;
+export type DaoPeerFeedback = typeof daoPeerFeedback.$inferSelect;
+
+// Project Opportunity Queue - Upcoming projects members can see and bid on
+export const projectOpportunityStatuses = ["open", "bidding", "assigned", "closed"] as const;
+export type ProjectOpportunityStatus = typeof projectOpportunityStatuses[number];
+
+export const daoProjectOpportunities = pgTable("dao_project_opportunities", {
+  id: serial("id").primaryKey(),
+  projectId: integer("project_id").notNull().references(() => daoProjects.id, { onDelete: "cascade" }),
+  status: varchar("status", { length: 20 }).$type<ProjectOpportunityStatus>().default("open"),
+  visibleToAll: boolean("visible_to_all").default(true), // Or restricted by rank
+  minimumRankTier: integer("minimum_rank_tier").default(1), // Minimum rank to bid
+  preferredSkillCategories: text("preferred_skill_categories"), // JSON array of service categories
+  estimatedStartDate: timestamp("estimated_start_date"),
+  applicationDeadline: timestamp("application_deadline"),
+  requiresCouncilApproval: boolean("requires_council_approval").default(false), // High-value projects
+  createdBy: varchar("created_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertDaoProjectOpportunitySchema = createInsertSchema(daoProjectOpportunities).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertDaoProjectOpportunity = z.infer<typeof insertDaoProjectOpportunitySchema>;
+export type DaoProjectOpportunity = typeof daoProjectOpportunities.$inferSelect;
+
+// Role Interest/Bids - Members expressing interest in project roles
+export const roleBidStatuses = ["pending", "accepted", "rejected", "withdrawn"] as const;
+export type RoleBidStatus = typeof roleBidStatuses[number];
+
+export const daoRoleBids = pgTable("dao_role_bids", {
+  id: serial("id").primaryKey(),
+  opportunityId: integer("opportunity_id").notNull().references(() => daoProjectOpportunities.id, { onDelete: "cascade" }),
+  membershipId: integer("membership_id").notNull().references(() => daoMemberships.id, { onDelete: "cascade" }),
+  preferredRole: varchar("preferred_role", { length: 20 }).$type<AttributionRoleSlot>().notNull(),
+  alternateRole: varchar("alternate_role", { length: 20 }).$type<AttributionRoleSlot>(),
+  motivation: text("motivation"), // Why they want this role
+  relevantExperience: text("relevant_experience"), // Past related work
+  availableHoursPerWeek: integer("available_hours_per_week"),
+  status: varchar("status", { length: 20 }).$type<RoleBidStatus>().default("pending"),
+  reviewedBy: integer("reviewed_by").references(() => daoMemberships.id),
+  reviewNotes: text("review_notes"),
+  reviewedAt: timestamp("reviewed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertDaoRoleBidSchema = createInsertSchema(daoRoleBids).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertDaoRoleBid = z.infer<typeof insertDaoRoleBidSchema>;
+export type DaoRoleBid = typeof daoRoleBids.$inferSelect;
+
+// Inbound Deals & IP Tracking - Credit for business development
+export const dealSources = ["inbound", "referral", "outbound", "ip_contribution", "partnership"] as const;
+export type DealSource = typeof dealSources[number];
+
+export const dealStatuses = ["lead", "qualified", "proposal", "negotiation", "won", "lost"] as const;
+export type DealStatus = typeof dealStatuses[number];
+
+export const daoInboundDeals = pgTable("dao_inbound_deals", {
+  id: serial("id").primaryKey(),
+  broughtByMembershipId: integer("brought_by_membership_id").notNull().references(() => daoMemberships.id),
+  referredByMembershipId: integer("referred_by_membership_id").references(() => daoMemberships.id), // If referral
+  source: varchar("source", { length: 30 }).$type<DealSource>().notNull(),
+  clientName: varchar("client_name", { length: 255 }).notNull(),
+  clientProfileId: integer("client_profile_id").references(() => clientProfiles.id, { onDelete: "set null" }),
+  description: text("description"),
+  estimatedValue: integer("estimated_value"), // In cents
+  status: varchar("status", { length: 30 }).$type<DealStatus>().default("lead"),
+  projectId: integer("project_id").references(() => daoProjects.id, { onDelete: "set null" }), // If converted to project
+  convertedToProjectAt: timestamp("converted_to_project_at"),
+  bizDevCreditPercent: integer("biz_dev_credit_percent").default(5), // Default 5% to person who brought it
+  referralCreditPercent: integer("referral_credit_percent").default(5), // If referred
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertDaoInboundDealSchema = createInsertSchema(daoInboundDeals).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertDaoInboundDeal = z.infer<typeof insertDaoInboundDealSchema>;
+export type DaoInboundDeal = typeof daoInboundDeals.$inferSelect;
+
+// IP Contributions - Track IP assets brought by members
+export const ipTypes = ["design", "code", "content", "brand", "game", "platform", "other"] as const;
+export type IpType = typeof ipTypes[number];
+
+export const daoIpContributions = pgTable("dao_ip_contributions", {
+  id: serial("id").primaryKey(),
+  contributorMembershipId: integer("contributor_membership_id").notNull().references(() => daoMemberships.id),
+  ipType: varchar("ip_type", { length: 30 }).$type<IpType>().notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  description: text("description"),
+  estimatedValue: integer("estimated_value"), // In cents
+  revenueSharePercent: real("revenue_share_percent").default(0), // If IP generates ongoing revenue
+  isActive: boolean("is_active").default(true),
+  usedInProjectIds: text("used_in_project_ids"), // JSON array of project IDs using this IP
+  documentUrl: text("document_url"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertDaoIpContributionSchema = createInsertSchema(daoIpContributions).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertDaoIpContribution = z.infer<typeof insertDaoIpContributionSchema>;
+export type DaoIpContribution = typeof daoIpContributions.$inferSelect;
+
+// Role Assignment History - Track who was assigned to what for fairness analysis
+export const daoRoleAssignmentHistory = pgTable("dao_role_assignment_history", {
+  id: serial("id").primaryKey(),
+  projectId: integer("project_id").notNull().references(() => daoProjects.id, { onDelete: "cascade" }),
+  membershipId: integer("membership_id").notNull().references(() => daoMemberships.id, { onDelete: "cascade" }),
+  roleSlot: varchar("role_slot", { length: 20 }).$type<AttributionRoleSlot>().notNull(),
+  assignmentMethod: varchar("assignment_method", { length: 30 }), // "council_decision", "algorithm", "volunteer", "rotation"
+  skillMatchScore: real("skill_match_score"), // Algorithm's match score
+  workloadScore: real("workload_score"), // Lower is better (less busy)
+  consistencyScore: real("consistency_score"), // Reliability score at time of assignment
+  rankAtAssignment: integer("rank_at_assignment"), // Member's rank tier when assigned
+  wasPreferred: boolean("was_preferred").default(false), // Did they request this role?
+  assignedBy: varchar("assigned_by").references(() => users.id),
+  assignedAt: timestamp("assigned_at").defaultNow(),
+});
+
+export const insertDaoRoleAssignmentHistorySchema = createInsertSchema(daoRoleAssignmentHistory).omit({ id: true, assignedAt: true });
+export type InsertDaoRoleAssignmentHistory = z.infer<typeof insertDaoRoleAssignmentHistorySchema>;
+export type DaoRoleAssignmentHistory = typeof daoRoleAssignmentHistory.$inferSelect;

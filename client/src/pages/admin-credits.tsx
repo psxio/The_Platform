@@ -166,7 +166,8 @@ export default function AdminCredits() {
     );
   }
 
-  const filteredUsers = eligibleUsers?.filter(u => {
+  const eligibleUsersArray = Array.isArray(eligibleUsers) ? eligibleUsers : [];
+  const filteredUsers = eligibleUsersArray.filter(u => {
     if (!searchQuery) return true;
     const query = searchQuery.toLowerCase();
     return (
@@ -256,7 +257,7 @@ export default function AdminCredits() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold" data-testid="text-eligible-users">
-              {eligibleUsers?.length || 0}
+              {eligibleUsersArray.length}
             </div>
           </CardContent>
         </Card>

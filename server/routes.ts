@@ -10329,6 +10329,690 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ==================== DAO MEMBER SKILLS ROUTES ====================
+  
+  // Helper: Check if user owns membership or is admin
+  async function checkMembershipOwnership(userId: string, membershipId: number, isAdmin: boolean): Promise<boolean> {
+    if (isAdmin) return true;
+    const membership = await storage.getDaoMembership(membershipId);
+    return membership?.userId === userId;
+  }
+  
+  app.get("/api/dao/member-skills", isAuthenticated, async (req: any, res) => {
+    try {
+      const membershipId = req.query.membershipId ? parseInt(req.query.membershipId) : undefined;
+      const skills = await storage.getDaoMemberSkills(membershipId);
+      res.json(skills);
+    } catch (error) {
+      console.error("Error fetching member skills:", error);
+      res.status(500).json({ error: "Failed to fetch member skills" });
+    }
+  });
+
+  app.post("/api/dao/member-skills", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const { membershipId, serviceCategory, proficiencyLevel } = req.body;
+      
+      if (!membershipId || !serviceCategory) {
+        return res.status(400).json({ error: "membershipId and serviceCategory are required" });
+      }
+      
+      if (proficiencyLevel !== undefined && (proficiencyLevel < 1 || proficiencyLevel > 5)) {
+        return res.status(400).json({ error: "proficiencyLevel must be between 1 and 5" });
+      }
+      
+      const isOwner = await checkMembershipOwnership(user.id, membershipId, user.role === "admin");
+      if (!isOwner) {
+        return res.status(403).json({ error: "You can only add skills to your own profile" });
+      }
+      
+      const skill = await storage.createDaoMemberSkill(req.body);
+      res.status(201).json(skill);
+    } catch (error) {
+      console.error("Error creating member skill:", error);
+      res.status(500).json({ error: "Failed to create member skill" });
+    }
+  });
+
+  app.patch("/api/dao/member-skills/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const id = parseInt(req.params.id);
+      
+      const skill = await storage.getDaoMemberSkill(id);
+      if (!skill) {
+        return res.status(404).json({ error: "Skill not found" });
+      }
+      
+      const isOwner = await checkMembershipOwnership(user.id, skill.membershipId, user.role === "admin");
+      if (!isOwner) {
+        return res.status(403).json({ error: "You can only update your own skills" });
+      }
+      
+      const updated = await storage.updateDaoMemberSkill(id, req.body);
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating member skill:", error);
+      res.status(500).json({ error: "Failed to update member skill" });
+    }
+  });
+
+  app.delete("/api/dao/member-skills/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const id = parseInt(req.params.id);
+      
+      const skill = await storage.getDaoMemberSkill(id);
+      if (!skill) {
+        return res.status(404).json({ error: "Skill not found" });
+      }
+      
+      const isOwner = await checkMembershipOwnership(user.id, skill.membershipId, user.role === "admin");
+      if (!isOwner) {
+        return res.status(403).json({ error: "You can only delete your own skills" });
+      }
+      
+      await storage.deleteDaoMemberSkill(id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting member skill:", error);
+      res.status(500).json({ error: "Failed to delete member skill" });
+    }
+  });
+
+  // ==================== DAO MEMBER AVAILABILITY ROUTES ====================
+  
+  app.get("/api/dao/member-availability", isAuthenticated, async (req: any, res) => {
+    try {
+      const membershipId = req.query.membershipId ? parseInt(req.query.membershipId) : undefined;
+      if (membershipId) {
+        const availability = await storage.getDaoMemberAvailability(membershipId);
+        res.json(availability);
+      } else {
+        const allAvailability = await storage.getAllMemberAvailability();
+        res.json(allAvailability);
+      }
+    } catch (error) {
+      console.error("Error fetching member availability:", error);
+      res.status(500).json({ error: "Failed to fetch member availability" });
+    }
+  });
+
+  app.post("/api/dao/member-availability", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const { membershipId, weeklyHoursAvailable } = req.body;
+      
+      if (!membershipId) {
+        return res.status(400).json({ error: "membershipId is required" });
+      }
+      
+      if (weeklyHoursAvailable !== undefined && (weeklyHoursAvailable < 0 || weeklyHoursAvailable > 168)) {
+        return res.status(400).json({ error: "weeklyHoursAvailable must be between 0 and 168" });
+      }
+      
+      const isOwner = await checkMembershipOwnership(user.id, membershipId, user.role === "admin");
+      if (!isOwner) {
+        return res.status(403).json({ error: "You can only update your own availability" });
+      }
+      
+      const availability = await storage.upsertDaoMemberAvailability(req.body);
+      res.status(201).json(availability);
+    } catch (error) {
+      console.error("Error updating member availability:", error);
+      res.status(500).json({ error: "Failed to update member availability" });
+    }
+  });
+
+  // ==================== DAO CONSISTENCY METRICS ROUTES ====================
+  
+  app.get("/api/dao/consistency-metrics", isAuthenticated, async (req: any, res) => {
+    try {
+      const membershipId = req.query.membershipId ? parseInt(req.query.membershipId) : undefined;
+      if (membershipId) {
+        const metrics = await storage.getDaoConsistencyMetrics(membershipId);
+        res.json(metrics);
+      } else {
+        const allMetrics = await storage.getAllConsistencyMetrics();
+        res.json(allMetrics);
+      }
+    } catch (error) {
+      console.error("Error fetching consistency metrics:", error);
+      res.status(500).json({ error: "Failed to fetch consistency metrics" });
+    }
+  });
+
+  app.post("/api/dao/consistency-metrics", requireRole("admin"), async (req: any, res) => {
+    try {
+      const metrics = await storage.upsertDaoConsistencyMetrics(req.body);
+      res.status(201).json(metrics);
+    } catch (error) {
+      console.error("Error updating consistency metrics:", error);
+      res.status(500).json({ error: "Failed to update consistency metrics" });
+    }
+  });
+
+  // ==================== DAO PEER FEEDBACK ROUTES ====================
+  
+  app.get("/api/dao/peer-feedback", isAuthenticated, async (req: any, res) => {
+    try {
+      const debriefId = req.query.debriefId ? parseInt(req.query.debriefId) : undefined;
+      const membershipId = req.query.membershipId ? parseInt(req.query.membershipId) : undefined;
+      
+      if (debriefId) {
+        const feedback = await storage.getDaoPeerFeedback(debriefId);
+        res.json(feedback);
+      } else if (membershipId) {
+        const feedback = await storage.getFeedbackForMember(membershipId);
+        res.json(feedback);
+      } else {
+        res.status(400).json({ error: "debriefId or membershipId required" });
+      }
+    } catch (error) {
+      console.error("Error fetching peer feedback:", error);
+      res.status(500).json({ error: "Failed to fetch peer feedback" });
+    }
+  });
+
+  app.post("/api/dao/peer-feedback", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const { debriefId, projectId, fromMembershipId, toMembershipId, collaborationRating, qualityRating, reliabilityRating } = req.body;
+      
+      if (!debriefId || !projectId || !fromMembershipId || !toMembershipId) {
+        return res.status(400).json({ error: "debriefId, projectId, fromMembershipId, and toMembershipId are required" });
+      }
+      
+      if (fromMembershipId === toMembershipId) {
+        return res.status(400).json({ error: "Cannot submit feedback for yourself" });
+      }
+      
+      const validateRating = (rating: number | undefined) => rating === undefined || (rating >= 1 && rating <= 5);
+      if (!validateRating(collaborationRating) || !validateRating(qualityRating) || !validateRating(reliabilityRating)) {
+        return res.status(400).json({ error: "Ratings must be between 1 and 5" });
+      }
+      
+      const isOwner = await checkMembershipOwnership(user.id, fromMembershipId, user.role === "admin");
+      if (!isOwner) {
+        return res.status(403).json({ error: "You can only submit feedback from your own profile" });
+      }
+      
+      const feedback = await storage.createDaoPeerFeedback(req.body);
+      res.status(201).json(feedback);
+    } catch (error) {
+      console.error("Error creating peer feedback:", error);
+      res.status(500).json({ error: "Failed to create peer feedback" });
+    }
+  });
+
+  // ==================== DAO PROJECT OPPORTUNITIES ROUTES ====================
+  
+  app.get("/api/dao/project-opportunities", isAuthenticated, async (req: any, res) => {
+    try {
+      const status = req.query.status as string | undefined;
+      const opportunities = await storage.getDaoProjectOpportunities(status);
+      res.json(opportunities);
+    } catch (error) {
+      console.error("Error fetching project opportunities:", error);
+      res.status(500).json({ error: "Failed to fetch project opportunities" });
+    }
+  });
+
+  app.get("/api/dao/project-opportunities/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const opportunity = await storage.getDaoProjectOpportunity(id);
+      if (!opportunity) {
+        return res.status(404).json({ error: "Opportunity not found" });
+      }
+      res.json(opportunity);
+    } catch (error) {
+      console.error("Error fetching project opportunity:", error);
+      res.status(500).json({ error: "Failed to fetch project opportunity" });
+    }
+  });
+
+  app.post("/api/dao/project-opportunities", requireRole("admin"), async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const opportunity = await storage.createDaoProjectOpportunity({
+        ...req.body,
+        createdBy: user.id,
+      });
+      res.status(201).json(opportunity);
+    } catch (error) {
+      console.error("Error creating project opportunity:", error);
+      res.status(500).json({ error: "Failed to create project opportunity" });
+    }
+  });
+
+  app.patch("/api/dao/project-opportunities/:id", requireRole("admin"), async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const opportunity = await storage.updateDaoProjectOpportunity(id, req.body);
+      res.json(opportunity);
+    } catch (error) {
+      console.error("Error updating project opportunity:", error);
+      res.status(500).json({ error: "Failed to update project opportunity" });
+    }
+  });
+
+  // ==================== DAO ROLE BIDS ROUTES ====================
+  
+  app.get("/api/dao/role-bids", isAuthenticated, async (req: any, res) => {
+    try {
+      const opportunityId = req.query.opportunityId ? parseInt(req.query.opportunityId) : undefined;
+      const membershipId = req.query.membershipId ? parseInt(req.query.membershipId) : undefined;
+      
+      if (membershipId) {
+        const bids = await storage.getMemberRoleBids(membershipId);
+        res.json(bids);
+      } else {
+        const bids = await storage.getDaoRoleBids(opportunityId);
+        res.json(bids);
+      }
+    } catch (error) {
+      console.error("Error fetching role bids:", error);
+      res.status(500).json({ error: "Failed to fetch role bids" });
+    }
+  });
+
+  app.post("/api/dao/role-bids", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const { opportunityId, membershipId, preferredRole } = req.body;
+      
+      if (!opportunityId || !membershipId || !preferredRole) {
+        return res.status(400).json({ error: "opportunityId, membershipId, and preferredRole are required" });
+      }
+      
+      const validRoles = ["biz_dev", "treasury", "project_lead", "project_support", "referral"];
+      if (!validRoles.includes(preferredRole)) {
+        return res.status(400).json({ error: "Invalid preferredRole value" });
+      }
+      
+      const isOwner = await checkMembershipOwnership(user.id, membershipId, user.role === "admin");
+      if (!isOwner) {
+        return res.status(403).json({ error: "You can only submit bids for yourself" });
+      }
+      
+      const bid = await storage.createDaoRoleBid(req.body);
+      res.status(201).json(bid);
+    } catch (error) {
+      console.error("Error creating role bid:", error);
+      res.status(500).json({ error: "Failed to create role bid" });
+    }
+  });
+
+  app.patch("/api/dao/role-bids/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const id = parseInt(req.params.id);
+      const isAdmin = user.role === "admin";
+      
+      const existingBid = await storage.getDaoRoleBid(id);
+      if (!existingBid) {
+        return res.status(404).json({ error: "Role bid not found" });
+      }
+      
+      const isOwner = await checkMembershipOwnership(user.id, existingBid.membershipId, isAdmin);
+      
+      const restrictedFields = ["status", "reviewedBy", "reviewNotes", "reviewedAt"];
+      const hasRestrictedFields = Object.keys(req.body).some(k => restrictedFields.includes(k));
+      
+      if (hasRestrictedFields && !isAdmin) {
+        return res.status(403).json({ error: "Only admins can change bid status" });
+      }
+      
+      if (!isOwner && !hasRestrictedFields) {
+        return res.status(403).json({ error: "You can only update your own bids" });
+      }
+      
+      const bid = await storage.updateDaoRoleBid(id, req.body);
+      res.json(bid);
+    } catch (error) {
+      console.error("Error updating role bid:", error);
+      res.status(500).json({ error: "Failed to update role bid" });
+    }
+  });
+
+  // ==================== DAO INBOUND DEALS ROUTES ====================
+  
+  app.get("/api/dao/inbound-deals", isAuthenticated, async (req: any, res) => {
+    try {
+      const status = req.query.status as string | undefined;
+      const membershipId = req.query.membershipId ? parseInt(req.query.membershipId) : undefined;
+      
+      if (membershipId) {
+        const deals = await storage.getDealsByMember(membershipId);
+        res.json(deals);
+      } else {
+        const deals = await storage.getDaoInboundDeals(status);
+        res.json(deals);
+      }
+    } catch (error) {
+      console.error("Error fetching inbound deals:", error);
+      res.status(500).json({ error: "Failed to fetch inbound deals" });
+    }
+  });
+
+  app.get("/api/dao/inbound-deals/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const deal = await storage.getDaoInboundDeal(id);
+      if (!deal) {
+        return res.status(404).json({ error: "Deal not found" });
+      }
+      res.json(deal);
+    } catch (error) {
+      console.error("Error fetching inbound deal:", error);
+      res.status(500).json({ error: "Failed to fetch inbound deal" });
+    }
+  });
+
+  app.post("/api/dao/inbound-deals", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const { broughtByMembershipId, clientName, source } = req.body;
+      
+      if (!broughtByMembershipId || !clientName || !source) {
+        return res.status(400).json({ error: "broughtByMembershipId, clientName, and source are required" });
+      }
+      
+      const validSources = ["inbound", "referral", "outbound", "ip_contribution", "partnership"];
+      if (!validSources.includes(source)) {
+        return res.status(400).json({ error: "Invalid source value" });
+      }
+      
+      const isOwner = await checkMembershipOwnership(user.id, broughtByMembershipId, user.role === "admin");
+      if (!isOwner) {
+        return res.status(403).json({ error: "You can only submit deals for yourself" });
+      }
+      
+      const deal = await storage.createDaoInboundDeal(req.body);
+      res.status(201).json(deal);
+    } catch (error) {
+      console.error("Error creating inbound deal:", error);
+      res.status(500).json({ error: "Failed to create inbound deal" });
+    }
+  });
+
+  app.patch("/api/dao/inbound-deals/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const id = parseInt(req.params.id);
+      const isAdmin = user.role === "admin";
+      
+      const existingDeal = await storage.getDaoInboundDeal(id);
+      if (!existingDeal) {
+        return res.status(404).json({ error: "Deal not found" });
+      }
+      
+      const isOwner = await checkMembershipOwnership(user.id, existingDeal.broughtByMembershipId, isAdmin);
+      
+      const restrictedFields = ["status", "projectId", "convertedToProjectAt", "bizDevCreditPercent", "referralCreditPercent"];
+      const hasRestrictedFields = Object.keys(req.body).some(k => restrictedFields.includes(k));
+      
+      if (hasRestrictedFields && !isAdmin) {
+        return res.status(403).json({ error: "Only admins can change deal status or credit percentages" });
+      }
+      
+      if (!isOwner && !isAdmin) {
+        return res.status(403).json({ error: "You can only update your own deals" });
+      }
+      
+      const deal = await storage.updateDaoInboundDeal(id, req.body);
+      res.json(deal);
+    } catch (error) {
+      console.error("Error updating inbound deal:", error);
+      res.status(500).json({ error: "Failed to update inbound deal" });
+    }
+  });
+
+  // ==================== DAO IP CONTRIBUTIONS ROUTES ====================
+  
+  app.get("/api/dao/ip-contributions", isAuthenticated, async (req: any, res) => {
+    try {
+      const membershipId = req.query.membershipId ? parseInt(req.query.membershipId) : undefined;
+      const contributions = await storage.getDaoIpContributions(membershipId);
+      res.json(contributions);
+    } catch (error) {
+      console.error("Error fetching IP contributions:", error);
+      res.status(500).json({ error: "Failed to fetch IP contributions" });
+    }
+  });
+
+  app.get("/api/dao/ip-contributions/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const contribution = await storage.getDaoIpContribution(id);
+      if (!contribution) {
+        return res.status(404).json({ error: "Contribution not found" });
+      }
+      res.json(contribution);
+    } catch (error) {
+      console.error("Error fetching IP contribution:", error);
+      res.status(500).json({ error: "Failed to fetch IP contribution" });
+    }
+  });
+
+  app.post("/api/dao/ip-contributions", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const { contributorMembershipId, ipType, name } = req.body;
+      
+      if (!contributorMembershipId || !ipType || !name) {
+        return res.status(400).json({ error: "contributorMembershipId, ipType, and name are required" });
+      }
+      
+      const validIpTypes = ["design", "code", "content", "brand", "game", "platform", "other"];
+      if (!validIpTypes.includes(ipType)) {
+        return res.status(400).json({ error: "Invalid ipType value" });
+      }
+      
+      const isOwner = await checkMembershipOwnership(user.id, contributorMembershipId, user.role === "admin");
+      if (!isOwner) {
+        return res.status(403).json({ error: "You can only add IP contributions for yourself" });
+      }
+      
+      const contribution = await storage.createDaoIpContribution(req.body);
+      res.status(201).json(contribution);
+    } catch (error) {
+      console.error("Error creating IP contribution:", error);
+      res.status(500).json({ error: "Failed to create IP contribution" });
+    }
+  });
+
+  app.patch("/api/dao/ip-contributions/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const id = parseInt(req.params.id);
+      const isAdmin = user.role === "admin";
+      
+      const existingContribution = await storage.getDaoIpContribution(id);
+      if (!existingContribution) {
+        return res.status(404).json({ error: "IP contribution not found" });
+      }
+      
+      const isOwner = await checkMembershipOwnership(user.id, existingContribution.contributorMembershipId, isAdmin);
+      
+      const restrictedFields = ["revenueSharePercent", "isActive"];
+      const hasRestrictedFields = Object.keys(req.body).some(k => restrictedFields.includes(k));
+      
+      if (hasRestrictedFields && !isAdmin) {
+        return res.status(403).json({ error: "Only admins can change revenue share or active status" });
+      }
+      
+      if (!isOwner && !isAdmin) {
+        return res.status(403).json({ error: "You can only update your own IP contributions" });
+      }
+      
+      const contribution = await storage.updateDaoIpContribution(id, req.body);
+      res.json(contribution);
+    } catch (error) {
+      console.error("Error updating IP contribution:", error);
+      res.status(500).json({ error: "Failed to update IP contribution" });
+    }
+  });
+
+  // ==================== DAO ROLE ASSIGNMENT HISTORY ROUTES ====================
+  
+  app.get("/api/dao/role-assignment-history", isAuthenticated, async (req: any, res) => {
+    try {
+      const projectId = req.query.projectId ? parseInt(req.query.projectId) : undefined;
+      const membershipId = req.query.membershipId ? parseInt(req.query.membershipId) : undefined;
+      
+      if (membershipId) {
+        const history = await storage.getMemberAssignmentHistory(membershipId);
+        res.json(history);
+      } else {
+        const history = await storage.getDaoRoleAssignmentHistory(projectId);
+        res.json(history);
+      }
+    } catch (error) {
+      console.error("Error fetching role assignment history:", error);
+      res.status(500).json({ error: "Failed to fetch role assignment history" });
+    }
+  });
+
+  app.post("/api/dao/role-assignment-history", requireRole("admin"), async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const history = await storage.createDaoRoleAssignmentHistory({
+        ...req.body,
+        assignedBy: user.id,
+      });
+      res.status(201).json(history);
+    } catch (error) {
+      console.error("Error creating role assignment history:", error);
+      res.status(500).json({ error: "Failed to create role assignment history" });
+    }
+  });
+
+  // ==================== DAO FAIRNESS DASHBOARD ROUTES ====================
+  
+  // Get comprehensive fairness data for dashboard
+  app.get("/api/dao/fairness-dashboard", isAuthenticated, async (req: any, res) => {
+    try {
+      const [
+        allMetrics,
+        allAvailability,
+        allSkills,
+        openOpportunities,
+        recentAssignments,
+      ] = await Promise.all([
+        storage.getAllConsistencyMetrics(),
+        storage.getAllMemberAvailability(),
+        storage.getDaoMemberSkills(),
+        storage.getDaoProjectOpportunities("open"),
+        storage.getDaoRoleAssignmentHistory(),
+      ]);
+
+      // Calculate workload distribution
+      const workloadByMember: { [key: number]: { lead: number; pm: number; core: number; support: number } } = {};
+      for (const metric of allMetrics) {
+        workloadByMember[metric.membershipId] = {
+          lead: metric.leadRoleCount || 0,
+          pm: metric.pmRoleCount || 0,
+          core: metric.coreRoleCount || 0,
+          support: metric.supportRoleCount || 0,
+        };
+      }
+
+      // Calculate skill coverage
+      const skillCoverage: { [key: string]: number } = {};
+      for (const skill of allSkills) {
+        const key = `${skill.serviceCategory}-${skill.specificService || "general"}`;
+        skillCoverage[key] = (skillCoverage[key] || 0) + 1;
+      }
+
+      res.json({
+        metrics: allMetrics,
+        availability: allAvailability,
+        skills: allSkills,
+        openOpportunities,
+        recentAssignments: recentAssignments.slice(0, 50),
+        workloadByMember,
+        skillCoverage,
+      });
+    } catch (error) {
+      console.error("Error fetching fairness dashboard:", error);
+      res.status(500).json({ error: "Failed to fetch fairness dashboard" });
+    }
+  });
+
+  // Get recommended team for a project opportunity
+  app.get("/api/dao/project-opportunities/:id/recommendations", isAuthenticated, async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const opportunity = await storage.getDaoProjectOpportunity(id);
+      if (!opportunity) {
+        return res.status(404).json({ error: "Opportunity not found" });
+      }
+
+      const [allSkills, allMetrics, allAvailability, bids] = await Promise.all([
+        storage.getDaoMemberSkills(),
+        storage.getAllConsistencyMetrics(),
+        storage.getAllMemberAvailability(),
+        storage.getDaoRoleBids(id),
+      ]);
+
+      // Score each member who bid for the opportunity
+      const recommendations = bids.map(bid => {
+        const memberSkills = allSkills.filter(s => s.membershipId === bid.membershipId);
+        const memberMetrics = allMetrics.find(m => m.membershipId === bid.membershipId);
+        const memberAvail = allAvailability.find(a => a.membershipId === bid.membershipId);
+
+        // Calculate skill match score (0-100)
+        const relevantSkills = memberSkills.filter(s => 
+          opportunity.requiredServices?.includes(s.serviceCategory) ||
+          opportunity.requiredServices?.includes(s.specificService || "")
+        );
+        const skillScore = relevantSkills.length > 0
+          ? (relevantSkills.reduce((sum, s) => sum + (s.proficiencyLevel || 3), 0) / relevantSkills.length) * 20
+          : 50;
+
+        // Calculate workload score (prefer members with fewer recent assignments)
+        const currentLoad = (memberMetrics?.leadRoleCount || 0) * 3 + 
+                           (memberMetrics?.pmRoleCount || 0) * 2 + 
+                           (memberMetrics?.coreRoleCount || 0) * 1;
+        const workloadScore = Math.max(0, 100 - currentLoad * 5);
+
+        // Calculate consistency score
+        const consistencyScore = (memberMetrics?.overallReliabilityScore || 50) * 2;
+
+        // Calculate availability score
+        const availScore = memberAvail?.isAvailableForNewProjects ? 100 : 30;
+
+        // Combined score
+        const totalScore = (skillScore * 0.3) + (workloadScore * 0.25) + (consistencyScore * 0.3) + (availScore * 0.15);
+
+        return {
+          bid,
+          membershipId: bid.membershipId,
+          preferredRole: bid.preferredRole,
+          scores: {
+            skill: Math.round(skillScore),
+            workload: Math.round(workloadScore),
+            consistency: Math.round(consistencyScore),
+            availability: Math.round(availScore),
+            total: Math.round(totalScore),
+          },
+          recommendation: totalScore >= 70 ? "strong" : totalScore >= 50 ? "moderate" : "weak",
+        };
+      });
+
+      // Sort by total score
+      recommendations.sort((a, b) => b.scores.total - a.scores.total);
+
+      res.json(recommendations);
+    } catch (error) {
+      console.error("Error generating recommendations:", error);
+      res.status(500).json({ error: "Failed to generate recommendations" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

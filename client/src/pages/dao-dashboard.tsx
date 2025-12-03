@@ -135,6 +135,7 @@ function formatCurrency(cents: number): string {
 }
 
 function getRoleIcon(tier: number) {
+  if (tier >= 7) return <Crown className="h-4 w-4 text-amber-400" />; // Founder
   if (tier >= 6) return <Crown className="h-4 w-4 text-yellow-500" />;
   if (tier >= 5) return <Star className="h-4 w-4 text-purple-500" />;
   if (tier >= 4) return <Shield className="h-4 w-4 text-blue-500" />;
@@ -635,11 +636,11 @@ export default function DaoDashboard() {
               <Card>
                 <CardHeader>
                   <CardTitle className="text-lg">Rank Progression</CardTitle>
-                  <CardDescription>6-tier advancement system</CardDescription>
+                  <CardDescription>7-tier advancement system</CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
-                    {roles?.slice(0, 6).map((role) => (
+                    {sortedRoles.map((role) => (
                       <div
                         key={role.id}
                         className="flex items-center justify-between p-2 rounded-lg hover-elevate"
@@ -651,9 +652,11 @@ export default function DaoDashboard() {
                         </div>
                         <div className="flex items-center gap-2">
                           <Badge variant="outline">{role.multiplier}x</Badge>
-                          <span className="text-sm text-muted-foreground">
-                            {formatCurrency(role.cumulativeRevenueRequired)}+
-                          </span>
+                          {role.cumulativeRevenueRequired > 0 && (
+                            <span className="text-sm text-muted-foreground">
+                              {formatCurrency(role.cumulativeRevenueRequired)}+
+                            </span>
+                          )}
                         </div>
                       </div>
                     ))}
@@ -825,7 +828,7 @@ export default function DaoDashboard() {
             <Card>
               <CardHeader>
                 <CardTitle>Rank Progression System</CardTitle>
-                <CardDescription>6-tier advancement with performance multipliers</CardDescription>
+                <CardDescription>7-tier advancement with performance multipliers</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">

@@ -128,6 +128,9 @@ import {
   type DaoRankProgression, type InsertDaoRankProgression, daoRankProgressions,
   type DaoProjectLink, type InsertDaoProjectLink, daoProjectLinks,
   type DaoPermission, type InsertDaoPermission, daoPermissions,
+  type DaoSafeWallet, type InsertDaoSafeWallet, daoSafeWallets,
+  type DaoSafeBalance, type InsertDaoSafeBalance, daoSafeBalances,
+  type DaoSafePendingTx, type InsertDaoSafePendingTx, daoSafePendingTxs,
 } from "@shared/schema";
 import { db } from "./db";
 import { desc, eq, and, sql, or, isNull } from "drizzle-orm";
@@ -793,6 +796,19 @@ export interface IStorage {
   createDaoPermission(permission: InsertDaoPermission): Promise<DaoPermission>;
   updateDaoPermission(id: number, updates: Partial<InsertDaoPermission>): Promise<DaoPermission | undefined>;
   hasCouncilPermission(membershipId: number, scope: string): Promise<boolean>;
+
+  // Safe Wallet methods
+  getDaoSafeWallets(): Promise<DaoSafeWallet[]>;
+  getDaoSafeWallet(id: number): Promise<DaoSafeWallet | undefined>;
+  getDaoSafeWalletByAddress(address: string, chainId: number): Promise<DaoSafeWallet | undefined>;
+  createDaoSafeWallet(wallet: InsertDaoSafeWallet): Promise<DaoSafeWallet>;
+  updateDaoSafeWallet(id: number, updates: Partial<InsertDaoSafeWallet>): Promise<DaoSafeWallet | undefined>;
+  deleteDaoSafeWallet(id: number): Promise<boolean>;
+  getDaoSafeBalances(walletId: number): Promise<DaoSafeBalance[]>;
+  upsertDaoSafeBalances(walletId: number, balances: InsertDaoSafeBalance[]): Promise<DaoSafeBalance[]>;
+  getDaoSafePendingTxs(walletId?: number): Promise<DaoSafePendingTx[]>;
+  upsertDaoSafePendingTx(tx: InsertDaoSafePendingTx): Promise<DaoSafePendingTx>;
+  deleteDaoSafePendingTx(id: number): Promise<boolean>;
 }
 
 export class DbStorage implements IStorage {
@@ -5304,6 +5320,94 @@ export class DbStorage implements IStorage {
     if (!permission) return true; // Council members have access by default
     
     return permission.canApprove;
+  }
+
+  // Safe Wallet methods
+  async getDaoSafeWallets(): Promise<DaoSafeWallet[]> {
+    return db.select().from(daoSafeWallets).where(eq(daoSafeWallets.isActive, true)).orderBy(desc(daoSafeWallets.createdAt));
+  }
+
+  async getDaoSafeWallet(id: number): Promise<DaoSafeWallet | undefined> {
+    const [wallet] = await db.select().from(daoSafeWallets).where(eq(daoSafeWallets.id, id));
+    return wallet;
+  }
+
+  async getDaoSafeWalletByAddress(address: string, chainId: number): Promise<DaoSafeWallet | undefined> {
+    const [wallet] = await db.select().from(daoSafeWallets)
+      .where(and(
+        eq(daoSafeWallets.address, address.toLowerCase()),
+        eq(daoSafeWallets.chainId, chainId)
+      ));
+    return wallet;
+  }
+
+  async createDaoSafeWallet(wallet: InsertDaoSafeWallet): Promise<DaoSafeWallet> {
+    const [created] = await db.insert(daoSafeWallets).values({
+      ...wallet,
+      address: wallet.address.toLowerCase(),
+    }).returning();
+    return created;
+  }
+
+  async updateDaoSafeWallet(id: number, updates: Partial<InsertDaoSafeWallet>): Promise<DaoSafeWallet | undefined> {
+    const [updated] = await db.update(daoSafeWallets)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(daoSafeWallets.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteDaoSafeWallet(id: number): Promise<boolean> {
+    await db.update(daoSafeWallets).set({ isActive: false }).where(eq(daoSafeWallets.id, id));
+    return true;
+  }
+
+  async getDaoSafeBalances(walletId: number): Promise<DaoSafeBalance[]> {
+    return db.select().from(daoSafeBalances).where(eq(daoSafeBalances.walletId, walletId));
+  }
+
+  async upsertDaoSafeBalances(walletId: number, balances: InsertDaoSafeBalance[]): Promise<DaoSafeBalance[]> {
+    // Delete existing balances for this wallet
+    await db.delete(daoSafeBalances).where(eq(daoSafeBalances.walletId, walletId));
+    
+    if (balances.length === 0) return [];
+    
+    // Insert new balances
+    const inserted = await db.insert(daoSafeBalances)
+      .values(balances.map(b => ({ ...b, walletId })))
+      .returning();
+    return inserted;
+  }
+
+  async getDaoSafePendingTxs(walletId?: number): Promise<DaoSafePendingTx[]> {
+    if (walletId) {
+      return db.select().from(daoSafePendingTxs)
+        .where(eq(daoSafePendingTxs.walletId, walletId))
+        .orderBy(desc(daoSafePendingTxs.submissionDate));
+    }
+    return db.select().from(daoSafePendingTxs).orderBy(desc(daoSafePendingTxs.submissionDate));
+  }
+
+  async upsertDaoSafePendingTx(tx: InsertDaoSafePendingTx): Promise<DaoSafePendingTx> {
+    // Check if exists
+    const [existing] = await db.select().from(daoSafePendingTxs)
+      .where(eq(daoSafePendingTxs.safeTxHash, tx.safeTxHash));
+    
+    if (existing) {
+      const [updated] = await db.update(daoSafePendingTxs)
+        .set({ ...tx, lastSyncedAt: new Date() })
+        .where(eq(daoSafePendingTxs.id, existing.id))
+        .returning();
+      return updated;
+    }
+    
+    const [created] = await db.insert(daoSafePendingTxs).values(tx).returning();
+    return created;
+  }
+
+  async deleteDaoSafePendingTx(id: number): Promise<boolean> {
+    await db.delete(daoSafePendingTxs).where(eq(daoSafePendingTxs.id, id));
+    return true;
   }
 }
 

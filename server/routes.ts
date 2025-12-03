@@ -10112,6 +10112,223 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // DAO Safe Wallets
+  app.get("/api/dao/safe-wallets", isAuthenticated, async (req: any, res) => {
+    try {
+      const wallets = await storage.getDaoSafeWallets();
+      res.json(wallets);
+    } catch (error) {
+      console.error("Error fetching safe wallets:", error);
+      res.status(500).json({ error: "Failed to fetch safe wallets" });
+    }
+  });
+
+  app.get("/api/dao/safe-wallets/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const wallet = await storage.getDaoSafeWallet(id);
+      if (!wallet) {
+        return res.status(404).json({ error: "Wallet not found" });
+      }
+      res.json(wallet);
+    } catch (error) {
+      console.error("Error fetching safe wallet:", error);
+      res.status(500).json({ error: "Failed to fetch safe wallet" });
+    }
+  });
+
+  app.post("/api/dao/safe-wallets", requireRole("admin"), async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const { address, chainId, label } = req.body;
+      
+      if (!address || !chainId || !label) {
+        return res.status(400).json({ error: "Missing required fields: address, chainId, label" });
+      }
+      
+      // Check if wallet already exists
+      const existing = await storage.getDaoSafeWalletByAddress(address, chainId);
+      if (existing) {
+        return res.status(409).json({ error: "Wallet already connected on this chain" });
+      }
+      
+      // Validate it's a real Safe wallet
+      const safeService = await import("./safe-service");
+      let safeInfo;
+      try {
+        safeInfo = await safeService.getSafeInfo(address, chainId);
+      } catch (error: any) {
+        return res.status(400).json({ error: `Invalid Safe wallet: ${error.message}` });
+      }
+      
+      const wallet = await storage.createDaoSafeWallet({
+        address,
+        chainId,
+        label,
+        owners: JSON.stringify(safeInfo.owners),
+        threshold: safeInfo.threshold,
+        nonce: safeInfo.nonce,
+        addedBy: user.id,
+        lastSyncedAt: new Date(),
+      });
+      
+      res.status(201).json(wallet);
+    } catch (error) {
+      console.error("Error creating safe wallet:", error);
+      res.status(500).json({ error: "Failed to create safe wallet" });
+    }
+  });
+
+  app.patch("/api/dao/safe-wallets/:id", requireRole("admin"), async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const wallet = await storage.updateDaoSafeWallet(id, req.body);
+      res.json(wallet);
+    } catch (error) {
+      console.error("Error updating safe wallet:", error);
+      res.status(500).json({ error: "Failed to update safe wallet" });
+    }
+  });
+
+  app.delete("/api/dao/safe-wallets/:id", requireRole("admin"), async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      await storage.deleteDaoSafeWallet(id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting safe wallet:", error);
+      res.status(500).json({ error: "Failed to delete safe wallet" });
+    }
+  });
+
+  // Safe Wallet Balances
+  app.get("/api/dao/safe-wallets/:id/balances", isAuthenticated, async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const wallet = await storage.getDaoSafeWallet(id);
+      if (!wallet) {
+        return res.status(404).json({ error: "Wallet not found" });
+      }
+      
+      const safeService = await import("./safe-service");
+      const balances = await safeService.getSafeBalances(wallet.address, wallet.chainId);
+      
+      // Cache balances in database
+      await storage.upsertDaoSafeBalances(id, balances.map(b => ({
+        walletId: id,
+        tokenAddress: b.tokenAddress,
+        tokenSymbol: b.tokenSymbol,
+        tokenName: b.tokenName,
+        tokenDecimals: b.tokenDecimals,
+        balance: b.balance,
+        balanceUsd: b.fiatBalance ? parseFloat(b.fiatBalance) : null,
+      })));
+      
+      res.json(balances);
+    } catch (error) {
+      console.error("Error fetching safe wallet balances:", error);
+      res.status(500).json({ error: "Failed to fetch balances" });
+    }
+  });
+
+  // Safe Wallet Pending Transactions
+  app.get("/api/dao/safe-wallets/:id/pending-txs", isAuthenticated, async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const wallet = await storage.getDaoSafeWallet(id);
+      if (!wallet) {
+        return res.status(404).json({ error: "Wallet not found" });
+      }
+      
+      const safeService = await import("./safe-service");
+      const pendingTxs = await safeService.getPendingTransactions(wallet.address, wallet.chainId);
+      
+      res.json(pendingTxs);
+    } catch (error) {
+      console.error("Error fetching pending transactions:", error);
+      res.status(500).json({ error: "Failed to fetch pending transactions" });
+    }
+  });
+
+  // Safe Wallet Transaction History
+  app.get("/api/dao/safe-wallets/:id/tx-history", isAuthenticated, async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const wallet = await storage.getDaoSafeWallet(id);
+      if (!wallet) {
+        return res.status(404).json({ error: "Wallet not found" });
+      }
+      
+      const limit = req.query.limit ? parseInt(req.query.limit) : 20;
+      const safeService = await import("./safe-service");
+      const history = await safeService.getTransactionHistory(wallet.address, wallet.chainId, limit);
+      
+      res.json(history);
+    } catch (error) {
+      console.error("Error fetching transaction history:", error);
+      res.status(500).json({ error: "Failed to fetch transaction history" });
+    }
+  });
+
+  // Sync all Safe wallets
+  app.post("/api/dao/safe-wallets/sync-all", requireRole("admin"), async (req: any, res) => {
+    try {
+      const wallets = await storage.getDaoSafeWallets();
+      const safeService = await import("./safe-service");
+      
+      const results = await Promise.allSettled(
+        wallets.map(async (wallet) => {
+          try {
+            const info = await safeService.getSafeInfo(wallet.address, wallet.chainId);
+            const balances = await safeService.getSafeBalances(wallet.address, wallet.chainId);
+            
+            await storage.updateDaoSafeWallet(wallet.id, {
+              owners: JSON.stringify(info.owners),
+              threshold: info.threshold,
+              nonce: info.nonce,
+              lastSyncedAt: new Date(),
+            });
+            
+            await storage.upsertDaoSafeBalances(wallet.id, balances.map(b => ({
+              walletId: wallet.id,
+              tokenAddress: b.tokenAddress,
+              tokenSymbol: b.tokenSymbol,
+              tokenName: b.tokenName,
+              tokenDecimals: b.tokenDecimals,
+              balance: b.balance,
+              balanceUsd: b.fiatBalance ? parseFloat(b.fiatBalance) : null,
+            })));
+            
+            return { walletId: wallet.id, success: true };
+          } catch (error: any) {
+            return { walletId: wallet.id, success: false, error: error.message };
+          }
+        })
+      );
+      
+      res.json({ synced: results.filter(r => r.status === "fulfilled").length, results });
+    } catch (error) {
+      console.error("Error syncing wallets:", error);
+      res.status(500).json({ error: "Failed to sync wallets" });
+    }
+  });
+
+  // Get supported chains
+  app.get("/api/dao/safe-chains", isAuthenticated, async (req: any, res) => {
+    try {
+      const safeService = await import("./safe-service");
+      const chainIds = safeService.getSupportedChainIds();
+      const chains = chainIds.map(id => ({
+        id,
+        name: safeService.getChainName(id),
+      }));
+      res.json(chains);
+    } catch (error) {
+      console.error("Error fetching chains:", error);
+      res.status(500).json({ error: "Failed to fetch chains" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

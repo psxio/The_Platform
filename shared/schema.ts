@@ -2456,3 +2456,84 @@ export const daoPermissions = pgTable("dao_permissions", {
 export const insertDaoPermissionSchema = createInsertSchema(daoPermissions).omit({ id: true, createdAt: true });
 export type InsertDaoPermission = z.infer<typeof insertDaoPermissionSchema>;
 export type DaoPermission = typeof daoPermissions.$inferSelect;
+
+// Supported EVM Chain IDs for Safe Wallets
+export const safeChains = [
+  { id: 1, name: "Ethereum", shortName: "eth" },
+  { id: 10, name: "Optimism", shortName: "oeth" },
+  { id: 56, name: "BNB Smart Chain", shortName: "bnb" },
+  { id: 100, name: "Gnosis", shortName: "gno" },
+  { id: 137, name: "Polygon", shortName: "matic" },
+  { id: 8453, name: "Base", shortName: "base" },
+  { id: 42161, name: "Arbitrum One", shortName: "arb1" },
+  { id: 43114, name: "Avalanche", shortName: "avax" },
+  { id: 11155111, name: "Sepolia", shortName: "sep" },
+] as const;
+
+export type SafeChain = typeof safeChains[number];
+
+// DAO Safe Wallets
+export const daoSafeWallets = pgTable("dao_safe_wallets", {
+  id: serial("id").primaryKey(),
+  address: varchar("address", { length: 42 }).notNull(),
+  chainId: integer("chain_id").notNull(),
+  label: varchar("label", { length: 100 }).notNull(),
+  owners: text("owners"), // JSON array of owner addresses
+  threshold: integer("threshold"),
+  nonce: integer("nonce").default(0),
+  isActive: boolean("is_active").default(true),
+  addedBy: varchar("added_by").references(() => users.id),
+  lastSyncedAt: timestamp("last_synced_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertDaoSafeWalletSchema = createInsertSchema(daoSafeWallets).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertDaoSafeWallet = z.infer<typeof insertDaoSafeWalletSchema>;
+export type DaoSafeWallet = typeof daoSafeWallets.$inferSelect;
+
+// Safe Wallet Token Balances (cached)
+export const daoSafeBalances = pgTable("dao_safe_balances", {
+  id: serial("id").primaryKey(),
+  walletId: integer("wallet_id").notNull().references(() => daoSafeWallets.id, { onDelete: "cascade" }),
+  tokenAddress: varchar("token_address", { length: 42 }), // null for native token
+  tokenSymbol: varchar("token_symbol", { length: 20 }).notNull(),
+  tokenName: varchar("token_name", { length: 100 }),
+  tokenDecimals: integer("token_decimals").default(18),
+  balance: varchar("balance", { length: 78 }).notNull(), // Store as string to handle large numbers
+  balanceUsd: real("balance_usd"), // USD value if available
+  lastUpdatedAt: timestamp("last_updated_at").defaultNow(),
+});
+
+export const insertDaoSafeBalanceSchema = createInsertSchema(daoSafeBalances).omit({ id: true, lastUpdatedAt: true });
+export type InsertDaoSafeBalance = z.infer<typeof insertDaoSafeBalanceSchema>;
+export type DaoSafeBalance = typeof daoSafeBalances.$inferSelect;
+
+// Safe Pending Transactions (cached)
+export const safeTxStatuses = ["awaiting_confirmations", "awaiting_execution", "executed", "failed", "cancelled"] as const;
+export type SafeTxStatus = typeof safeTxStatuses[number];
+
+export const daoSafePendingTxs = pgTable("dao_safe_pending_txs", {
+  id: serial("id").primaryKey(),
+  walletId: integer("wallet_id").notNull().references(() => daoSafeWallets.id, { onDelete: "cascade" }),
+  safeTxHash: varchar("safe_tx_hash", { length: 66 }).notNull(),
+  to: varchar("to", { length: 42 }).notNull(),
+  value: varchar("value", { length: 78 }).default("0"),
+  data: text("data"),
+  operation: integer("operation").default(0), // 0 = CALL, 1 = DELEGATECALL
+  nonce: integer("nonce").notNull(),
+  confirmationsRequired: integer("confirmations_required").notNull(),
+  confirmationsCount: integer("confirmations_count").default(0),
+  confirmations: text("confirmations"), // JSON array of confirmation objects
+  status: varchar("status", { length: 30 }).$type<SafeTxStatus>().default("awaiting_confirmations"),
+  submissionDate: timestamp("submission_date"),
+  executedAt: timestamp("executed_at"),
+  proposedBy: varchar("proposed_by", { length: 42 }),
+  description: text("description"),
+  daoProjectId: integer("dao_project_id").references(() => daoProjects.id, { onDelete: "set null" }),
+  lastSyncedAt: timestamp("last_synced_at").defaultNow(),
+});
+
+export const insertDaoSafePendingTxSchema = createInsertSchema(daoSafePendingTxs).omit({ id: true, lastSyncedAt: true });
+export type InsertDaoSafePendingTx = z.infer<typeof insertDaoSafePendingTxSchema>;
+export type DaoSafePendingTx = typeof daoSafePendingTxs.$inferSelect;

@@ -1,0 +1,402 @@
+The Agency DAO - Standardized Services
+Offerings
+Overview
+The Agency provides professional services across blockchain, Web3, and decentralized
+technology domains. Our standardized offerings ensure consistent pricing, clear scope
+definitions, and predictable delivery timelines for clients.
+Service Categories
+1. Strategy & Consulting
+Professional advisory services for organizations navigating Web3, DAO structures, and
+decentralized systems.
+1.1 DAO Strategy & Design
+Scope:
+• Governance framework design
+• Tokenomics modeling and analysis
+• DAO tooling recommendations
+• Launch strategy and roadmap
+• Community structure planning
+Deliverables:
+• Comprehensive DAO design document
+• Governance framework specification
+• Token distribution model
+• Implementation roadmap
+• Risk assessment and mitigation plan
+Pricing:
+• Foundation Package: $15,000 - $25,000 (2-3 weeks)
+• Comprehensive Package: $35,000 - $60,000 (4-6 weeks)
+• Enterprise Package: $75,000+ (8+ weeks, ongoing advisory)
+Ideal For: New DAOs, organizations transitioning to decentralized governance, protocol
+teams
+1.2 Web3 Product Strategy
+Scope:
+• Market analysis and positioning
+• Product-market fit assessment
+• Go-to-market strategy
+• Competitive landscape analysis
+• User journey mapping for Web3 products
+Deliverables:
+• Product strategy document
+• Market research report
+• GTM plan with timeline
+• User personas and journey maps
+• Success metrics framework
+Pricing:
+• Startup Package: $10,000 - $20,000 (2-3 weeks)
+• Growth Package: $25,000 - $45,000 (4-6 weeks)
+• Scale Package: $50,000+ (ongoing strategic partnership)
+Ideal For: Web3 startups, protocols launching new products, traditional companies
+entering Web3
+1.3 Tokenomics Design
+Scope:
+• Token utility design
+• Distribution and vesting schedules
+• Economic modeling and simulations
+• Incentive mechanism design
+• Regulatory considerations review
+Deliverables:
+• Tokenomics whitepaper
+• Economic model with simulations
+• Distribution schedule and rationale
+• Utility framework documentation
+• Visual diagrams and infographics
+Pricing:
+• Core Model: $20,000 - $35,000 (3-4 weeks)
+• Advanced Model: $40,000 - $70,000 (5-8 weeks, includes simulation)
+• Comprehensive Suite: $80,000+ (full economic design + ongoing optimization)
+Ideal For: Token launches, protocol upgrades, DeFi projects, gaming economies
+2. Development Services
+Full-stack blockchain and Web3 development from smart contracts to user interfaces.
+2.1 Smart Contract Development
+Scope:
+• Custom smart contract development (Solidity, Rust, Move)
+• Contract architecture design
+• Gas optimization
+• Security best practices implementation
+• Testing and documentation
+Deliverables:
+• Production-ready smart contracts
+• Comprehensive test suite
+• Deployment scripts
+• Technical documentation
+• Architecture diagrams
+Pricing:
+• Simple Contract: $8,000 - $15,000 (1-2 weeks) - Basic token, simple NFT
+• Standard Contract Suite: $20,000 - $40,000 (3-5 weeks) - Multi-contract system,
+moderate complexity
+• Complex Protocol: $50,000 - $150,000+ (6-12 weeks) - DeFi protocols, advanced
+mechanisms
+Ideal For: Token launches, NFT projects, DeFi protocols, on-chain governance systems
+2.2 Smart Contract Audit & Security Review
+Scope:
+• Line-by-line code review
+• Automated security scanning
+• Manual vulnerability assessment
+• Gas optimization review
+• Best practices compliance check
+Deliverables:
+• Detailed audit report
+• Vulnerability classification (Critical/High/Medium/Low)
+• Remediation recommendations
+• Re-audit after fixes (included)
+• Security badge/certification
+Pricing:
+• Basic Audit: $10,000 - $20,000 (1-2 weeks, <500 lines)
+• Standard Audit: $25,000 - $45,000 (2-3 weeks, 500-1500 lines)
+• Comprehensive Audit: $50,000 - $100,000+ (3-5 weeks, complex protocols)
+Ideal For: Pre-launch protocols, security-conscious projects, projects seeking investor
+confidence
+2.3 dApp Development
+Scope:
+• Frontend development (React, Next.js, Vue)
+• Web3 integration (ethers.js, wagmi, viem)
+• Wallet connection and authentication
+• Smart contract interaction layer
+• Responsive design and UX optimization
+Deliverables:
+• Production-ready dApp
+• Responsive web interface
+• Web3 wallet integration
+• Deployment and hosting setup
+• User documentation
+Pricing:
+• MVP dApp: $15,000 - $30,000 (3-4 weeks) - Core functionality, basic UI
+• Standard dApp: $35,000 - $70,000 (5-8 weeks) - Full features, polished UI/UX
+• Enterprise dApp: $80,000 - $200,000+ (10-16 weeks) - Complex features, custom design,
+advanced integrations
+Ideal For: DeFi platforms, NFT marketplaces, DAO dashboards, Web3 social apps
+2.4 Backend & Infrastructure
+Scope:
+• API development and integration
+• Indexing and data services (The Graph, custom indexers)
+• IPFS/Arweave integration
+• Database design and management
+• DevOps and deployment automation
+Deliverables:
+• Production API endpoints
+• Database schema and migrations
+• Indexing services
+• Infrastructure as code
+• Monitoring and logging setup
+Pricing:
+• API Development: $12,000 - $25,000 (2-4 weeks)
+• Indexing Solution: $15,000 - $35,000 (3-5 weeks)
+• Full Backend Stack: $40,000 - $80,000+ (6-10 weeks)
+Ideal For: Projects needing off-chain data, complex queries, scalable infrastructure
+3. Design & User Experience
+Visual design and user experience services tailored for Web3 products.
+3.1 Brand Identity & Visual Design
+Scope:
+• Logo design and brand guidelines
+• Color palette and typography
+• Visual asset creation
+• Marketing materials design
+• Brand strategy consultation
+Deliverables:
+• Logo suite (primary, variations, marks)
+• Brand guidelines document
+• Design system foundations
+• Marketing asset templates
+• Source files (Figma, Adobe)
+Pricing:
+• Startup Branding: $8,000 - $15,000 (2-3 weeks)
+• Complete Brand Identity: $18,000 - $35,000 (4-6 weeks)
+• Enterprise Rebrand: $40,000+ (8+ weeks)
+Ideal For: New projects, rebrands, projects seeking professional market presence
+3.2 UI/UX Design for dApps
+Scope:
+• User research and persona development
+• Information architecture
+• Wireframing and prototyping
+• High-fidelity UI design
+• Design system creation
+• Usability testing
+Deliverables:
+• User flow diagrams
+• Wireframes (low and high fidelity)
+• Interactive prototypes
+• Final UI designs (Figma)
+• Design system/component library
+• Developer handoff documentation
+Pricing:
+• Core Screens: $10,000 - $20,000 (2-3 weeks, 5-10 screens)
+• Full dApp Design: $25,000 - $50,000 (4-6 weeks, complete application)
+• Design System + dApp: $55,000 - $90,000+ (8-12 weeks, comprehensive)
+Ideal For: dApp launches, UX improvements, professional product presentation
+3.3 NFT Art & Collection Design
+Scope:
+• Generative art system design
+• Trait creation and layering
+• Rarity distribution planning
+• Metadata structure
+• Preview and promotional assets
+Deliverables:
+• Complete NFT collection (up to 10,000 items)
+• Trait layers and variations
+• Rarity chart and distribution
+• Metadata files
+• Marketing visuals
+Pricing:
+• Small Collection: $8,000 - $15,000 (1-3 weeks, up to 1,000 NFTs)
+• Standard Collection: $18,000 - $35,000 (3-5 weeks, up to 10,000 NFTs)
+• Premium/Custom Art: $40,000+ (hand-drawn, unique pieces, complex systems)
+Ideal For: NFT projects, gaming assets, community membership tokens
+4. Marketing & Growth
+Web3-native marketing and community growth services.
+4.1 Community Building & Management
+Scope:
+• Discord/Telegram setup and management
+• Community engagement strategy
+• Moderation and support
+• Event planning and execution
+• Ambassador program design
+Deliverables:
+• Configured community platforms
+• Community guidelines and documentation
+• Engagement calendar
+• Monthly analytics reports
+• Trained moderation team
+Pricing:
+• Setup + Strategy: $6,000 - $12,000 (one-time)
+• Ongoing Management: $4,000 - $8,000/month (retainer)
+• Full-Service Growth: $10,000 - $20,000/month (comprehensive)
+Ideal For: Pre-launch projects, growing communities, projects needing professional
+community ops
+4.2 Content Creation & Marketing
+Scope:
+• Content strategy development
+• Blog posts and articles
+• Social media content
+• Video scripts and production
+• Email campaigns
+• Thought leadership pieces
+Deliverables:
+• Content calendar
+• Written content (blogs, threads, posts)
+• Visual content (graphics, videos)
+• Distribution and scheduling
+• Performance analytics
+Pricing:
+• Content Strategy: $5,000 - $10,000 (one-time)
+• Content Retainer: $3,000 - $8,000/month (ongoing content production)
+• Campaign Package: $15,000 - $40,000 (major launch or campaign)
+Ideal For: Projects needing consistent content, launches, thought leadership building
+4.3 Go-to-Market Campaign
+Scope:
+• Launch strategy and planning
+• Multi-channel marketing execution
+• Influencer and partnership outreach
+• PR and media relations
+• Community activation
+• Performance tracking and optimization
+Deliverables:
+• GTM strategy document
+• Marketing asset suite
+• Launch timeline and checklist
+• Partnership agreements
+• Campaign performance report
+Pricing:
+• Soft Launch: $15,000 - $30,000 (4-6 weeks)
+• Standard Launch: $35,000 - $70,000 (6-10 weeks)
+• Major Launch Campaign: $80,000 - $150,000+ (12+ weeks, comprehensive)
+Ideal For: Token launches, mainnet releases, major product updates
+5. Ongoing Support & Retainers
+Continuous partnership models for long-term collaboration.
+5.1 Technical Maintenance & Support
+Scope:
+• Bug fixes and updates
+• Smart contract monitoring
+• Infrastructure maintenance
+• Security patches
+• Performance optimization
+Pricing:
+• Basic Support: $3,000 - $6,000/month (up to 20 hours)
+• Standard Support: $8,000 - $15,000/month (up to 50 hours)
+• Premium Support: $18,000+/month (dedicated team, SLA)
+5.2 Strategic Advisory Retainer
+Scope:
+• Regular strategy sessions
+• Market intelligence and insights
+• Decision support and guidance
+• Network introductions
+• Ad-hoc consulting
+Pricing:
+• Advisor Access: $5,000 - $10,000/month (monthly sessions)
+• Strategic Partner: $12,000 - $25,000/month (weekly access, priority support)
+• Embedded Advisor: $30,000+/month (daily access, deep integration)
+5.3 Full-Service Partnership
+Scope:
+• Combination of development, design, marketing, and strategy
+• Dedicated team allocation
+• Flexible scope and priorities
+• Regular reporting and planning
+Pricing:
+• Startup Partner: $15,000 - $30,000/month
+• Growth Partner: $35,000 - $70,000/month
+• Enterprise Partner: $80,000+/month
+Custom Projects
+For projects that don't fit standardized offerings:
+Process:
+1. Initial consultation (complimentary)
+2. Scope definition and proposal
+3. Custom pricing based on effort, timeline, and value
+4. Statement of Work (SOW) agreement
+5. Milestone-based delivery
+Typical Range: $10,000 - $500,000+ depending on scope
+Pricing Notes
+Factors Affecting Pricing
+• Complexity: Technical difficulty and novelty of requirements
+• Timeline: Rush projects may incur 20-50% premium
+• Scope Changes: Change requests handled via formal change order process
+• Team Composition: Senior specialists may increase rates
+• Client Readiness: Well-prepared clients with clear requirements may reduce costs
+Payment Terms
+Standard Terms:
+• 30% deposit upon SOW signing
+• 40% at midpoint milestone
+• 30% upon completion and acceptance
+Retainer Terms:
+• Monthly billing in advance
+• Unused hours do not roll over (unless specified)
+• 30-day cancellation notice required
+Discounts
+• DAO-to-DAO: 10% discount for registered DAO clients
+• Multi-Service Bundle: 15% discount when combining 3+ service categories
+• Long-Term Retainer: Up to 20% discount for 6+ month commitments
+• Referral Program: 10% credit for successful client referrals
+Engagement Process
+1. Discovery Call
+• Initial consultation (30-60 min, complimentary)
+• Understand client needs and objectives
+• Assess fit and capability
+2. Proposal & Scoping
+• Detailed proposal with scope, timeline, pricing
+• Team composition and expertise overview
+• Success criteria and deliverables definition
+3. Agreement & Kickoff
+• SOW or Master Services Agreement execution
+• Deposit payment
+• Project kickoff meeting
+• Communication channels setup
+4. Delivery & Iteration
+• Regular progress updates
+• Milestone reviews and approvals
+• Iterative feedback incorporation
+• Quality assurance and testing
+5. Completion & Handoff
+• Final deliverables transfer
+• Documentation and training
+• Warranty period (typically 30 days)
+• Post-project support options
+Service Level Agreements (SLA)
+Response Times
+Support Tier Initial Response Resolution Target
+Basic 48 hours Best effort
+Standard 24 hours 5 business days
+Premium 4 hours 48 hours (critical)
+Availability
+• Standard Projects: Business hours (9 AM - 6 PM client timezone)
+• Premium Support: Extended hours with emergency contact
+• Enterprise: 24/7 critical issue support available
+Quality Guarantees
+Development Services
+• Code review by senior developers
+• Automated testing with >80% coverage
+• Security best practices compliance
+• 30-day bug fix warranty
+Design Services
+• Unlimited revisions during design phase (within scope)
+• Brand guidelines compliance
+• Accessibility standards (WCAG 2.1 AA minimum)
+• Source file delivery
+Consulting Services
+• Industry best practices application
+• Research-backed recommendations
+• Actionable deliverables
+• 30-day Q&A support post-delivery
+Add-On Services
+Available for any engagement:
+• Accelerated Timeline: +25% fee for 2x speed
+• White-Glove Support: Dedicated project manager (+$5k-15k)
+• Training & Workshops: $2,000 - $5,000 per session
+• Documentation: Comprehensive technical docs (+$3k-10k)
+• Post-Launch Monitoring: 30-day monitoring and optimization ($5k-15k)
+Case Study Examples
+Example 1: DeFi Protocol Launch
+Services: Tokenomics Design + Smart Contract Development + dApp Development + Audit
++ GTM Campaign Timeline: 16 weeks Investment: $285,000 Result: Successful launch with
+$50M TVL in first month
+Example 2: DAO Governance Upgrade
+Services: DAO Strategy + Smart Contract Development + UI/UX Design Timeline: 8 weeks
+Investment: $95,000 Result: Improved governance participation by 340%
+Example 3: NFT Collection Launch
+Services: NFT Art Design + Smart Contract + Marketing Campaign + Community Building
+Timeline: 10 weeks Investment: $125,000 Result: Sold out 5,000 NFT collection in 48 hours
+Getting Started
+Contact The Agency:
+• Email: hello@theagency.dao
+• Discord: [Agency Community Server]
+• Telegram: @TheAgencyDAO
+• Website: theagency.dao
+Book a Discovery Call: [Calendly Link]
+Pricing and offerings subject to change. Custom quotes provided upon request. All prices in
+USD.

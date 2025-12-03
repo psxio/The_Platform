@@ -25,9 +25,11 @@ import {
   Shield,
   Target,
   Settings,
-  BarChart3
+  BarChart3,
+  Vault
 } from "lucide-react";
 import { Link } from "wouter";
+import { DaoSafeWallets } from "@/components/dao-safe-wallets";
 
 type DaoRole = {
   id: number;
@@ -268,6 +270,10 @@ export default function DaoDashboard() {
             <TabsTrigger value="roles" className="gap-2" data-testid="tab-roles">
               <Crown className="h-4 w-4" />
               <span className="hidden sm:inline">Ranks</span>
+            </TabsTrigger>
+            <TabsTrigger value="safe-wallets" className="gap-2" data-testid="tab-safe-wallets">
+              <Vault className="h-4 w-4" />
+              <span className="hidden sm:inline">Safe Wallets</span>
             </TabsTrigger>
           </TabsList>
 
@@ -596,6 +602,10 @@ export default function DaoDashboard() {
                 </div>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          <TabsContent value="safe-wallets" className="mt-6">
+            <DaoSafeWallets />
           </TabsContent>
         </Tabs>
       </div>

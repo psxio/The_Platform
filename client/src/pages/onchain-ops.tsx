@@ -261,6 +261,13 @@ export default function OnchainOps() {
                     icon={CopyCheck}
                     href="/web3/duplicates"
                   />
+                  <QuickActionCard
+                    title="Wallet Screener"
+                    description="Screen wallets for bots, sybils, and suspicious activity"
+                    icon={Shield}
+                    href="/web3/screener"
+                    variant="primary"
+                  />
                 </div>
               </CardContent>
             </Card>

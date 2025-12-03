@@ -30,6 +30,7 @@ import {
   ListTodo,
   ArrowRight,
   CopyCheck,
+  Shield,
 } from "lucide-react";
 
 type SearchResult = {
@@ -85,6 +86,7 @@ const PAGE_RESULTS: PageItem[] = [
   { id: "page-extract", type: "page", title: "EVM Extractor", description: "Extract addresses from files", path: "/web3/extract", icon: Database, role: "web3" },
   { id: "page-collections", type: "page", title: "NFT Collections", description: "Manage NFT collections", path: "/web3/collections", icon: FolderOpen, role: "web3" },
   { id: "page-duplicates", type: "page", title: "Duplicate Checker", description: "Find and remove duplicate addresses", path: "/web3/duplicates", icon: CopyCheck, role: "web3" },
+  { id: "page-screener", type: "page", title: "Wallet Screener", description: "Screen wallets for bots and sybils", path: "/web3/screener", icon: Shield, role: "web3" },
   { id: "page-dao", type: "page", title: "DAO Hub", description: "DAO management dashboard", path: "/dao", icon: Crown },
   { id: "page-dao-catalog", type: "page", title: "Service Catalog", description: "DAO services", path: "/dao/catalog", icon: Briefcase },
   { id: "page-clients", type: "page", title: "Client Directory", description: "Client profiles", path: "/client-directory", icon: Building2 },

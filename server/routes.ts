@@ -10751,11 +10751,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const isOwner = await checkMembershipOwnership(user.id, existingDeal.broughtByMembershipId, isAdmin);
       
-      const restrictedFields = ["status", "projectId", "convertedToProjectAt", "bizDevCreditPercent", "referralCreditPercent"];
+      const { source, status, bizDevCreditPercent, referralCreditPercent } = req.body;
+      
+      if (source) {
+        const validSources = ["inbound", "referral", "outbound", "ip_contribution", "partnership"];
+        if (!validSources.includes(source)) {
+          return res.status(400).json({ error: "Invalid source value" });
+        }
+      }
+      
+      if (status) {
+        const validStatuses = ["lead", "qualified", "proposal", "negotiation", "won", "lost"];
+        if (!validStatuses.includes(status)) {
+          return res.status(400).json({ error: "Invalid status value" });
+        }
+      }
+      
+      if (bizDevCreditPercent !== undefined && (bizDevCreditPercent < 0 || bizDevCreditPercent > 100)) {
+        return res.status(400).json({ error: "bizDevCreditPercent must be between 0 and 100" });
+      }
+      
+      if (referralCreditPercent !== undefined && (referralCreditPercent < 0 || referralCreditPercent > 100)) {
+        return res.status(400).json({ error: "referralCreditPercent must be between 0 and 100" });
+      }
+      
+      const restrictedFields = ["status", "projectId", "convertedToProjectAt", "bizDevCreditPercent", "referralCreditPercent", "source"];
       const hasRestrictedFields = Object.keys(req.body).some(k => restrictedFields.includes(k));
       
       if (hasRestrictedFields && !isAdmin) {
-        return res.status(403).json({ error: "Only admins can change deal status or credit percentages" });
+        return res.status(403).json({ error: "Only admins can change deal status, source, or credit percentages" });
       }
       
       if (!isOwner && !isAdmin) {
@@ -10837,11 +10861,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
       
       const isOwner = await checkMembershipOwnership(user.id, existingContribution.contributorMembershipId, isAdmin);
       
-      const restrictedFields = ["revenueSharePercent", "isActive"];
+      const { ipType, revenueSharePercent, name } = req.body;
+      
+      if (ipType) {
+        const validIpTypes = ["design", "code", "content", "brand", "game", "platform", "other"];
+        if (!validIpTypes.includes(ipType)) {
+          return res.status(400).json({ error: "Invalid ipType value" });
+        }
+      }
+      
+      if (name !== undefined && (!name || name.trim().length === 0)) {
+        return res.status(400).json({ error: "Name cannot be empty" });
+      }
+      
+      if (revenueSharePercent !== undefined && (revenueSharePercent < 0 || revenueSharePercent > 100)) {
+        return res.status(400).json({ error: "revenueSharePercent must be between 0 and 100" });
+      }
+      
+      const restrictedFields = ["revenueSharePercent", "isActive", "ipType"];
       const hasRestrictedFields = Object.keys(req.body).some(k => restrictedFields.includes(k));
       
       if (hasRestrictedFields && !isAdmin) {
-        return res.status(403).json({ error: "Only admins can change revenue share or active status" });
+        return res.status(403).json({ error: "Only admins can change revenue share, active status, or IP type" });
       }
       
       if (!isOwner && !isAdmin) {

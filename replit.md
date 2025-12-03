@@ -11,6 +11,22 @@ Preferred communication style: Simple, everyday language.
 ### UI/UX Decisions
 The frontend is built with React and TypeScript using Vite, Wouter for routing, and Shadcn UI (New York style) with Radix UI primitives. Design emphasizes modern aesthetics, utilizing task templates, multiple task views (Grid, Kanban, Calendar), visual indicators for task status, and an analytics dashboard. Task detail dialogs feature inline editing with role-based permissions and quick status workflow buttons.
 
+### Navigation Architecture (December 2024)
+The platform uses a **space-based navigation** system with role-gated access:
+- **SpaceSwitcher**: Top-level navigation between spaces (My Workspace, Content, Onchain, DAO, Admin)
+- **SpaceTabs**: Secondary navigation within each space
+- **SpotlightSearch**: Global Cmd+K search across all spaces with role-filtered results
+
+**Key Home Pages by Role:**
+- **web3**: `/onchain-ops` - Onchain Operations dashboard with Safe wallet balances, comparison history, NFT collections
+- **content**: `/content-dashboard` - Content Studio with grouped tabs (Work, Team, Library, Reports, Settings)
+- **admin**: `/content-dashboard` + `/admin/control-center` - Full access plus unified admin dashboard
+
+**Spotlight Search** (Cmd+K or click search button):
+- Role-filtered page navigation (content/web3/admin pages only shown to authorized users)
+- Dynamic search across tasks, projects, clients, wallets, and collections
+- Quick keyboard shortcut access from anywhere in the app
+
 ### Role Architecture
 The system uses three roles: `web3`, `content`, and `admin`, with role-based access control enforced throughout. Clients in the buy power system are `content`-role users accessing a self-service portal.
 

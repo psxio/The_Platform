@@ -2792,3 +2792,29 @@ export const daoRoleAssignmentHistory = pgTable("dao_role_assignment_history", {
 export const insertDaoRoleAssignmentHistorySchema = createInsertSchema(daoRoleAssignmentHistory).omit({ id: true, assignedAt: true });
 export type InsertDaoRoleAssignmentHistory = z.infer<typeof insertDaoRoleAssignmentHistorySchema>;
 export type DaoRoleAssignmentHistory = typeof daoRoleAssignmentHistory.$inferSelect;
+
+// Media to MP3 Conversion - Track conversion jobs for web3 users
+export const mediaConversionStatuses = ["pending", "processing", "completed", "failed"] as const;
+export type MediaConversionStatus = typeof mediaConversionStatuses[number];
+
+export const mediaPlatforms = ["youtube", "soundcloud", "direct"] as const;
+export type MediaPlatform = typeof mediaPlatforms[number];
+
+export const mediaConversions = pgTable("media_conversions", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  sourceUrl: text("source_url").notNull(),
+  platform: varchar("platform", { length: 30 }).$type<MediaPlatform>().notNull(),
+  title: varchar("title", { length: 500 }),
+  duration: integer("duration"), // Duration in seconds
+  status: varchar("status", { length: 30 }).$type<MediaConversionStatus>().default("pending"),
+  outputPath: text("output_path"),
+  fileSize: integer("file_size"), // File size in bytes
+  errorMessage: text("error_message"),
+  createdAt: timestamp("created_at").defaultNow(),
+  completedAt: timestamp("completed_at"),
+});
+
+export const insertMediaConversionSchema = createInsertSchema(mediaConversions).omit({ id: true, createdAt: true, completedAt: true });
+export type InsertMediaConversion = z.infer<typeof insertMediaConversionSchema>;
+export type MediaConversion = typeof mediaConversions.$inferSelect;

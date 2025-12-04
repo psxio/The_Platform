@@ -7,6 +7,7 @@ import { AdvancedTaskFilters } from "@/components/advanced-task-filters";
 import { BulkTaskActions } from "@/components/bulk-task-actions";
 import { AddContentTaskDialog } from "@/components/add-content-task-dialog";
 import { TaskDetailsDialog } from "@/components/task-details-dialog";
+import { QuickAddWork } from "@/components/quick-add-work";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { AlertCircle, Inbox, User as UserIcon, Users, Building2, Home, Filter } from "lucide-react";
@@ -304,6 +305,8 @@ export function ContentTasksView() {
         onClearSelection={() => setSelectedTaskIds([])}
         assignees={uniqueAssignees}
       />
+
+      <QuickAddWork />
 
       <div>
         {isLoading ? (

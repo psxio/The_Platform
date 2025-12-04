@@ -51,15 +51,20 @@ interface TeamMember {
 
 interface ContentTask {
   id: number;
-  title: string;
+  description: string;
+  title?: string;
   status: string;
   priority: string;
-  assignedTo: number | null;
+  assignedTo: string | null;
   dueDate: string | null;
+  client?: string | null;
+  clientType?: string | null;
   contentType: string | null;
   campaignId: number | null;
   estimatedHours: number | null;
   progress?: number;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 interface Campaign {
@@ -89,13 +94,21 @@ interface ActivityLog {
   createdAt: string;
 }
 
+const normalizeStatus = (status: string): string => 
+  status.toUpperCase().replace(/-/g, ' ');
+
 const statusColors: { [key: string]: string } = {
-  "pending": "bg-amber-500",
-  "in-progress": "bg-blue-500",
-  "review": "bg-purple-500",
-  "completed": "bg-emerald-500",
-  "blocked": "bg-destructive",
+  "PENDING": "bg-amber-500",
+  "IN PROGRESS": "bg-blue-500",
+  "TO BE STARTED": "bg-slate-400",
+  "REVIEW": "bg-purple-500",
+  "IN REVIEW": "bg-purple-500",
+  "COMPLETED": "bg-emerald-500",
+  "BLOCKED": "bg-destructive",
 };
+
+const getStatusColor = (status: string): string => 
+  statusColors[normalizeStatus(status)] || "bg-muted";
 
 const priorityConfig = {
   low: { label: "Low", className: "bg-muted text-muted-foreground" },
@@ -140,12 +153,12 @@ export function ProductionCommandCenter() {
     refetchInterval: 30000,
   });
 
-  const activeTasks = tasks?.filter(t => t.status !== "completed") || [];
-  const inProgressTasks = tasks?.filter(t => t.status === "in-progress") || [];
-  const reviewTasks = tasks?.filter(t => t.status === "review") || [];
-  const blockedTasks = tasks?.filter(t => t.status === "blocked") || [];
+  const activeTasks = tasks?.filter(t => normalizeStatus(t.status) !== "COMPLETED") || [];
+  const inProgressTasks = tasks?.filter(t => normalizeStatus(t.status) === "IN PROGRESS") || [];
+  const reviewTasks = tasks?.filter(t => normalizeStatus(t.status) === "REVIEW" || normalizeStatus(t.status) === "IN REVIEW") || [];
+  const blockedTasks = tasks?.filter(t => normalizeStatus(t.status) === "BLOCKED") || [];
   const completedToday = tasks?.filter(t => {
-    if (t.status !== "completed") return false;
+    if (normalizeStatus(t.status) !== "COMPLETED") return false;
     return true;
   }) || [];
 
@@ -168,7 +181,7 @@ export function ProductionCommandCenter() {
     return presence?.isScreenSharing;
   }) || [];
 
-  const activeCampaigns = campaigns?.filter(c => c.status === "active") || [];
+  const activeCampaigns = campaigns?.filter(c => normalizeStatus(c.status) === "ACTIVE") || [];
 
   const getInitials = (name?: string | null) => {
     if (!name) return "?";
@@ -302,6 +315,116 @@ export function ProductionCommandCenter() {
         </Card>
       </div>
 
+      {/* Live Workstream - What everyone is working on */}
+      <Card data-testid="live-workstream-card">
+        <CardHeader className="pb-4">
+          <CardTitle className="text-base flex items-center justify-between">
+            <span className="flex items-center gap-2">
+              <Activity className="h-4 w-4 text-primary" />
+              Live Workstream
+            </span>
+            <Badge variant="outline" className="text-xs">
+              {tasks?.filter(t => normalizeStatus(t.status) === "IN PROGRESS").length || 0} active
+            </Badge>
+          </CardTitle>
+          <CardDescription>
+            Real-time view of what the team is working on
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ScrollArea className="h-[320px] pr-4">
+            <div className="space-y-3">
+              {tasks
+                ?.filter(t => normalizeStatus(t.status) !== "COMPLETED")
+                .sort((a, b) => {
+                  const statusOrder: Record<string, number> = { 
+                    "IN PROGRESS": 0, 
+                    "BLOCKED": 1, 
+                    "IN REVIEW": 2, 
+                    "REVIEW": 2,
+                    "TO BE STARTED": 3,
+                    "PENDING": 3
+                  };
+                  return (statusOrder[normalizeStatus(a.status)] ?? 99) - (statusOrder[normalizeStatus(b.status)] ?? 99);
+                })
+                .slice(0, 20)
+                .map(task => (
+                  <div
+                    key={task.id}
+                    className={cn(
+                      "flex items-start gap-3 p-3 rounded-lg border bg-card",
+                      normalizeStatus(task.status) === "BLOCKED" && "border-destructive/30 bg-destructive/5",
+                      task.dueDate && new Date(task.dueDate) < new Date() && normalizeStatus(task.status) !== "COMPLETED" && "border-amber-500/30"
+                    )}
+                    data-testid={`workstream-task-${task.id}`}
+                  >
+                    <div className={cn(
+                      "w-1.5 h-full min-h-[48px] rounded-full flex-shrink-0",
+                      getStatusColor(task.status)
+                    )} />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <p className="font-medium text-sm line-clamp-2">{task.description}</p>
+                          <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                            {task.assignedTo && (
+                              <div className="flex items-center gap-1.5">
+                                <Avatar className="h-5 w-5">
+                                  <AvatarFallback className="text-[10px]">
+                                    {task.assignedTo.split(" ").map(n => n[0]).join("").toUpperCase().slice(0, 2)}
+                                  </AvatarFallback>
+                                </Avatar>
+                                <span className="text-xs text-muted-foreground">{task.assignedTo}</span>
+                              </div>
+                            )}
+                            {task.client && (
+                              <Badge variant="secondary" className="text-xs">
+                                {task.client}
+                              </Badge>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex flex-col items-end gap-1 flex-shrink-0">
+                          <Badge 
+                            variant="outline" 
+                            className={cn(
+                              "text-xs",
+                              normalizeStatus(task.status) === "IN PROGRESS" && "bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/20",
+                              normalizeStatus(task.status) === "BLOCKED" && "bg-destructive/10 text-destructive border-destructive/20",
+                              normalizeStatus(task.status) === "IN REVIEW" && "bg-purple-500/10 text-purple-700 dark:text-purple-400 border-purple-500/20",
+                              (normalizeStatus(task.status) === "TO BE STARTED" || normalizeStatus(task.status) === "PENDING") && "bg-muted"
+                            )}
+                          >
+                            {task.status}
+                          </Badge>
+                          {task.dueDate && (
+                            <span className={cn(
+                              "text-xs",
+                              new Date(task.dueDate) < new Date() && normalizeStatus(task.status) !== "COMPLETED" 
+                                ? "text-amber-600 dark:text-amber-400 font-medium" 
+                                : "text-muted-foreground"
+                            )}>
+                              <Calendar className="h-3 w-3 inline mr-1" />
+                              {new Date(task.dueDate).toLocaleDateString()}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              {(!tasks || tasks.filter(t => normalizeStatus(t.status) !== "COMPLETED").length === 0) && (
+                <div className="py-8 text-center text-muted-foreground">
+                  <Activity className="h-8 w-8 mx-auto mb-2 opacity-30" />
+                  <p className="text-sm">No active work items</p>
+                  <p className="text-xs mt-1">Team members can add their work from the Tasks tab</p>
+                </div>
+              )}
+            </div>
+          </ScrollArea>
+        </CardContent>
+      </Card>
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <Card className="lg:col-span-2">
           <CardHeader className="pb-4">
@@ -331,10 +454,10 @@ export function ProductionCommandCenter() {
                     >
                       <div className={cn(
                         "w-1 h-10 rounded-full",
-                        statusColors[task.status] || "bg-muted"
+                        getStatusColor(task.status)
                       )} />
                       <div className="flex-1 min-w-0">
-                        <p className="font-medium text-sm truncate">{task.title}</p>
+                        <p className="font-medium text-sm truncate">{task.description}</p>
                         <div className="flex items-center gap-2 mt-1 flex-wrap">
                           <Badge variant="outline" className={priorityConfig[task.priority as keyof typeof priorityConfig]?.className || ""}>
                             {priorityConfig[task.priority as keyof typeof priorityConfig]?.label || task.priority}
@@ -461,7 +584,7 @@ export function ProductionCommandCenter() {
               {activeCampaigns.length > 0 ? (
                 activeCampaigns.slice(0, 4).map(campaign => {
                   const campaignTasks = tasks?.filter(t => t.campaignId === campaign.id) || [];
-                  const completedCount = campaignTasks.filter(t => t.status === "completed").length;
+                  const completedCount = campaignTasks.filter(t => normalizeStatus(t.status) === "COMPLETED").length;
                   const progress = campaignTasks.length > 0 ? (completedCount / campaignTasks.length) * 100 : 0;
                   
                   return (
@@ -558,7 +681,7 @@ export function ProductionCommandCenter() {
           <CardContent>
             <div className="flex items-baseline gap-2">
               <span className="text-2xl font-bold" data-testid="stat-pending-deliverables">
-                {deliverables?.filter(d => d.status === "pending").length || 0}
+                {deliverables?.filter(d => normalizeStatus(d.status) === "PENDING").length || 0}
               </span>
               <span className="text-sm text-muted-foreground">awaiting review</span>
             </div>

@@ -112,18 +112,34 @@ const SUB_TAB_LABELS: Record<string, { label: string; icon: any }> = {
 };
 
 export default function ContentDashboard() {
-  const [isAddTaskDialogOpen, setIsAddTaskDialogOpen] = useState(false);
-  const [isAddCampaignDialogOpen, setIsAddCampaignDialogOpen] = useState(false);
-  const [activeGroup, setActiveGroup] = useState<MainGroup>("work");
-  const [activeSubTab, setActiveSubTab] = useState("command");
-  const [taskViewMode, setTaskViewMode] = useState<TaskViewMode>("grid");
   const { user } = useAuth();
   const { toast } = useToast();
   const isAdmin = user?.role === "admin";
+  
+  const [isAddTaskDialogOpen, setIsAddTaskDialogOpen] = useState(false);
+  const [isAddCampaignDialogOpen, setIsAddCampaignDialogOpen] = useState(false);
+  const [activeGroup, setActiveGroup] = useState<MainGroup>("work");
+  const [activeSubTab, setActiveSubTab] = useState("tasks");
+  const [taskViewMode, setTaskViewMode] = useState<TaskViewMode>("grid");
+
+  const getFilteredSubTabs = (group: MainGroup) => {
+    const config = GROUP_CONFIG[group];
+    if (group === "work" && !isAdmin) {
+      return config.subTabs.filter((tab) => tab !== "command");
+    }
+    return config.subTabs;
+  };
+
+  const getDefaultSubTab = (group: MainGroup) => {
+    if (group === "work" && !isAdmin) {
+      return "tasks";
+    }
+    return GROUP_CONFIG[group].default;
+  };
 
   const handleGroupChange = (group: MainGroup) => {
     setActiveGroup(group);
-    setActiveSubTab(GROUP_CONFIG[group].default);
+    setActiveSubTab(getDefaultSubTab(group));
   };
 
   const handleExport = async (format: "json" | "csv") => {
@@ -149,7 +165,8 @@ export default function ContentDashboard() {
   };
 
   const currentGroupConfig = GROUP_CONFIG[activeGroup];
-  const showSubTabs = currentGroupConfig.subTabs.length > 1;
+  const filteredSubTabs = getFilteredSubTabs(activeGroup);
+  const showSubTabs = filteredSubTabs.length > 1;
 
   return (
     <ContentAccessGuard>
@@ -234,7 +251,7 @@ export default function ContentDashboard() {
 
             {showSubTabs && (
               <div className="flex items-center gap-1 border-b pb-2">
-                {currentGroupConfig.subTabs.map((subTab) => {
+                {filteredSubTabs.map((subTab) => {
                   const tabConfig = SUB_TAB_LABELS[subTab];
                   const Icon = tabConfig.icon;
                   const isActive = activeSubTab === subTab;
@@ -263,7 +280,7 @@ export default function ContentDashboard() {
           </div>
 
           <div className="mt-2">
-            {activeSubTab === "command" && <ProductionCommandCenter />}
+            {activeSubTab === "command" && isAdmin && <ProductionCommandCenter />}
 
             {activeSubTab === "tasks" && (
               <>

@@ -4192,6 +4192,66 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ================== WORK SESSIONS (CLOCK IN/OUT) ENDPOINTS ==================
+
+  // Get active work session for current user
+  app.get("/api/work-sessions/active", requireRole("content"), async (req, res) => {
+    try {
+      const userId = req.user!.id;
+      const session = await storage.getActiveWorkSession(userId);
+      res.json(session || null);
+    } catch (error) {
+      console.error("Error fetching active work session:", error);
+      res.status(500).json({ error: "Failed to fetch active work session" });
+    }
+  });
+
+  // Get work session history for current user
+  app.get("/api/work-sessions", requireRole("content"), async (req, res) => {
+    try {
+      const userId = req.user!.id;
+      const limit = parseInt(req.query.limit as string) || 10;
+      const sessions = await storage.getUserWorkSessions(userId, limit);
+      res.json(sessions);
+    } catch (error) {
+      console.error("Error fetching work sessions:", error);
+      res.status(500).json({ error: "Failed to fetch work sessions" });
+    }
+  });
+
+  // Clock in - start a new work session
+  app.post("/api/work-sessions/clock-in", requireRole("content"), async (req, res) => {
+    try {
+      const userId = req.user!.id;
+      const session = await storage.clockIn(userId);
+      res.status(201).json(session);
+    } catch (error) {
+      console.error("Error clocking in:", error);
+      res.status(500).json({ error: "Failed to clock in" });
+    }
+  });
+
+  // Clock out - end a work session with summary
+  app.post("/api/work-sessions/:id/clock-out", requireRole("content"), async (req, res) => {
+    try {
+      const sessionId = parseInt(req.params.id);
+      const { summary, taskIds } = req.body;
+      
+      if (!summary || summary.trim().length === 0) {
+        return res.status(400).json({ error: "Summary is required" });
+      }
+      
+      const session = await storage.clockOut(sessionId, summary.trim(), taskIds);
+      if (!session) {
+        return res.status(404).json({ error: "Work session not found" });
+      }
+      res.json(session);
+    } catch (error) {
+      console.error("Error clocking out:", error);
+      res.status(500).json({ error: "Failed to clock out" });
+    }
+  });
+
   // ================== ASSET LIBRARY ENDPOINTS ==================
 
   // Get all assets

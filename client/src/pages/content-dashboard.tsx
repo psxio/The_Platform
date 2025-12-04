@@ -22,6 +22,7 @@ import { IntegrationSettings } from "@/components/integration-settings";
 import { UserInvites } from "@/components/user-invites";
 import { ContentAccessGuard } from "@/components/content-access-guard";
 import { ProductionCommandCenter } from "@/components/production-command-center";
+import { ClockWidget } from "@/components/clock-widget";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
@@ -182,6 +183,7 @@ export default function ContentDashboard() {
               </p>
             </div>
             <div className="flex items-center gap-2">
+              <ClockWidget />
               <Link href="/content/monitoring">
                 <Button variant="outline" size="sm" data-testid="button-monitoring">
                   <Camera className="h-4 w-4 mr-2" />

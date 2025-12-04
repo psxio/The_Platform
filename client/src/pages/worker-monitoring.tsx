@@ -31,6 +31,7 @@ import {
 import { ContentAccessGuard } from "@/components/content-access-guard";
 import { useToast } from "@/hooks/use-toast";
 import { DiscordLiveList, DiscordLinkStatus } from "@/components/discord-presence";
+import { LiveStreamIndicator } from "@/components/live-stream-indicator";
 import { SiDiscord } from "react-icons/si";
 
 interface MonitoringSession {
@@ -260,12 +261,15 @@ export default function WorkerMonitoring() {
             </p>
           </div>
           
-          {hasConsent && (
-            <Badge variant="outline" className="flex items-center gap-1">
-              <ShieldCheck className="h-3 w-3" />
-              Consent Provided
-            </Badge>
-          )}
+          <div className="flex items-center gap-3">
+            {session && <LiveStreamIndicator />}
+            {hasConsent && (
+              <Badge variant="outline" className="flex items-center gap-1">
+                <ShieldCheck className="h-3 w-3" />
+                Consent Provided
+              </Badge>
+            )}
+          </div>
         </div>
 
         <Card data-testid="card-discord-live">

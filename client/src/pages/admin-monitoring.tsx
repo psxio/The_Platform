@@ -10,6 +10,8 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
+import { LivePreviewViewer } from "@/components/live-preview-viewer";
+import { useAuth } from "@/hooks/useAuth";
 import { 
   Monitor, 
   Camera, 
@@ -32,7 +34,8 @@ import {
   RefreshCw,
   ShieldCheck,
   Gauge,
-  Circle
+  Circle,
+  MonitorPlay
 } from "lucide-react";
 import { formatDistanceToNow, format, differenceInMinutes } from "date-fns";
 import { getCategoryColor, getCategoryLabel, type AppCategory } from "@/lib/screen-capture";
@@ -388,10 +391,13 @@ function ScreenshotTimeline({
 }
 
 export default function AdminMonitoring() {
+  const { user } = useAuth();
   const [selectedSession, setSelectedSession] = useState<MonitoringSession | null>(null);
   const [selectedScreenshot, setSelectedScreenshot] = useState<Screenshot | null>(null);
   const [showScreenshotDialog, setShowScreenshotDialog] = useState(false);
   const [showSessionDialog, setShowSessionDialog] = useState(false);
+  const [livePreviewUser, setLivePreviewUser] = useState<UserInfo | null>(null);
+  const [showLivePreview, setShowLivePreview] = useState(false);
 
   const { data: activeSessions, isLoading: isLoadingActive, refetch: refetchActive } = useQuery<MonitoringSession[]>({
     queryKey: ["/api/admin/monitoring/sessions/active"],
@@ -440,6 +446,13 @@ export default function AdminMonitoring() {
   const handleViewScreenshot = (screenshotId: number) => {
     setSelectedScreenshot({ id: screenshotId } as Screenshot);
     setShowScreenshotDialog(true);
+  };
+
+  const handleWatchLive = (session: MonitoringSession) => {
+    if (session.user) {
+      setLivePreviewUser(session.user);
+      setShowLivePreview(true);
+    }
   };
 
   const activityScore = (() => {
@@ -773,6 +786,16 @@ export default function AdminMonitoring() {
                         </Badge>
                         <Button 
                           size="sm" 
+                          variant="default"
+                          onClick={() => handleWatchLive(session)}
+                          className="bg-green-600 hover:bg-green-700 gap-1"
+                          data-testid={`button-watch-live-${session.id}`}
+                        >
+                          <MonitorPlay className="h-4 w-4" />
+                          Watch Live
+                        </Button>
+                        <Button 
+                          size="sm" 
                           variant="outline"
                           onClick={() => handleViewSession(session)}
                           data-testid={`button-view-session-${session.id}`}
@@ -1103,6 +1126,16 @@ export default function AdminMonitoring() {
           )}
         </DialogContent>
       </Dialog>
+
+      <LivePreviewViewer
+        open={showLivePreview}
+        onClose={() => {
+          setShowLivePreview(false);
+          setLivePreviewUser(null);
+        }}
+        targetUser={livePreviewUser}
+        viewerId={user?.id || ''}
+      />
     </div>
   );
 }

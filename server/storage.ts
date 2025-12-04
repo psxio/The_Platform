@@ -142,6 +142,7 @@ import {
   type DaoInboundDeal, type InsertDaoInboundDeal, daoInboundDeals,
   type DaoIpContribution, type InsertDaoIpContribution, daoIpContributions,
   type DaoRoleAssignmentHistory, type InsertDaoRoleAssignmentHistory, daoRoleAssignmentHistory,
+  type MediaConversion, type InsertMediaConversion, mediaConversions,
 } from "@shared/schema";
 import { db } from "./db";
 import { desc, eq, and, sql, or, isNull } from "drizzle-orm";
@@ -880,6 +881,13 @@ export interface IStorage {
   getDaoRoleAssignmentHistory(projectId?: number): Promise<DaoRoleAssignmentHistory[]>;
   createDaoRoleAssignmentHistory(history: InsertDaoRoleAssignmentHistory): Promise<DaoRoleAssignmentHistory>;
   getMemberAssignmentHistory(membershipId: number): Promise<DaoRoleAssignmentHistory[]>;
+
+  // Media Conversion methods (web3 users)
+  getMediaConversions(userId: string): Promise<MediaConversion[]>;
+  getMediaConversion(id: number): Promise<MediaConversion | undefined>;
+  createMediaConversion(conversion: InsertMediaConversion): Promise<MediaConversion>;
+  updateMediaConversion(id: number, updates: Partial<InsertMediaConversion>): Promise<MediaConversion | undefined>;
+  deleteMediaConversion(id: number): Promise<boolean>;
 }
 
 export class DbStorage implements IStorage {
@@ -5850,6 +5858,37 @@ export class DbStorage implements IStorage {
     return db.select().from(daoRoleAssignmentHistory)
       .where(eq(daoRoleAssignmentHistory.membershipId, membershipId))
       .orderBy(desc(daoRoleAssignmentHistory.assignedAt));
+  }
+
+  // Media Conversion methods (web3 users)
+  async getMediaConversions(userId: string): Promise<MediaConversion[]> {
+    return db.select().from(mediaConversions)
+      .where(eq(mediaConversions.userId, userId))
+      .orderBy(desc(mediaConversions.createdAt));
+  }
+
+  async getMediaConversion(id: number): Promise<MediaConversion | undefined> {
+    const [conversion] = await db.select().from(mediaConversions)
+      .where(eq(mediaConversions.id, id));
+    return conversion;
+  }
+
+  async createMediaConversion(conversion: InsertMediaConversion): Promise<MediaConversion> {
+    const [created] = await db.insert(mediaConversions).values(conversion).returning();
+    return created;
+  }
+
+  async updateMediaConversion(id: number, updates: Partial<InsertMediaConversion>): Promise<MediaConversion | undefined> {
+    const [updated] = await db.update(mediaConversions)
+      .set(updates)
+      .where(eq(mediaConversions.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteMediaConversion(id: number): Promise<boolean> {
+    const result = await db.delete(mediaConversions).where(eq(mediaConversions.id, id));
+    return true;
   }
 }
 

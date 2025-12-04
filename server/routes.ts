@@ -12,6 +12,7 @@ import { setupAuth, isAuthenticated, requireRole } from "./auth";
 import { googleSheetsService } from "./google-sheets";
 import { emailService } from "./email-service";
 import { channelNotificationService } from "./channel-notification-service";
+import { setAuthorizedSession, removeAuthorizedSession } from "./live-stream";
 
 // Validate Ethereum address format
 function isValidEvmAddress(address: string): boolean {
@@ -4973,6 +4974,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const session = await storage.getActiveMonitoringSession(userId);
+      
+      if (session) {
+        const hasConsent = await storage.hasValidConsent(userId);
+        if (hasConsent) {
+          setAuthorizedSession(userId, 'content', true);
+        }
+      }
+      
       res.json({ session });
     } catch (error) {
       console.error("Error fetching active session:", error);
@@ -5005,6 +5014,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         status: "active",
       });
 
+      setAuthorizedSession(userId, 'content', true);
+
       res.json(session);
     } catch (error) {
       console.error("Error starting session:", error);
@@ -5032,6 +5043,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const endedSession = await storage.endMonitoringSession(sessionId);
+      removeAuthorizedSession(userId);
       res.json(endedSession);
     } catch (error) {
       console.error("Error ending session:", error);
@@ -5162,6 +5174,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Admin: Get all active monitoring sessions
   app.get("/api/admin/monitoring/sessions/active", requireRole("admin"), async (req, res) => {
     try {
+      const userId = (req as any).user?.id;
+      if (userId) {
+        setAuthorizedSession(userId, 'admin', false);
+      }
       const sessions = await storage.getAllActiveMonitoringSessions();
       
       // Enrich with user info

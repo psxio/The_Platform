@@ -48,6 +48,9 @@ export function useLiveStreamWorker(userId: string) {
         case 'viewer-count':
           setState(s => ({ ...s, viewerCount: data.count }));
           break;
+        case 'error':
+          setState(s => ({ ...s, error: data.message }));
+          break;
         case 'pong':
           break;
       }
@@ -68,47 +71,6 @@ export function useLiveStreamWorker(userId: string) {
 
     wsRef.current = ws;
   }, [userId, state.isStreaming]);
-
-  const captureAndSendFrame = useCallback(async () => {
-    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
-
-    try {
-      const stream = await navigator.mediaDevices.getDisplayMedia({
-        video: { frameRate: 2 },
-        audio: false
-      });
-
-      const video = document.createElement('video');
-      video.srcObject = stream;
-      await video.play();
-
-      if (!canvasRef.current) {
-        canvasRef.current = document.createElement('canvas');
-      }
-      const canvas = canvasRef.current;
-      
-      const scale = Math.min(800 / video.videoWidth, 600 / video.videoHeight);
-      canvas.width = video.videoWidth * scale;
-      canvas.height = video.videoHeight * scale;
-      
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        const frame = canvas.toDataURL('image/jpeg', 0.6);
-        
-        wsRef.current?.send(JSON.stringify({
-          type: 'screen-frame',
-          userId,
-          frame,
-          timestamp: Date.now()
-        }));
-      }
-
-      stream.getTracks().forEach(track => track.stop());
-    } catch (error) {
-      console.error('Screen capture error:', error);
-    }
-  }, [userId]);
 
   const startStreaming = useCallback(async () => {
     try {
@@ -238,6 +200,9 @@ export function useLiveStreamViewer(viewerId: string, targetUserId: string) {
             isStreamActive: data.isStreamActive,
             error: null 
           }));
+          break;
+        case 'error':
+          setState(s => ({ ...s, error: data.message }));
           break;
         case 'screen-frame':
           setState(s => ({ 

@@ -6,6 +6,7 @@ interface StreamClient {
   userId: string;
   role: 'worker' | 'viewer';
   targetUserId?: string;
+  userRole?: string;
 }
 
 const streamClients = new Map<string, StreamClient>();
@@ -14,7 +15,29 @@ const workerStreams = new Map<string, {
   viewers: Set<string>;
   lastFrame?: string;
   lastFrameTime?: number;
+  isActive: boolean;
 }>();
+
+const authorizedSessions = new Map<string, { userId: string; role: string; hasConsent: boolean }>();
+const MAX_FRAME_SIZE = 500000;
+
+export function setAuthorizedSession(userId: string, role: string, hasConsent: boolean = false) {
+  authorizedSessions.set(userId, { userId, role, hasConsent });
+}
+
+export function removeAuthorizedSession(userId: string) {
+  authorizedSessions.delete(userId);
+}
+
+export function isAuthorizedViewer(userId: string): boolean {
+  const session = authorizedSessions.get(userId);
+  return !!session && (session.role === 'admin' || session.role === 'web3');
+}
+
+export function isAuthorizedWorker(userId: string): boolean {
+  const session = authorizedSessions.get(userId);
+  return !!session && session.hasConsent;
+}
 
 export function setupLiveStreamServer(server: Server) {
   const wss = new WebSocketServer({ 
@@ -51,18 +74,36 @@ export function setupLiveStreamServer(server: Server) {
 function handleMessage(ws: WebSocket, clientId: string, data: any) {
   switch (data.type) {
     case 'worker-register':
+      if (!isAuthorizedWorker(data.userId)) {
+        ws.send(JSON.stringify({ type: 'error', message: 'Unauthorized: consent required' }));
+        return;
+      }
       registerWorker(ws, clientId, data.userId);
       break;
     case 'viewer-subscribe':
+      if (!isAuthorizedViewer(data.viewerId)) {
+        ws.send(JSON.stringify({ type: 'error', message: 'Unauthorized: admin/web3 role required' }));
+        return;
+      }
       subscribeViewer(ws, clientId, data.viewerId, data.targetUserId);
       break;
     case 'viewer-unsubscribe':
       unsubscribeViewer(clientId);
       break;
     case 'screen-frame':
+      if (!isAuthorizedWorker(data.userId)) {
+        return;
+      }
+      if (data.frame && data.frame.length > MAX_FRAME_SIZE) {
+        console.warn(`Frame too large from ${data.userId}: ${data.frame.length} bytes`);
+        return;
+      }
       broadcastFrame(data.userId, data.frame, data.timestamp);
       break;
     case 'stream-status':
+      if (!isAuthorizedWorker(data.userId)) {
+        return;
+      }
       updateStreamStatus(data.userId, data.isStreaming);
       break;
     case 'ping':
@@ -81,8 +122,12 @@ function registerWorker(ws: WebSocket, clientId: string, userId: string) {
   if (!workerStreams.has(userId)) {
     workerStreams.set(userId, {
       workerId: userId,
-      viewers: new Set()
+      viewers: new Set(),
+      isActive: true
     });
+  } else {
+    const stream = workerStreams.get(userId)!;
+    stream.isActive = true;
   }
 
   ws.send(JSON.stringify({
@@ -95,15 +140,18 @@ function registerWorker(ws: WebSocket, clientId: string, userId: string) {
 }
 
 function subscribeViewer(ws: WebSocket, clientId: string, viewerId: string, targetUserId: string) {
+  const session = authorizedSessions.get(viewerId);
+  
   streamClients.set(clientId, {
     ws,
     userId: viewerId,
     role: 'viewer',
-    targetUserId
+    targetUserId,
+    userRole: session?.role
   });
 
   const stream = workerStreams.get(targetUserId);
-  if (stream) {
+  if (stream && stream.isActive) {
     stream.viewers.add(clientId);
     
     if (stream.lastFrame) {
@@ -120,10 +168,10 @@ function subscribeViewer(ws: WebSocket, clientId: string, viewerId: string, targ
   ws.send(JSON.stringify({
     type: 'subscribed',
     targetUserId,
-    isStreamActive: !!stream
+    isStreamActive: stream?.isActive || false
   }));
 
-  console.log(`Viewer ${viewerId} subscribed to watch ${targetUserId}`);
+  console.log(`Viewer ${viewerId} (${session?.role}) subscribed to watch ${targetUserId}`);
 }
 
 function unsubscribeViewer(clientId: string) {
@@ -140,7 +188,7 @@ function unsubscribeViewer(clientId: string) {
 
 function broadcastFrame(workerId: string, frame: string, timestamp: number) {
   const stream = workerStreams.get(workerId);
-  if (!stream) return;
+  if (!stream || !stream.isActive) return;
 
   stream.lastFrame = frame;
   stream.lastFrameTime = timestamp;
@@ -177,6 +225,13 @@ function updateStreamStatus(userId: string, isStreaming: boolean) {
   const stream = workerStreams.get(userId);
   if (!stream) return;
 
+  stream.isActive = isStreaming;
+  
+  if (!isStreaming) {
+    stream.lastFrame = undefined;
+    stream.lastFrameTime = undefined;
+  }
+
   stream.viewers.forEach(viewerClientId => {
     const viewer = streamClients.get(viewerClientId);
     if (viewer?.ws?.readyState === WebSocket.OPEN) {
@@ -199,9 +254,14 @@ function handleDisconnect(clientId: string) {
       stream.viewers.delete(clientId);
       notifyWorkerViewerCount(client.targetUserId);
     }
+    authorizedSessions.delete(client.userId);
   } else if (client.role === 'worker') {
     const stream = workerStreams.get(client.userId);
     if (stream) {
+      stream.isActive = false;
+      stream.lastFrame = undefined;
+      stream.lastFrameTime = undefined;
+      
       stream.viewers.forEach(viewerClientId => {
         const viewer = streamClients.get(viewerClientId);
         if (viewer?.ws?.readyState === WebSocket.OPEN) {
@@ -211,8 +271,10 @@ function handleDisconnect(clientId: string) {
           }));
         }
       });
+      
       workerStreams.delete(client.userId);
     }
+    authorizedSessions.delete(client.userId);
   }
 
   streamClients.delete(clientId);
@@ -223,15 +285,17 @@ export function getActiveStreams(): { userId: string; viewerCount: number }[] {
   const streams: { userId: string; viewerCount: number }[] = [];
   
   for (const [userId, stream] of workerStreams) {
-    const workerConnected = Array.from(streamClients.values()).some(
-      c => c.role === 'worker' && c.userId === userId && c.ws.readyState === WebSocket.OPEN
-    );
-    
-    if (workerConnected) {
-      streams.push({
-        userId,
-        viewerCount: stream.viewers.size
-      });
+    if (stream.isActive) {
+      const workerConnected = Array.from(streamClients.values()).some(
+        c => c.role === 'worker' && c.userId === userId && c.ws.readyState === WebSocket.OPEN
+      );
+      
+      if (workerConnected) {
+        streams.push({
+          userId,
+          viewerCount: stream.viewers.size
+        });
+      }
     }
   }
   

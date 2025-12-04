@@ -1,3 +1,4 @@
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -8,6 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { 
   Activity,
   CheckCircle, 
@@ -27,7 +29,9 @@ import {
   PauseCircle,
   Rocket,
   RefreshCw,
-  Eye
+  Eye,
+  Filter,
+  X
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Link } from "wouter";
@@ -153,6 +157,25 @@ export function ProductionCommandCenter() {
     refetchInterval: 30000,
   });
 
+  // Workstream filters
+  const [workstreamStatusFilter, setWorkstreamStatusFilter] = useState<string>("all");
+  const [workstreamAssigneeFilter, setWorkstreamAssigneeFilter] = useState<string>("all");
+  const [workstreamClientFilter, setWorkstreamClientFilter] = useState<string>("all");
+  const [showBlockedOverdue, setShowBlockedOverdue] = useState<boolean>(false);
+
+  // Extract unique assignees and clients for filter options
+  const uniqueAssignees = useMemo(() => {
+    if (!tasks) return [];
+    const assignees = new Set(tasks.map(t => t.assignedTo).filter(Boolean));
+    return Array.from(assignees).sort() as string[];
+  }, [tasks]);
+
+  const uniqueClients = useMemo(() => {
+    if (!tasks) return [];
+    const clients = new Set(tasks.map(t => t.client).filter(Boolean));
+    return Array.from(clients).sort() as string[];
+  }, [tasks]);
+
   const activeTasks = tasks?.filter(t => normalizeStatus(t.status) !== "COMPLETED") || [];
   const inProgressTasks = tasks?.filter(t => normalizeStatus(t.status) === "IN PROGRESS") || [];
   const reviewTasks = tasks?.filter(t => normalizeStatus(t.status) === "REVIEW" || normalizeStatus(t.status) === "IN REVIEW") || [];
@@ -166,6 +189,82 @@ export function ProductionCommandCenter() {
     if (!t.dueDate) return false;
     return new Date(t.dueDate) < new Date();
   });
+
+  // Helper to check if task is overdue
+  const isTaskOverdue = (task: ContentTask) => {
+    if (!task.dueDate) return false;
+    return new Date(task.dueDate) < new Date();
+  };
+
+  // Filtered workstream tasks
+  const filteredWorkstreamTasks = useMemo(() => {
+    let filtered = tasks?.filter(t => normalizeStatus(t.status) !== "COMPLETED") || [];
+
+    // Apply status filter (handle IN REVIEW and REVIEW as equivalent)
+    if (workstreamStatusFilter !== "all") {
+      filtered = filtered.filter(t => {
+        const normalizedTaskStatus = normalizeStatus(t.status);
+        // Treat IN REVIEW and REVIEW as equivalent
+        if (workstreamStatusFilter === "IN REVIEW") {
+          return normalizedTaskStatus === "IN REVIEW" || normalizedTaskStatus === "REVIEW";
+        }
+        return normalizedTaskStatus === workstreamStatusFilter;
+      });
+    }
+
+    // Apply assignee filter
+    if (workstreamAssigneeFilter !== "all") {
+      filtered = filtered.filter(t => t.assignedTo === workstreamAssigneeFilter);
+    }
+
+    // Apply client filter
+    if (workstreamClientFilter !== "all") {
+      filtered = filtered.filter(t => t.client === workstreamClientFilter);
+    }
+
+    // Apply blocked/overdue toggle
+    if (showBlockedOverdue) {
+      filtered = filtered.filter(t => 
+        normalizeStatus(t.status) === "BLOCKED" || isTaskOverdue(t)
+      );
+    }
+
+    // Sort: blocked first, then overdue, then in progress, then review, then others
+    return filtered.sort((a, b) => {
+      const aBlocked = normalizeStatus(a.status) === "BLOCKED";
+      const bBlocked = normalizeStatus(b.status) === "BLOCKED";
+      const aOverdue = isTaskOverdue(a);
+      const bOverdue = isTaskOverdue(b);
+      
+      if (aBlocked && !bBlocked) return -1;
+      if (!aBlocked && bBlocked) return 1;
+      if (aOverdue && !bOverdue) return -1;
+      if (!aOverdue && bOverdue) return 1;
+      
+      const statusOrder: Record<string, number> = { 
+        "IN PROGRESS": 0, 
+        "BLOCKED": 1, 
+        "IN REVIEW": 2, 
+        "REVIEW": 2,
+        "TO BE STARTED": 3,
+        "PENDING": 3
+      };
+      return (statusOrder[normalizeStatus(a.status)] ?? 99) - (statusOrder[normalizeStatus(b.status)] ?? 99);
+    });
+  }, [tasks, workstreamStatusFilter, workstreamAssigneeFilter, workstreamClientFilter, showBlockedOverdue]);
+
+  // Check if any filters are active
+  const hasActiveFilters = workstreamStatusFilter !== "all" || 
+    workstreamAssigneeFilter !== "all" || 
+    workstreamClientFilter !== "all" ||
+    showBlockedOverdue;
+
+  const clearAllFilters = () => {
+    setWorkstreamStatusFilter("all");
+    setWorkstreamAssigneeFilter("all");
+    setWorkstreamClientFilter("all");
+    setShowBlockedOverdue(false);
+  };
 
   const dueThisWeek = activeTasks.filter(t => {
     if (!t.dueDate) return false;
@@ -323,30 +422,92 @@ export function ProductionCommandCenter() {
               <Activity className="h-4 w-4 text-primary" />
               Live Workstream
             </span>
-            <Badge variant="outline" className="text-xs">
-              {tasks?.filter(t => normalizeStatus(t.status) === "IN PROGRESS").length || 0} active
-            </Badge>
+            <div className="flex items-center gap-2">
+              {hasActiveFilters && (
+                <Badge variant="secondary" className="text-xs">
+                  {filteredWorkstreamTasks.length} filtered
+                </Badge>
+              )}
+              <Badge variant="outline" className="text-xs">
+                {tasks?.filter(t => normalizeStatus(t.status) === "IN PROGRESS").length || 0} active
+              </Badge>
+            </div>
           </CardTitle>
           <CardDescription>
             Real-time view of what the team is working on
           </CardDescription>
+
+          {/* Filter Controls */}
+          <div className="flex flex-wrap items-center gap-2 pt-3" data-testid="workstream-filters">
+            <Select value={workstreamStatusFilter} onValueChange={setWorkstreamStatusFilter}>
+              <SelectTrigger className="w-[140px]" data-testid="filter-status">
+                <SelectValue placeholder="All Statuses" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Statuses</SelectItem>
+                <SelectItem value="IN PROGRESS">In Progress</SelectItem>
+                <SelectItem value="IN REVIEW">In Review</SelectItem>
+                <SelectItem value="BLOCKED">Blocked</SelectItem>
+                <SelectItem value="TO BE STARTED">To Be Started</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Select value={workstreamAssigneeFilter} onValueChange={setWorkstreamAssigneeFilter}>
+              <SelectTrigger className="w-[150px]" data-testid="filter-assignee">
+                <SelectValue placeholder="All Assignees" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Assignees</SelectItem>
+                {uniqueAssignees.map(assignee => (
+                  <SelectItem key={assignee} value={assignee}>{assignee}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Select value={workstreamClientFilter} onValueChange={setWorkstreamClientFilter}>
+              <SelectTrigger className="w-[140px]" data-testid="filter-client">
+                <SelectValue placeholder="All Clients" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Clients</SelectItem>
+                {uniqueClients.map(client => (
+                  <SelectItem key={client} value={client}>{client}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+
+            <Button
+              variant={showBlockedOverdue ? "default" : "outline"}
+              size="sm"
+              onClick={() => setShowBlockedOverdue(!showBlockedOverdue)}
+              className={cn(
+                "gap-1 text-xs",
+                showBlockedOverdue && "bg-destructive hover:bg-destructive/90"
+              )}
+              data-testid="filter-blocked-overdue"
+            >
+              <AlertTriangle className="h-3 w-3" />
+              Blocked/Overdue
+            </Button>
+
+            {hasActiveFilters && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={clearAllFilters}
+                className="gap-1 text-xs text-muted-foreground"
+                data-testid="button-clear-filters"
+              >
+                <X className="h-3 w-3" />
+                Clear
+              </Button>
+            )}
+          </div>
         </CardHeader>
         <CardContent>
           <ScrollArea className="h-[320px] pr-4">
             <div className="space-y-3">
-              {tasks
-                ?.filter(t => normalizeStatus(t.status) !== "COMPLETED")
-                .sort((a, b) => {
-                  const statusOrder: Record<string, number> = { 
-                    "IN PROGRESS": 0, 
-                    "BLOCKED": 1, 
-                    "IN REVIEW": 2, 
-                    "REVIEW": 2,
-                    "TO BE STARTED": 3,
-                    "PENDING": 3
-                  };
-                  return (statusOrder[normalizeStatus(a.status)] ?? 99) - (statusOrder[normalizeStatus(b.status)] ?? 99);
-                })
+              {filteredWorkstreamTasks
                 .slice(0, 20)
                 .map(task => (
                   <div
@@ -354,7 +515,7 @@ export function ProductionCommandCenter() {
                     className={cn(
                       "flex items-start gap-3 p-3 rounded-lg border bg-card",
                       normalizeStatus(task.status) === "BLOCKED" && "border-destructive/30 bg-destructive/5",
-                      task.dueDate && new Date(task.dueDate) < new Date() && normalizeStatus(task.status) !== "COMPLETED" && "border-amber-500/30"
+                      isTaskOverdue(task) && "border-amber-500/30 bg-amber-500/5"
                     )}
                     data-testid={`workstream-task-${task.id}`}
                   >
@@ -365,7 +526,14 @@ export function ProductionCommandCenter() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0 flex-1">
-                          <p className="font-medium text-sm line-clamp-2">{task.description}</p>
+                          <div className="flex items-center gap-2">
+                            <p className="font-medium text-sm line-clamp-2">{task.description}</p>
+                            {isTaskOverdue(task) && (
+                              <Badge variant="outline" className="text-xs text-amber-600 dark:text-amber-400 border-amber-500/30 flex-shrink-0">
+                                Overdue
+                              </Badge>
+                            )}
+                          </div>
                           <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                             {task.assignedTo && (
                               <div className="flex items-center gap-1.5">
@@ -413,11 +581,27 @@ export function ProductionCommandCenter() {
                     </div>
                   </div>
                 ))}
-              {(!tasks || tasks.filter(t => normalizeStatus(t.status) !== "COMPLETED").length === 0) && (
+              {filteredWorkstreamTasks.length === 0 && (
                 <div className="py-8 text-center text-muted-foreground">
                   <Activity className="h-8 w-8 mx-auto mb-2 opacity-30" />
-                  <p className="text-sm">No active work items</p>
-                  <p className="text-xs mt-1">Team members can add their work from the Tasks tab</p>
+                  {hasActiveFilters ? (
+                    <>
+                      <p className="text-sm">No tasks match your filters</p>
+                      <Button
+                        variant="link"
+                        size="sm"
+                        onClick={clearAllFilters}
+                        className="text-xs mt-1"
+                      >
+                        Clear all filters
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-sm">No active work items</p>
+                      <p className="text-xs mt-1">Team members can add their work from the Tasks tab</p>
+                    </>
+                  )}
                 </div>
               )}
             </div>

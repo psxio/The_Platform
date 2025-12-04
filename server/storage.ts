@@ -21,6 +21,7 @@ import {
   type TaskWatcher, type InsertTaskWatcher, taskWatchers,
   type Approval, type InsertApproval, approvals,
   type TimeEntry, type InsertTimeEntry, timeEntries,
+  type WorkSession, type InsertWorkSession, workSessions,
   type Asset, type InsertAsset, assets,
   type DeliverableVersion, type InsertDeliverableVersion, deliverableVersions,
   type SavedFilter, type InsertSavedFilter, savedFilters,
@@ -291,6 +292,12 @@ export interface IStorage {
   createTimeEntry(entry: InsertTimeEntry): Promise<TimeEntry>;
   updateTimeEntry(id: number, entry: Partial<InsertTimeEntry>): Promise<TimeEntry | undefined>;
   deleteTimeEntry(id: number): Promise<boolean>;
+  
+  // Work Session methods (clock in/out)
+  getActiveWorkSession(userId: string): Promise<WorkSession | undefined>;
+  getUserWorkSessions(userId: string, limit?: number): Promise<WorkSession[]>;
+  clockIn(userId: string): Promise<WorkSession>;
+  clockOut(sessionId: number, summary: string, taskIds?: number[]): Promise<WorkSession | undefined>;
   
   // Asset methods
   getAssets(category?: string): Promise<Asset[]>;
@@ -1770,6 +1777,70 @@ export class DbStorage implements IStorage {
   async deleteTimeEntry(id: number): Promise<boolean> {
     const result = await db.delete(timeEntries).where(eq(timeEntries.id, id)).returning();
     return result.length > 0;
+  }
+
+  // Work Session methods (clock in/out)
+  async getActiveWorkSession(userId: string): Promise<WorkSession | undefined> {
+    const [session] = await db
+      .select()
+      .from(workSessions)
+      .where(and(eq(workSessions.userId, userId), eq(workSessions.status, "active")));
+    return session;
+  }
+
+  async getUserWorkSessions(userId: string, limit: number = 10): Promise<WorkSession[]> {
+    return await db
+      .select()
+      .from(workSessions)
+      .where(eq(workSessions.userId, userId))
+      .orderBy(desc(workSessions.clockInTime))
+      .limit(limit);
+  }
+
+  async clockIn(userId: string): Promise<WorkSession> {
+    // First check if there's already an active session
+    const existing = await this.getActiveWorkSession(userId);
+    if (existing) {
+      return existing; // Already clocked in
+    }
+    
+    const [created] = await db
+      .insert(workSessions)
+      .values({
+        userId,
+        clockInTime: new Date(),
+        status: "active",
+      })
+      .returning();
+    return created;
+  }
+
+  async clockOut(sessionId: number, summary: string, taskIds?: number[]): Promise<WorkSession | undefined> {
+    const clockOutTime = new Date();
+    const [session] = await db
+      .select()
+      .from(workSessions)
+      .where(eq(workSessions.id, sessionId));
+    
+    if (!session) return undefined;
+    
+    // Calculate total minutes
+    const clockInTime = new Date(session.clockInTime);
+    const totalMinutes = Math.round((clockOutTime.getTime() - clockInTime.getTime()) / 60000);
+    
+    const [updated] = await db
+      .update(workSessions)
+      .set({
+        clockOutTime,
+        summary,
+        taskIds: taskIds ? JSON.stringify(taskIds) : null,
+        totalMinutes,
+        status: "completed",
+      })
+      .where(eq(workSessions.id, sessionId))
+      .returning();
+    
+    return updated;
   }
 
   // Asset methods

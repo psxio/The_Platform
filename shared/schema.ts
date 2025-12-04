@@ -528,6 +528,27 @@ export const insertTimeEntrySchema = createInsertSchema(timeEntries).omit({
 export type InsertTimeEntry = z.infer<typeof insertTimeEntrySchema>;
 export type TimeEntry = typeof timeEntries.$inferSelect;
 
+// Work Sessions - clock in/out tracking
+export const workSessions = pgTable("work_sessions", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  clockInTime: timestamp("clock_in_time").notNull().defaultNow(),
+  clockOutTime: timestamp("clock_out_time"),
+  summary: text("summary"),
+  taskIds: text("task_ids"), // JSON array of task IDs worked on
+  totalMinutes: integer("total_minutes"),
+  status: varchar("status", { length: 20 }).notNull().default("active"), // active, completed
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertWorkSessionSchema = createInsertSchema(workSessions).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertWorkSession = z.infer<typeof insertWorkSessionSchema>;
+export type WorkSession = typeof workSessions.$inferSelect;
+
 // Assets - brand assets library
 export const assets = pgTable("assets", {
   id: serial("id").primaryKey(),

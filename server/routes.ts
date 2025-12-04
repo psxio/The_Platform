@@ -1176,6 +1176,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "URL is required" });
       }
 
+      const youtubeRegex = /^(https?:\/\/)?(www\.)?(youtube\.com\/(watch\?v=|shorts\/|embed\/)|youtu\.be\/)[a-zA-Z0-9_-]{11}/;
+      if (!youtubeRegex.test(url)) {
+        return res.status(400).json({ error: "Invalid URL. Please provide a valid YouTube URL." });
+      }
+
       const { startConversion } = await import('./media-converter');
       const result = await startConversion(userId, url);
       

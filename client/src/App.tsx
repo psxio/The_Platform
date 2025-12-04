@@ -45,6 +45,7 @@ import Workspace from "@/pages/workspace";
 import OnchainOps from "@/pages/onchain-ops";
 import DuplicateChecker from "@/pages/duplicate-checker";
 import WalletScreener from "@/pages/wallet-screener";
+import MediaConverter from "@/pages/media-converter";
 import NotFound from "@/pages/not-found";
 import { Web3WelcomeModal } from "@/components/web3-welcome-modal";
 import { WelcomeModal } from "@/components/welcome-modal";
@@ -140,6 +141,9 @@ function AuthenticatedRouter() {
       </Route>
       <Route path="/web3/screener">
         <Web3RouteGuard><WalletScreener /></Web3RouteGuard>
+      </Route>
+      <Route path="/web3/mp3">
+        <Web3RouteGuard><MediaConverter /></Web3RouteGuard>
       </Route>
       <Route path="/web3/history">
         <Web3RouteGuard><History /></Web3RouteGuard>

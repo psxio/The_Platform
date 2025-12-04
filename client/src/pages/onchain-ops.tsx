@@ -23,6 +23,7 @@ import {
   Upload,
   RefreshCw,
   CopyCheck,
+  Music,
 } from "lucide-react";
 import { format } from "date-fns";
 
@@ -267,6 +268,12 @@ export default function OnchainOps() {
                     icon={Shield}
                     href="/web3/screener"
                     variant="primary"
+                  />
+                  <QuickActionCard
+                    title="YouTube to MP3"
+                    description="Convert YouTube videos to MP3 audio files"
+                    icon={Music}
+                    href="/web3/mp3"
                   />
                 </div>
               </CardContent>

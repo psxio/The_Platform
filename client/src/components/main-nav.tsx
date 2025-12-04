@@ -71,6 +71,7 @@ const web3Items: NavItem[] = [
   { title: "Extract", href: "/web3/extract", icon: FileSearch, description: "Extract addresses from files" },
   { title: "Merge", href: "/web3/merge", icon: Combine, description: "Merge and deduplicate lists" },
   { title: "Collections", href: "/web3/collections", icon: Database, description: "Manage NFT collections" },
+  { title: "MP3 Converter", href: "/web3/mp3", icon: Radio, description: "Convert YouTube to MP3" },
   { title: "History", href: "/web3/history", icon: History, description: "View comparison history" },
   { title: "To Do", href: "/web3/todo", icon: CheckSquare, description: "Personal task list" },
 ];

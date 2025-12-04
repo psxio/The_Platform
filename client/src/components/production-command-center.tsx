@@ -95,7 +95,7 @@ interface ActivityLog {
 }
 
 const normalizeStatus = (status: string): string => 
-  status.toUpperCase().replace(/-/g, ' ');
+  status.toUpperCase().replace(/[-_]/g, ' ');
 
 const statusColors: { [key: string]: string } = {
   "PENDING": "bg-amber-500",

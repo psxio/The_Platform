@@ -1,10 +1,13 @@
 import type { ContentTask, Campaign } from "@shared/schema";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Calendar, User, Building2, AlertTriangle, Flag, FolderKanban, Home } from "lucide-react";
+import { Calendar, User, Building2, AlertTriangle, Flag, FolderKanban, Home, Play, CheckCircle2, AlertCircle, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { apiRequest, queryClient } from "@/lib/queryClient";
+import { useToast } from "@/hooks/use-toast";
 
 function parseDate(dueDate: string): Date | null {
   try {
@@ -99,6 +102,7 @@ const priorityConfig = {
 };
 
 export function ContentTaskCard({ task, isSelected, onSelectionChange, onEdit }: ContentTaskCardProps) {
+  const { toast } = useToast();
   const statusStyle = statusConfig[task.status as keyof typeof statusConfig] || statusConfig["TO BE STARTED"];
   const priorityStyle = priorityConfig[(task.priority || "medium") as keyof typeof priorityConfig] || priorityConfig.medium;
   const taskIsOverdue = isOverdue(task.dueDate, task.status);
@@ -110,14 +114,48 @@ export function ContentTaskCard({ task, isSelected, onSelectionChange, onEdit }:
 
   const campaign = campaigns?.find(c => c.id === task.campaignId);
 
+  const updateStatusMutation = useMutation({
+    mutationFn: async (newStatus: string) => {
+      return apiRequest("PUT", `/api/content-tasks/${task.id}`, { status: newStatus });
+    },
+    onSuccess: (_data, newStatus) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/content-tasks"] });
+      const statusLabels: Record<string, string> = {
+        "IN PROGRESS": "in progress",
+        "IN REVIEW": "in review",
+        "COMPLETED": "completed",
+        "TO BE STARTED": "pending",
+      };
+      toast({
+        title: "Status updated",
+        description: `Task is now ${statusLabels[newStatus] || newStatus.toLowerCase()}`,
+      });
+    },
+    onError: () => {
+      toast({
+        variant: "destructive",
+        title: "Update failed",
+        description: "Could not update task status. Please try again.",
+      });
+    },
+  });
+
+  const handleStatusChange = (newStatus: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    updateStatusMutation.mutate(newStatus);
+  };
+
   const handleCardClick = (e: React.MouseEvent) => {
-    if ((e.target as HTMLElement).closest('[data-radix-collection-item]')) {
+    if ((e.target as HTMLElement).closest('[data-radix-collection-item]') || 
+        (e.target as HTMLElement).closest('[data-quick-action]')) {
       return;
     }
     if (onEdit) {
       onEdit(task);
     }
   };
+
+  const normalizedStatus = task.status.toUpperCase().replace(/[-_]/g, ' ');
 
   return (
     <Card
@@ -241,6 +279,76 @@ export function ContentTaskCard({ task, isSelected, onSelectionChange, onEdit }:
             {task.notes}
           </p>
         )}
+
+        {/* Quick Status Actions */}
+        <div className="flex items-center gap-1 pt-2 border-t border-border/30" data-quick-action>
+          {normalizedStatus !== "COMPLETED" ? (
+            <>
+              {normalizedStatus === "TO BE STARTED" && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-xs gap-1 text-primary"
+                  onClick={(e) => handleStatusChange("IN PROGRESS", e)}
+                  disabled={updateStatusMutation.isPending}
+                  data-testid={`button-start-task-${task.id}`}
+                >
+                  <Play className="h-3 w-3" />
+                  Start
+                </Button>
+              )}
+              {normalizedStatus === "IN PROGRESS" && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-xs gap-1 text-amber-600 dark:text-amber-400"
+                  onClick={(e) => handleStatusChange("IN REVIEW", e)}
+                  disabled={updateStatusMutation.isPending}
+                  data-testid={`button-review-task-${task.id}`}
+                >
+                  <AlertCircle className="h-3 w-3" />
+                  Send for Review
+                </Button>
+              )}
+              {(normalizedStatus === "IN REVIEW" || normalizedStatus === "REVIEW") && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-xs gap-1 text-primary"
+                  onClick={(e) => handleStatusChange("IN PROGRESS", e)}
+                  disabled={updateStatusMutation.isPending}
+                  data-testid={`button-revise-task-${task.id}`}
+                >
+                  <RotateCcw className="h-3 w-3" />
+                  Back to Work
+                </Button>
+              )}
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-xs gap-1 text-emerald-600 dark:text-emerald-400"
+                onClick={(e) => handleStatusChange("COMPLETED", e)}
+                disabled={updateStatusMutation.isPending}
+                data-testid={`button-complete-task-${task.id}`}
+              >
+                <CheckCircle2 className="h-3 w-3" />
+                Done
+              </Button>
+            </>
+          ) : (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-xs gap-1 text-muted-foreground"
+              onClick={(e) => handleStatusChange("TO BE STARTED", e)}
+              disabled={updateStatusMutation.isPending}
+              data-testid={`button-reopen-task-${task.id}`}
+            >
+              <RotateCcw className="h-3 w-3" />
+              Reopen
+            </Button>
+          )}
+        </div>
       </CardContent>
     </Card>
   );

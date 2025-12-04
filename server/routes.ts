@@ -1161,6 +1161,155 @@ export async function registerRoutes(app: Express): Promise<Server> {
     });
   });
 
+  // ================== MEDIA TO MP3 CONVERSION ==================
+
+  // Start a media conversion (YouTube/SoundCloud to MP3)
+  app.post("/api/media-convert", requireRole("web3"), async (req, res) => {
+    try {
+      const userId = (req as any).user?.id;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const { url } = req.body;
+      if (!url || typeof url !== 'string') {
+        return res.status(400).json({ error: "URL is required" });
+      }
+
+      const { startConversion } = await import('./media-converter');
+      const result = await startConversion(userId, url);
+      
+      res.json({
+        success: true,
+        conversionId: result.conversionId,
+        title: result.title,
+        platform: result.platform,
+        message: "Conversion started"
+      });
+    } catch (error) {
+      console.error("Error starting conversion:", error);
+      res.status(500).json({
+        error: error instanceof Error ? error.message : "Failed to start conversion"
+      });
+    }
+  });
+
+  // Get user's conversion history
+  app.get("/api/media-conversions", requireRole("web3"), async (req, res) => {
+    try {
+      const userId = (req as any).user?.id;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const conversions = await storage.getMediaConversions(userId);
+      res.json(conversions);
+    } catch (error) {
+      console.error("Error fetching conversions:", error);
+      res.status(500).json({ error: "Failed to fetch conversions" });
+    }
+  });
+
+  // Get conversion status/progress
+  app.get("/api/media-conversions/:id", requireRole("web3"), async (req, res) => {
+    try {
+      const userId = (req as any).user?.id;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const conversionId = parseInt(req.params.id);
+      if (isNaN(conversionId)) {
+        return res.status(400).json({ error: "Invalid conversion ID" });
+      }
+
+      const conversion = await storage.getMediaConversion(conversionId);
+      if (!conversion) {
+        return res.status(404).json({ error: "Conversion not found" });
+      }
+
+      if (conversion.userId !== userId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+
+      const { getConversionProgress } = await import('./media-converter');
+      const progress = getConversionProgress(conversionId);
+
+      res.json({
+        ...conversion,
+        progress: progress || (conversion.status === 'completed' ? { percent: 100, status: 'completed' } : null)
+      });
+    } catch (error) {
+      console.error("Error fetching conversion:", error);
+      res.status(500).json({ error: "Failed to fetch conversion" });
+    }
+  });
+
+  // Download converted file
+  app.get("/api/media-conversions/:id/download", requireRole("web3"), async (req, res) => {
+    try {
+      const userId = (req as any).user?.id;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const conversionId = parseInt(req.params.id);
+      if (isNaN(conversionId)) {
+        return res.status(400).json({ error: "Invalid conversion ID" });
+      }
+
+      const { downloadConvertedFile } = await import('./media-converter');
+      const result = await downloadConvertedFile(conversionId, userId);
+
+      if (!result) {
+        return res.status(404).json({ error: "File not found or not ready" });
+      }
+
+      res.download(result.filePath, result.filename);
+    } catch (error) {
+      console.error("Error downloading file:", error);
+      res.status(500).json({ error: "Failed to download file" });
+    }
+  });
+
+  // Delete a conversion
+  app.delete("/api/media-conversions/:id", requireRole("web3"), async (req, res) => {
+    try {
+      const userId = (req as any).user?.id;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const conversionId = parseInt(req.params.id);
+      if (isNaN(conversionId)) {
+        return res.status(400).json({ error: "Invalid conversion ID" });
+      }
+
+      const conversion = await storage.getMediaConversion(conversionId);
+      if (!conversion) {
+        return res.status(404).json({ error: "Conversion not found" });
+      }
+
+      if (conversion.userId !== userId) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+
+      // Delete file if exists
+      if (conversion.outputPath) {
+        const fs = await import('fs');
+        if (fs.existsSync(conversion.outputPath)) {
+          fs.unlinkSync(conversion.outputPath);
+        }
+      }
+
+      await storage.deleteMediaConversion(conversionId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting conversion:", error);
+      res.status(500).json({ error: "Failed to delete conversion" });
+    }
+  });
+
   // ================== COMPARE WITH COLLECTION ==================
 
   // Compare eligible addresses against a stored collection

@@ -107,6 +107,7 @@ integrations = ["javascript_log_in_with_replit:1.0.0"]
 [userenv.shared]
 INITIAL_ADMIN_CODE = "ADMIN2025FIRST"
 GOOGLE_SHEET_ID = "14l5LOsTo1xO4s7fh-bG_fFaRG09xueuVefEJ_bCBY4s"
+GOOGLE_DRIVE_CONTENT_FOLDER_ID = "1c6leH3y4tZWZozy6sCb9mn3DUV-X5t46"
 
 [userenv.production]
 BOOTSTRAP_ADMIN_EMAIL = "psxonbase@gmail.com"

@@ -12413,6 +12413,117 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ==================== GOOGLE DRIVE CONTENT BROWSER ROUTES ====================
+
+  // Check if Google Drive is configured
+  app.get("/api/drive/status", requireRole("content"), async (req, res) => {
+    try {
+      const { isGoogleDriveConfigured } = await import("./google-drive");
+      const configured = await isGoogleDriveConfigured();
+      const hasFolderId = !!process.env.GOOGLE_DRIVE_CONTENT_FOLDER_ID;
+      res.json({ configured, hasFolderId });
+    } catch (error) {
+      console.error("Error checking Drive status:", error);
+      res.status(500).json({ error: "Failed to check Drive status" });
+    }
+  });
+
+  // Get all content team member folders
+  app.get("/api/drive/team-folders", requireRole("content"), async (req, res) => {
+    try {
+      const { getContentTeamFolders } = await import("./google-drive");
+      const folders = await getContentTeamFolders();
+      res.json(folders);
+    } catch (error) {
+      console.error("Error fetching team folders:", error);
+      res.status(500).json({ error: "Failed to fetch team folders" });
+    }
+  });
+
+  // List files in a specific folder
+  app.get("/api/drive/folders/:folderId/files", requireRole("content"), async (req, res) => {
+    try {
+      const { listFilesInFolder } = await import("./google-drive");
+      const files = await listFilesInFolder(req.params.folderId);
+      res.json(files);
+    } catch (error) {
+      console.error("Error listing folder files:", error);
+      res.status(500).json({ error: "Failed to list folder files" });
+    }
+  });
+
+  // Get folder contents recursively
+  app.get("/api/drive/folders/:folderId/contents", requireRole("content"), async (req, res) => {
+    try {
+      const { getFolderContents } = await import("./google-drive");
+      const contents = await getFolderContents(req.params.folderId, req.query.name as string || '');
+      res.json(contents);
+    } catch (error) {
+      console.error("Error fetching folder contents:", error);
+      res.status(500).json({ error: "Failed to fetch folder contents" });
+    }
+  });
+
+  // Get file details
+  app.get("/api/drive/files/:fileId", requireRole("content"), async (req, res) => {
+    try {
+      const { getFileDetails } = await import("./google-drive");
+      const file = await getFileDetails(req.params.fileId);
+      if (!file) {
+        return res.status(404).json({ error: "File not found" });
+      }
+      res.json(file);
+    } catch (error) {
+      console.error("Error fetching file details:", error);
+      res.status(500).json({ error: "Failed to fetch file details" });
+    }
+  });
+
+  // Get folder breadcrumb path
+  app.get("/api/drive/folders/:folderId/breadcrumb", requireRole("content"), async (req, res) => {
+    try {
+      const { getFolderBreadcrumb } = await import("./google-drive");
+      const breadcrumb = await getFolderBreadcrumb(req.params.folderId);
+      res.json(breadcrumb);
+    } catch (error) {
+      console.error("Error fetching breadcrumb:", error);
+      res.status(500).json({ error: "Failed to fetch breadcrumb" });
+    }
+  });
+
+  // Upload file to a team member's folder
+  app.post("/api/drive/upload/:memberName/:folderType", requireRole("content"), upload.single("file"), async (req: any, res) => {
+    try {
+      const { memberName, folderType } = req.params;
+      
+      if (!req.file) {
+        return res.status(400).json({ error: "No file uploaded" });
+      }
+      
+      if (folderType !== 'client' && folderType !== 'internal') {
+        return res.status(400).json({ error: "Folder type must be 'client' or 'internal'" });
+      }
+      
+      const { uploadToMemberFolder } = await import("./google-drive");
+      const result = await uploadToMemberFolder(
+        req.file.buffer,
+        req.file.originalname,
+        req.file.mimetype,
+        memberName,
+        folderType as 'client' | 'internal'
+      );
+      
+      if (!result) {
+        return res.status(500).json({ error: "Failed to upload file to Drive" });
+      }
+      
+      res.json(result);
+    } catch (error: any) {
+      console.error("Error uploading to Drive:", error);
+      res.status(500).json({ error: error.message || "Failed to upload file" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

@@ -23,6 +23,7 @@ import { UserInvites } from "@/components/user-invites";
 import { ContentAccessGuard } from "@/components/content-access-guard";
 import { ProductionCommandCenter } from "@/components/production-command-center";
 import { ClockWidget } from "@/components/clock-widget";
+import { DriveBrowser } from "@/components/drive-browser";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
@@ -53,6 +54,7 @@ import {
   Library,
   TrendingUp,
   Cog,
+  HardDrive,
 } from "lucide-react";
 import { Link } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
@@ -78,7 +80,7 @@ const GROUP_CONFIG = {
   library: {
     label: "Library",
     icon: Library,
-    subTabs: ["assets", "brand-packs", "templates"] as const,
+    subTabs: ["assets", "drive", "brand-packs", "templates"] as const,
     default: "assets",
   },
   reports: {
@@ -103,6 +105,7 @@ const SUB_TAB_LABELS: Record<string, { label: string; icon: any }> = {
   directory: { label: "Directory", icon: Users },
   deliverables: { label: "Deliverables", icon: Upload },
   assets: { label: "Assets", icon: Image },
+  drive: { label: "Team Drive", icon: HardDrive },
   "brand-packs": { label: "Brand Packs", icon: Package },
   templates: { label: "Templates", icon: FileText },
   analytics: { label: "Analytics", icon: BarChart3 },
@@ -301,6 +304,8 @@ export default function ContentDashboard() {
             {activeSubTab === "deliverables" && <DeliverablesView />}
 
             {activeSubTab === "assets" && <AssetsLibrary />}
+
+            {activeSubTab === "drive" && <DriveBrowser />}
 
             {activeSubTab === "brand-packs" && <BrandPacksView />}
 

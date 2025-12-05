@@ -66,7 +66,7 @@ The backend is a Node.js application using Express, providing APIs for Onchain T
       - **Role Assignment History**: Complete audit trail of project assignments with skill/workload/consistency scores at time of assignment
 -   **Client Directory**: Centralized database of client and partner profiles with company info, contacts, relationship status, project history, notes, and custom tags. Features a per-client calendar and search/filtering.
 -   **Internal Team Management**: Centralized roster for internal team members with pay tracking, wallet addresses, and contact information.
--   **Admin Features**: Invite code generation, user management, integration settings, payment/brand pack/Sheets Hub management, client buy power management.
+-   **Admin Features**: Invite code generation, user management, integration settings, payment/brand pack/Sheets Hub management, client buy power management, and **3D Model Generator** (AI-powered 3D model creation from text prompts using Blender, exports to GLB/FBX/Blender/OBJ/STL formats, job queue with status tracking).
 -   **Onboarding System**: Role-specific welcome modals with guided walkthroughs.
 -   **Help Center**: Role-specific documentation and FAQs.
 
@@ -96,3 +96,5 @@ Security is enforced via role-based access control, bcrypt hashing, and server-s
 -   **Google Integration**: Google APIs for Sheets and Drive
 -   **Discord Integration**: `discord.js`
 -   **OCR**: `tesseract.js`
+-   **3D Graphics**: Blender (headless mode for model generation)
+-   **AI**: Anthropic Claude API via Replit AI Integrations

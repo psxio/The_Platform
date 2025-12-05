@@ -2829,6 +2829,30 @@ export type BoardVisibility = typeof boardVisibilityOptions[number];
 export const teamTaskStatuses = ["todo", "in_progress", "done"] as const;
 export type TeamTaskStatus = typeof teamTaskStatuses[number];
 
+// Task types for categorization (executable = high priority, idea = backlog, milestone = launch date)
+export const taskTypeOptions = ["executable", "idea", "milestone"] as const;
+export type TaskType = typeof taskTypeOptions[number];
+
+// Edit permission levels
+export const editPermissionOptions = ["admin_only", "assignee", "team"] as const;
+export type EditPermission = typeof editPermissionOptions[number];
+
+// Predefined project tags for categorization
+export const projectTagOptions = [
+  "Internal",
+  "4444 Portal", 
+  "Fireside",
+  "Miggles",
+  "Titanium",
+  "PSX",
+  "Signals",
+  "RYFT",
+  "Tenge",
+  "Agency Website",
+  "Other"
+] as const;
+export type ProjectTag = typeof projectTagOptions[number];
+
 // Team Boards - Groups of tasks with visibility settings
 export const teamBoards = pgTable("team_boards", {
   id: serial("id").primaryKey(),
@@ -2875,6 +2899,13 @@ export const teamTasks = pgTable("team_tasks", {
   subtasks: jsonb("subtasks").$type<{ id: string; title: string; completed: boolean }[]>().default([]),
   orderIndex: integer("order_index").default(0),
   isArchived: boolean("is_archived").default(false),
+  // New fields for enhanced task management
+  taskType: varchar("task_type", { length: 20 }).$type<TaskType>().default("executable"), // executable, idea, milestone
+  projectTag: varchar("project_tag", { length: 50 }), // [Internal], [4444 Portal], etc.
+  richNotes: text("rich_notes"), // Long-form documentation/notes
+  launchDate: timestamp("launch_date"), // For milestones - different from due date
+  isPublic: boolean("is_public").default(true), // Visible to all team or just assigned
+  editableBy: varchar("editable_by", { length: 20 }).$type<EditPermission>().default("assignee"), // admin_only, assignee, team
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });

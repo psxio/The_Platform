@@ -3,7 +3,8 @@ import { useQuery, useMutation } from "@tanstack/react-query";
 import { 
   Plus, Check, Clock, Circle, Trash2, Loader2, LayoutGrid, List, Calendar as CalendarIcon,
   FolderKanban, Settings, Users, Globe, Lock, User as UserIcon, Flag, ChevronDown,
-  GripVertical, MessageSquare, CheckSquare, MoreHorizontal, Search, Filter, X, Edit2
+  GripVertical, MessageSquare, CheckSquare, MoreHorizontal, Search, Filter, X, Edit2,
+  Rocket, Lightbulb, Target, FileText, Eye, EyeOff, Shield
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -41,6 +42,45 @@ const PRIORITY_CONFIG = {
   normal: { label: "Normal", color: "text-blue-600 bg-blue-100 dark:bg-blue-950", borderColor: "border-l-blue-500" },
   low: { label: "Low", color: "text-slate-500 bg-slate-100 dark:bg-slate-800", borderColor: "border-l-slate-400" },
 };
+
+// Task type configurations
+const TASK_TYPE_CONFIG = {
+  executable: { 
+    label: "Executable", 
+    icon: Rocket, 
+    color: "text-emerald-600 bg-emerald-100 dark:bg-emerald-950",
+    description: "High-priority action item"
+  },
+  idea: { 
+    label: "Idea", 
+    icon: Lightbulb, 
+    color: "text-purple-600 bg-purple-100 dark:bg-purple-950",
+    description: "Future improvement or backlog item"
+  },
+  milestone: { 
+    label: "Milestone", 
+    icon: Target, 
+    color: "text-amber-600 bg-amber-100 dark:bg-amber-950",
+    description: "Launch date or key deadline"
+  },
+};
+
+// Project tag configurations with colors
+const PROJECT_TAG_CONFIG: Record<string, { color: string; bgColor: string }> = {
+  "Internal": { color: "text-slate-700 dark:text-slate-300", bgColor: "bg-slate-100 dark:bg-slate-800" },
+  "4444 Portal": { color: "text-violet-700 dark:text-violet-300", bgColor: "bg-violet-100 dark:bg-violet-900" },
+  "Fireside": { color: "text-orange-700 dark:text-orange-300", bgColor: "bg-orange-100 dark:bg-orange-900" },
+  "Miggles": { color: "text-pink-700 dark:text-pink-300", bgColor: "bg-pink-100 dark:bg-pink-900" },
+  "Titanium": { color: "text-cyan-700 dark:text-cyan-300", bgColor: "bg-cyan-100 dark:bg-cyan-900" },
+  "PSX": { color: "text-indigo-700 dark:text-indigo-300", bgColor: "bg-indigo-100 dark:bg-indigo-900" },
+  "Signals": { color: "text-emerald-700 dark:text-emerald-300", bgColor: "bg-emerald-100 dark:bg-emerald-900" },
+  "RYFT": { color: "text-red-700 dark:text-red-300", bgColor: "bg-red-100 dark:bg-red-900" },
+  "Tenge": { color: "text-yellow-700 dark:text-yellow-300", bgColor: "bg-yellow-100 dark:bg-yellow-900" },
+  "Agency Website": { color: "text-blue-700 dark:text-blue-300", bgColor: "bg-blue-100 dark:bg-blue-900" },
+  "Other": { color: "text-gray-700 dark:text-gray-300", bgColor: "bg-gray-100 dark:bg-gray-800" },
+};
+
+const PROJECT_TAGS = Object.keys(PROJECT_TAG_CONFIG);
 
 const VISIBILITY_OPTIONS = [
   { value: "private", label: "Private", icon: Lock, description: "Only you can see" },
@@ -501,9 +541,12 @@ function TaskListItem({
 }) {
   const priorityConfig = PRIORITY_CONFIG[task.priority as keyof typeof PRIORITY_CONFIG] || PRIORITY_CONFIG.normal;
   const statusConfig = STATUS_CONFIG[task.status as keyof typeof STATUS_CONFIG] || STATUS_CONFIG.todo;
+  const taskTypeConfig = TASK_TYPE_CONFIG[(task as any).taskType as keyof typeof TASK_TYPE_CONFIG] || TASK_TYPE_CONFIG.executable;
+  const projectTagConfig = (task as any).projectTag ? PROJECT_TAG_CONFIG[(task as any).projectTag] : null;
   const assignee = users.find(u => u.id === task.assigneeId);
   const subtasks = task.subtasks as { id: string; title: string; completed: boolean }[] || [];
   const completedSubtasks = subtasks.filter(s => s.completed).length;
+  const TaskTypeIcon = taskTypeConfig.icon;
   
   const cycleStatus = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -535,10 +578,26 @@ function TaskListItem({
         </Button>
 
         <div className={cn("flex-1 min-w-0", task.status === "done" && "line-through")}>
-          <p className="font-medium truncate">{task.title}</p>
-          {task.description && (
-            <p className="text-sm text-muted-foreground truncate">{task.description}</p>
-          )}
+          <div className="flex items-center gap-2 mb-0.5">
+            {/* Task Type Icon */}
+            <TaskTypeIcon className={cn("w-4 h-4 shrink-0", taskTypeConfig.color.split(" ")[0])} />
+            <p className="font-medium truncate">{task.title}</p>
+            {/* Private indicator */}
+            {!(task as any).isPublic && (
+              <Lock className="w-3 h-3 text-muted-foreground shrink-0" />
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            {/* Project Tag */}
+            {projectTagConfig && (task as any).projectTag && (
+              <Badge variant="secondary" className={cn("text-xs", projectTagConfig.color, projectTagConfig.bgColor)}>
+                {(task as any).projectTag}
+              </Badge>
+            )}
+            {task.description && (
+              <p className="text-sm text-muted-foreground truncate">{task.description}</p>
+            )}
+          </div>
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
@@ -553,6 +612,14 @@ function TaskListItem({
             <Badge variant="outline" className="text-xs">
               <CheckSquare className="w-3 h-3 mr-1" />
               {completedSubtasks}/{subtasks.length}
+            </Badge>
+          )}
+
+          {/* Launch Date for milestones */}
+          {(task as any).launchDate && (
+            <Badge variant="secondary" className="text-xs text-amber-600 bg-amber-100 dark:bg-amber-950">
+              <Target className="w-3 h-3 mr-1" />
+              {new Date((task as any).launchDate).toLocaleDateString()}
             </Badge>
           )}
           
@@ -669,8 +736,11 @@ function KanbanCard({
   onClick: () => void;
 }) {
   const priorityConfig = PRIORITY_CONFIG[task.priority as keyof typeof PRIORITY_CONFIG] || PRIORITY_CONFIG.normal;
+  const taskTypeConfig = TASK_TYPE_CONFIG[(task as any).taskType as keyof typeof TASK_TYPE_CONFIG] || TASK_TYPE_CONFIG.executable;
+  const projectTagConfig = (task as any).projectTag ? PROJECT_TAG_CONFIG[(task as any).projectTag] : null;
   const subtasks = task.subtasks as { id: string; title: string; completed: boolean }[] || [];
   const completedSubtasks = subtasks.filter(s => s.completed).length;
+  const TaskTypeIcon = taskTypeConfig.icon;
 
   return (
     <Card
@@ -687,10 +757,27 @@ function KanbanCard({
       <CardContent className="p-4 space-y-3">
         <div className="flex items-start gap-2">
           <GripVertical className="w-4 h-4 text-muted-foreground/50 shrink-0 mt-0.5 cursor-grab" />
-          <p className="text-sm font-medium flex-1 line-clamp-2">{task.title}</p>
+          <TaskTypeIcon className={cn("w-4 h-4 shrink-0 mt-0.5", taskTypeConfig.color.split(" ")[0])} />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium line-clamp-2">{task.title}</p>
+            {/* Private indicator */}
+            {!(task as any).isPublic && (
+              <div className="flex items-center gap-1 mt-1">
+                <Lock className="w-3 h-3 text-muted-foreground" />
+                <span className="text-xs text-muted-foreground">Private</span>
+              </div>
+            )}
+          </div>
         </div>
 
         <div className="flex items-center gap-2 flex-wrap pl-6">
+          {/* Project Tag */}
+          {projectTagConfig && (task as any).projectTag && (
+            <Badge variant="secondary" className={cn("text-xs", projectTagConfig.color, projectTagConfig.bgColor)}>
+              {(task as any).projectTag}
+            </Badge>
+          )}
+
           {task.priority && task.priority !== "normal" && (
             <Badge variant="secondary" className={cn("text-xs", priorityConfig.color)}>
               <Flag className="w-3 h-3 mr-1" />
@@ -702,6 +789,14 @@ function KanbanCard({
             <Badge variant="outline" className="text-xs">
               <CheckSquare className="w-3 h-3 mr-1" />
               {completedSubtasks}/{subtasks.length}
+            </Badge>
+          )}
+
+          {/* Launch Date for milestones */}
+          {(task as any).launchDate && (
+            <Badge variant="secondary" className="text-xs text-amber-600 bg-amber-100 dark:bg-amber-950">
+              <Target className="w-3 h-3 mr-1" />
+              {new Date((task as any).launchDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
             </Badge>
           )}
           
@@ -952,6 +1047,11 @@ function CreateTaskDialog({
   const [priority, setPriority] = useState("normal");
   const [dueDate, setDueDate] = useState("");
   const [assigneeId, setAssigneeId] = useState<string>("");
+  const [taskType, setTaskType] = useState("executable");
+  const [projectTag, setProjectTag] = useState("");
+  const [richNotes, setRichNotes] = useState("");
+  const [launchDate, setLaunchDate] = useState("");
+  const [isPublic, setIsPublic] = useState(true);
 
   const handleSubmit = () => {
     if (title.trim()) {
@@ -961,24 +1061,85 @@ function CreateTaskDialog({
         priority: priority as any,
         dueDate: dueDate ? new Date(dueDate) : undefined,
         assigneeId: assigneeId || undefined,
+        taskType: taskType as any,
+        projectTag: projectTag || undefined,
+        richNotes: richNotes.trim() || undefined,
+        launchDate: launchDate ? new Date(launchDate) : undefined,
+        isPublic,
       });
       setTitle("");
       setDescription("");
       setPriority("normal");
       setDueDate("");
       setAssigneeId("");
+      setTaskType("executable");
+      setProjectTag("");
+      setRichNotes("");
+      setLaunchDate("");
+      setIsPublic(true);
     }
   };
 
+  const selectedTaskType = TASK_TYPE_CONFIG[taskType as keyof typeof TASK_TYPE_CONFIG];
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Create Task</DialogTitle>
           <DialogDescription>Add a new task to this board.</DialogDescription>
         </DialogHeader>
         
         <div className="space-y-4">
+          {/* Task Type Selection */}
+          <div>
+            <Label className="mb-2 block">Task Type</Label>
+            <div className="flex gap-2">
+              {Object.entries(TASK_TYPE_CONFIG).map(([key, config]) => {
+                const Icon = config.icon;
+                return (
+                  <Button
+                    key={key}
+                    type="button"
+                    variant={taskType === key ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setTaskType(key)}
+                    className="flex items-center gap-2"
+                    data-testid={`task-type-${key}`}
+                  >
+                    <Icon className="w-4 h-4" />
+                    {config.label}
+                  </Button>
+                );
+              })}
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">{selectedTaskType?.description}</p>
+          </div>
+
+          {/* Project Tag */}
+          <div>
+            <Label>Project</Label>
+            <Select value={projectTag || "none"} onValueChange={(v) => setProjectTag(v === "none" ? "" : v)}>
+              <SelectTrigger data-testid="select-project-tag">
+                <SelectValue placeholder="Select project..." />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">No Project</SelectItem>
+                {PROJECT_TAGS.map(tag => {
+                  const config = PROJECT_TAG_CONFIG[tag];
+                  return (
+                    <SelectItem key={tag} value={tag}>
+                      <div className="flex items-center gap-2">
+                        <div className={cn("w-2 h-2 rounded-full", config.bgColor)} />
+                        {tag}
+                      </div>
+                    </SelectItem>
+                  );
+                })}
+              </SelectContent>
+            </Select>
+          </div>
+
           <div>
             <Label>Title</Label>
             <Input 
@@ -995,6 +1156,7 @@ function CreateTaskDialog({
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Add more details..."
+              rows={2}
               data-testid="textarea-task-description"
             />
           </div>
@@ -1025,6 +1187,23 @@ function CreateTaskDialog({
               />
             </div>
           </div>
+
+          {/* Launch Date (for milestones) */}
+          {taskType === "milestone" && (
+            <div>
+              <Label className="flex items-center gap-2">
+                <Target className="w-4 h-4 text-amber-600" />
+                Launch Date
+              </Label>
+              <Input 
+                type="date"
+                value={launchDate}
+                onChange={(e) => setLaunchDate(e.target.value)}
+                data-testid="input-launch-date"
+              />
+              <p className="text-xs text-muted-foreground mt-1">This date will appear in the launch calendar</p>
+            </div>
+          )}
           
           <div>
             <Label>Assignee</Label>
@@ -1041,6 +1220,45 @@ function CreateTaskDialog({
                 ))}
               </SelectContent>
             </Select>
+          </div>
+
+          {/* Rich Notes (for ideas with detailed documentation) */}
+          {taskType === "idea" && (
+            <div>
+              <Label className="flex items-center gap-2">
+                <FileText className="w-4 h-4 text-purple-600" />
+                Detailed Notes
+              </Label>
+              <Textarea 
+                value={richNotes}
+                onChange={(e) => setRichNotes(e.target.value)}
+                placeholder="Add detailed documentation, requirements, or context for this idea..."
+                rows={4}
+                data-testid="textarea-rich-notes"
+              />
+            </div>
+          )}
+
+          {/* Visibility Toggle */}
+          <div className="flex items-center justify-between p-3 border rounded-lg">
+            <div className="flex items-center gap-2">
+              {isPublic ? <Eye className="w-4 h-4 text-muted-foreground" /> : <EyeOff className="w-4 h-4 text-muted-foreground" />}
+              <div>
+                <p className="text-sm font-medium">{isPublic ? "Visible to Team" : "Private Task"}</p>
+                <p className="text-xs text-muted-foreground">
+                  {isPublic ? "All team members can see this task" : "Only you and assignees can see this"}
+                </p>
+              </div>
+            </div>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setIsPublic(!isPublic)}
+              data-testid="toggle-visibility"
+            >
+              {isPublic ? "Make Private" : "Make Public"}
+            </Button>
           </div>
         </div>
 
@@ -1077,6 +1295,13 @@ function TaskDetailDialog({
   const [priority, setPriority] = useState<string>(task.priority || "normal");
   const [status, setStatus] = useState<string>(task.status || "todo");
   const [assigneeId, setAssigneeId] = useState(task.assigneeId || "");
+  const [taskType, setTaskType] = useState<string>((task as any).taskType || "executable");
+  const [projectTag, setProjectTag] = useState<string>((task as any).projectTag || "");
+  const [richNotes, setRichNotes] = useState<string>((task as any).richNotes || "");
+  const [launchDate, setLaunchDate] = useState<string>(
+    (task as any).launchDate ? new Date((task as any).launchDate).toISOString().split('T')[0] : ""
+  );
+  const [isPublic, setIsPublic] = useState<boolean>((task as any).isPublic !== false);
   const [subtasks, setSubtasks] = useState<{ id: string; title: string; completed: boolean }[]>(
     (task.subtasks as any) || []
   );
@@ -1113,6 +1338,11 @@ function TaskDetailDialog({
       status: status as any,
       assigneeId: assigneeId || undefined,
       subtasks,
+      taskType: taskType as any,
+      projectTag: projectTag || undefined,
+      richNotes: richNotes || undefined,
+      launchDate: launchDate ? new Date(launchDate) : undefined,
+      isPublic,
     });
     setIsEditing(false);
   };
@@ -1190,8 +1420,53 @@ function TaskDetailDialog({
 
         <ScrollArea className="flex-1">
           <div className="space-y-6 pr-4">
+            {/* Task Type & Project Tag Header */}
+            <div className="flex items-center gap-3 flex-wrap">
+              {/* Task Type Badge */}
+              {(() => {
+                const config = TASK_TYPE_CONFIG[taskType as keyof typeof TASK_TYPE_CONFIG] || TASK_TYPE_CONFIG.executable;
+                const Icon = config.icon;
+                return (
+                  <Badge variant="secondary" className={cn("text-sm", config.color)}>
+                    <Icon className="w-4 h-4 mr-1" />
+                    {config.label}
+                  </Badge>
+                );
+              })()}
+              
+              {/* Project Tag Badge */}
+              {projectTag && PROJECT_TAG_CONFIG[projectTag] && (
+                <Badge variant="secondary" className={cn("text-sm", PROJECT_TAG_CONFIG[projectTag].color, PROJECT_TAG_CONFIG[projectTag].bgColor)}>
+                  {projectTag}
+                </Badge>
+              )}
+
+              {/* Launch Date Badge */}
+              {launchDate && (
+                <Badge variant="secondary" className="text-sm text-amber-600 bg-amber-100 dark:bg-amber-950">
+                  <Target className="w-4 h-4 mr-1" />
+                  Launch: {new Date(launchDate).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+                </Badge>
+              )}
+
+              {/* Visibility Badge */}
+              <Badge variant="outline" className="text-sm">
+                {isPublic ? (
+                  <>
+                    <Eye className="w-4 h-4 mr-1" />
+                    Public
+                  </>
+                ) : (
+                  <>
+                    <Lock className="w-4 h-4 mr-1" />
+                    Private
+                  </>
+                )}
+              </Badge>
+            </div>
+
             {/* Status & Priority */}
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-4 flex-wrap">
               <div>
                 <Label className="text-xs text-muted-foreground">Status</Label>
                 <Select value={status} onValueChange={(v) => { setStatus(v); onUpdate({ status: v as any }); }}>
@@ -1239,6 +1514,100 @@ function TaskDetailDialog({
               </div>
             </div>
 
+            {/* Task Type, Project, and Visibility (Editable) */}
+            {isEditing && (
+              <div className="space-y-4 p-4 border rounded-lg bg-muted/30">
+                <h4 className="text-sm font-medium flex items-center gap-2">
+                  <Settings className="w-4 h-4" />
+                  Task Settings
+                </h4>
+                
+                {/* Task Type */}
+                <div>
+                  <Label className="text-xs text-muted-foreground">Task Type</Label>
+                  <div className="flex gap-2 mt-1">
+                    {Object.entries(TASK_TYPE_CONFIG).map(([key, config]) => {
+                      const Icon = config.icon;
+                      return (
+                        <Button
+                          key={key}
+                          type="button"
+                          variant={taskType === key ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => setTaskType(key)}
+                          className="flex items-center gap-2"
+                        >
+                          <Icon className="w-4 h-4" />
+                          {config.label}
+                        </Button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Project Tag */}
+                <div>
+                  <Label className="text-xs text-muted-foreground">Project</Label>
+                  <Select value={projectTag || "none"} onValueChange={(v) => setProjectTag(v === "none" ? "" : v)}>
+                    <SelectTrigger data-testid="select-detail-project">
+                      <SelectValue placeholder="Select project..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">No Project</SelectItem>
+                      {PROJECT_TAGS.map(tag => {
+                        const config = PROJECT_TAG_CONFIG[tag];
+                        return (
+                          <SelectItem key={tag} value={tag}>
+                            <div className="flex items-center gap-2">
+                              <div className={cn("w-2 h-2 rounded-full", config.bgColor)} />
+                              {tag}
+                            </div>
+                          </SelectItem>
+                        );
+                      })}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Launch Date (for milestones) */}
+                {taskType === "milestone" && (
+                  <div>
+                    <Label className="text-xs text-muted-foreground flex items-center gap-1">
+                      <Target className="w-3 h-3 text-amber-600" />
+                      Launch Date
+                    </Label>
+                    <Input 
+                      type="date"
+                      value={launchDate}
+                      onChange={(e) => setLaunchDate(e.target.value)}
+                      data-testid="input-detail-launch-date"
+                    />
+                  </div>
+                )}
+
+                {/* Visibility */}
+                <div className="flex items-center justify-between p-3 border rounded-lg">
+                  <div className="flex items-center gap-2">
+                    {isPublic ? <Eye className="w-4 h-4 text-muted-foreground" /> : <EyeOff className="w-4 h-4 text-muted-foreground" />}
+                    <div>
+                      <p className="text-sm font-medium">{isPublic ? "Visible to Team" : "Private Task"}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {isPublic ? "All team members can see this task" : "Only you and assignees can see this"}
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setIsPublic(!isPublic)}
+                  >
+                    {isPublic ? "Make Private" : "Make Public"}
+                  </Button>
+                </div>
+              </div>
+            )}
+
             {/* Description */}
             <div>
               <Label className="text-xs text-muted-foreground">Description</Label>
@@ -1256,6 +1625,31 @@ function TaskDetailDialog({
                 </p>
               )}
             </div>
+
+            {/* Rich Notes (for ideas) */}
+            {(taskType === "idea" || richNotes) && (
+              <div>
+                <Label className="text-xs text-muted-foreground flex items-center gap-1">
+                  <FileText className="w-3 h-3 text-purple-600" />
+                  Detailed Notes
+                </Label>
+                {isEditing ? (
+                  <Textarea 
+                    value={richNotes}
+                    onChange={(e) => setRichNotes(e.target.value)}
+                    placeholder="Add detailed documentation, requirements, or context..."
+                    className="min-h-[120px]"
+                    data-testid="textarea-edit-rich-notes"
+                  />
+                ) : richNotes ? (
+                  <div className="mt-1 p-3 bg-purple-50 dark:bg-purple-950/30 rounded-md border border-purple-200 dark:border-purple-800">
+                    <p className="text-sm whitespace-pre-wrap">{richNotes}</p>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted-foreground mt-1 italic">No detailed notes</p>
+                )}
+              </div>
+            )}
 
             {/* Subtasks */}
             <div>

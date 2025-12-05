@@ -150,6 +150,9 @@ import {
   type TeamTaskComment, type InsertTeamTaskComment, teamTaskComments,
   type TeamTaskActivity, type InsertTeamTaskActivity, teamTaskActivity,
   type BoardVisibility, type TeamTaskActivityType,
+  // Safe Transaction History
+  type DaoSafeTxHistory, type InsertDaoSafeTxHistory, daoSafeTxHistory,
+  type DaoSafeSigner, type InsertDaoSafeSigner, daoSafeSigners,
 } from "@shared/schema";
 import { db } from "./db";
 import { desc, eq, and, sql, or, isNull } from "drizzle-orm";
@@ -879,6 +882,20 @@ export interface IStorage {
   getDaoSafePendingTxs(walletId?: number): Promise<DaoSafePendingTx[]>;
   upsertDaoSafePendingTx(tx: InsertDaoSafePendingTx): Promise<DaoSafePendingTx>;
   deleteDaoSafePendingTx(id: number): Promise<boolean>;
+
+  // Safe Transaction History methods
+  getDaoSafeTxHistory(walletId: number, options?: { status?: string; limit?: number; offset?: number }): Promise<DaoSafeTxHistory[]>;
+  getDaoSafeTxByHash(safeTxHash: string): Promise<DaoSafeTxHistory | undefined>;
+  upsertDaoSafeTxHistory(tx: InsertDaoSafeTxHistory): Promise<DaoSafeTxHistory>;
+  getRecentDaoSafeTxs(limit?: number): Promise<DaoSafeTxHistory[]>;
+  getPendingSignatureTxs(): Promise<DaoSafeTxHistory[]>;
+  
+  // Safe Signer Mapping methods
+  getDaoSafeSigners(walletId: number): Promise<DaoSafeSigner[]>;
+  getDaoSafeSignerByAddress(walletId: number, signerAddress: string): Promise<DaoSafeSigner | undefined>;
+  upsertDaoSafeSigner(signer: InsertDaoSafeSigner): Promise<DaoSafeSigner>;
+  linkSignerToUser(signerId: number, platformUserId: string): Promise<DaoSafeSigner | undefined>;
+  syncWalletSigners(walletId: number, signerAddresses: string[]): Promise<DaoSafeSigner[]>;
 
   // DAO Member Skills
   getDaoMemberSkills(membershipId?: number): Promise<DaoMemberSkill[]>;
@@ -5603,6 +5620,133 @@ export class DbStorage implements IStorage {
   async deleteDaoSafePendingTx(id: number): Promise<boolean> {
     await db.delete(daoSafePendingTxs).where(eq(daoSafePendingTxs.id, id));
     return true;
+  }
+
+  // Safe Transaction History methods
+  async getDaoSafeTxHistory(walletId: number, options?: { status?: string; limit?: number; offset?: number }): Promise<DaoSafeTxHistory[]> {
+    let query = db.select().from(daoSafeTxHistory)
+      .where(eq(daoSafeTxHistory.walletId, walletId))
+      .orderBy(desc(daoSafeTxHistory.submittedAt))
+      .$dynamic();
+    
+    if (options?.limit) {
+      query = query.limit(options.limit);
+    }
+    if (options?.offset) {
+      query = query.offset(options.offset);
+    }
+    
+    const results = await query;
+    
+    // Filter by status in memory if provided
+    if (options?.status) {
+      return results.filter(tx => tx.status === options.status);
+    }
+    return results;
+  }
+
+  async getDaoSafeTxByHash(safeTxHash: string): Promise<DaoSafeTxHistory | undefined> {
+    const [tx] = await db.select().from(daoSafeTxHistory)
+      .where(eq(daoSafeTxHistory.safeTxHash, safeTxHash));
+    return tx;
+  }
+
+  async upsertDaoSafeTxHistory(tx: InsertDaoSafeTxHistory): Promise<DaoSafeTxHistory> {
+    // Check if exists
+    const [existing] = await db.select().from(daoSafeTxHistory)
+      .where(eq(daoSafeTxHistory.safeTxHash, tx.safeTxHash));
+    
+    if (existing) {
+      const [updated] = await db.update(daoSafeTxHistory)
+        .set({ ...tx, lastSyncedAt: new Date() })
+        .where(eq(daoSafeTxHistory.id, existing.id))
+        .returning();
+      return updated;
+    }
+    
+    const [created] = await db.insert(daoSafeTxHistory).values(tx).returning();
+    return created;
+  }
+
+  async getRecentDaoSafeTxs(limit: number = 10): Promise<DaoSafeTxHistory[]> {
+    return db.select().from(daoSafeTxHistory)
+      .orderBy(desc(daoSafeTxHistory.submittedAt))
+      .limit(limit);
+  }
+
+  async getPendingSignatureTxs(): Promise<DaoSafeTxHistory[]> {
+    return db.select().from(daoSafeTxHistory)
+      .where(or(
+        eq(daoSafeTxHistory.status, "awaiting_confirmations"),
+        eq(daoSafeTxHistory.status, "awaiting_execution")
+      ))
+      .orderBy(desc(daoSafeTxHistory.submittedAt));
+  }
+
+  // Safe Signer Mapping methods
+  async getDaoSafeSigners(walletId: number): Promise<DaoSafeSigner[]> {
+    return db.select().from(daoSafeSigners)
+      .where(eq(daoSafeSigners.walletId, walletId))
+      .orderBy(daoSafeSigners.signerAddress);
+  }
+
+  async getDaoSafeSignerByAddress(walletId: number, signerAddress: string): Promise<DaoSafeSigner | undefined> {
+    const [signer] = await db.select().from(daoSafeSigners)
+      .where(and(
+        eq(daoSafeSigners.walletId, walletId),
+        eq(daoSafeSigners.signerAddress, signerAddress.toLowerCase())
+      ));
+    return signer;
+  }
+
+  async upsertDaoSafeSigner(signer: InsertDaoSafeSigner): Promise<DaoSafeSigner> {
+    const [existing] = await db.select().from(daoSafeSigners)
+      .where(and(
+        eq(daoSafeSigners.walletId, signer.walletId),
+        eq(daoSafeSigners.signerAddress, signer.signerAddress.toLowerCase())
+      ));
+    
+    if (existing) {
+      const [updated] = await db.update(daoSafeSigners)
+        .set({ ...signer, signerAddress: signer.signerAddress.toLowerCase(), updatedAt: new Date() })
+        .where(eq(daoSafeSigners.id, existing.id))
+        .returning();
+      return updated;
+    }
+    
+    const [created] = await db.insert(daoSafeSigners).values({
+      ...signer,
+      signerAddress: signer.signerAddress.toLowerCase()
+    }).returning();
+    return created;
+  }
+
+  async linkSignerToUser(signerId: number, platformUserId: string): Promise<DaoSafeSigner | undefined> {
+    const [updated] = await db.update(daoSafeSigners)
+      .set({ platformUserId, updatedAt: new Date() })
+      .where(eq(daoSafeSigners.id, signerId))
+      .returning();
+    return updated;
+  }
+
+  async syncWalletSigners(walletId: number, signerAddresses: string[]): Promise<DaoSafeSigner[]> {
+    // Mark all existing signers as inactive
+    await db.update(daoSafeSigners)
+      .set({ isActive: false, updatedAt: new Date() })
+      .where(eq(daoSafeSigners.walletId, walletId));
+    
+    // Upsert each signer address as active
+    const signers: DaoSafeSigner[] = [];
+    for (const address of signerAddresses) {
+      const signer = await this.upsertDaoSafeSigner({
+        walletId,
+        signerAddress: address,
+        isActive: true,
+      });
+      signers.push(signer);
+    }
+    
+    return signers;
   }
 
   // DAO Member Skills

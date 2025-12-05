@@ -24,8 +24,10 @@ import {
   RefreshCw,
   CopyCheck,
   Music,
+  Box,
 } from "lucide-react";
 import { format } from "date-fns";
+import { useAuth } from "@/hooks/useAuth";
 
 type Collection = {
   id: number;
@@ -118,6 +120,9 @@ function QuickActionCard({
 }
 
 export default function OnchainOps() {
+  const { user } = useAuth();
+  const isAdmin = user?.role === "admin";
+
   const { data: collections = [], isLoading: collectionsLoading } = useQuery<Collection[]>({
     queryKey: ["/api/collections"],
   });
@@ -275,6 +280,15 @@ export default function OnchainOps() {
                     icon={Music}
                     href="/web3/mp3"
                   />
+                  {isAdmin && (
+                    <QuickActionCard
+                      title="3D Model Generator"
+                      description="Generate 3D models from text prompts using AI"
+                      icon={Box}
+                      href="/model-generator"
+                      variant="primary"
+                    />
+                  )}
                 </div>
               </CardContent>
             </Card>

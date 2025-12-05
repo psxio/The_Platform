@@ -28,6 +28,7 @@ import {
   Mail,
   Wallet,
   LayoutGrid,
+  Building2,
 } from "lucide-react";
 import { format } from "date-fns";
 import { Link } from "wouter";
@@ -643,6 +644,12 @@ function SystemHealthSection() {
 function QuickActionsSection() {
   return (
     <div className="grid grid-cols-2 gap-3">
+      <Button variant="outline" className="h-auto py-3 flex-col items-start gap-1" asChild>
+        <Link href="/client-directory">
+          <Building2 className="h-4 w-4" />
+          <span className="text-sm">Client Directory</span>
+        </Link>
+      </Button>
       <Button variant="outline" className="h-auto py-3 flex-col items-start gap-1" asChild>
         <Link href="/invite-users">
           <Mail className="h-4 w-4" />

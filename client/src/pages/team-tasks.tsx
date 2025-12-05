@@ -28,7 +28,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
-import type { TeamBoard, TeamTask, TeamTaskComment, User } from "@shared/schema";
+import type { TeamBoard, TeamTask, TeamTaskComment, User, ClientProfile } from "@shared/schema";
 
 // Types for saved filters
 interface SavedFilterData {
@@ -86,22 +86,34 @@ const TASK_TYPE_CONFIG = {
   },
 };
 
-// Project tag configurations with colors
-const PROJECT_TAG_CONFIG: Record<string, { color: string; bgColor: string }> = {
-  "Internal": { color: "text-slate-700 dark:text-slate-300", bgColor: "bg-slate-100 dark:bg-slate-800" },
-  "4444 Portal": { color: "text-violet-700 dark:text-violet-300", bgColor: "bg-violet-100 dark:bg-violet-900" },
-  "Fireside": { color: "text-orange-700 dark:text-orange-300", bgColor: "bg-orange-100 dark:bg-orange-900" },
-  "Miggles": { color: "text-pink-700 dark:text-pink-300", bgColor: "bg-pink-100 dark:bg-pink-900" },
-  "Titanium": { color: "text-cyan-700 dark:text-cyan-300", bgColor: "bg-cyan-100 dark:bg-cyan-900" },
-  "PSX": { color: "text-indigo-700 dark:text-indigo-300", bgColor: "bg-indigo-100 dark:bg-indigo-900" },
-  "Signals": { color: "text-emerald-700 dark:text-emerald-300", bgColor: "bg-emerald-100 dark:bg-emerald-900" },
-  "RYFT": { color: "text-red-700 dark:text-red-300", bgColor: "bg-red-100 dark:bg-red-900" },
-  "Tenge": { color: "text-yellow-700 dark:text-yellow-300", bgColor: "bg-yellow-100 dark:bg-yellow-900" },
-  "Agency Website": { color: "text-blue-700 dark:text-blue-300", bgColor: "bg-blue-100 dark:bg-blue-900" },
-  "Other": { color: "text-gray-700 dark:text-gray-300", bgColor: "bg-gray-100 dark:bg-gray-800" },
-};
+// Color palette for generating client colors dynamically
+const COLOR_PALETTE = [
+  { color: "text-violet-700 dark:text-violet-300", bgColor: "bg-violet-100 dark:bg-violet-900" },
+  { color: "text-orange-700 dark:text-orange-300", bgColor: "bg-orange-100 dark:bg-orange-900" },
+  { color: "text-pink-700 dark:text-pink-300", bgColor: "bg-pink-100 dark:bg-pink-900" },
+  { color: "text-cyan-700 dark:text-cyan-300", bgColor: "bg-cyan-100 dark:bg-cyan-900" },
+  { color: "text-indigo-700 dark:text-indigo-300", bgColor: "bg-indigo-100 dark:bg-indigo-900" },
+  { color: "text-emerald-700 dark:text-emerald-300", bgColor: "bg-emerald-100 dark:bg-emerald-900" },
+  { color: "text-red-700 dark:text-red-300", bgColor: "bg-red-100 dark:bg-red-900" },
+  { color: "text-yellow-700 dark:text-yellow-300", bgColor: "bg-yellow-100 dark:bg-yellow-900" },
+  { color: "text-blue-700 dark:text-blue-300", bgColor: "bg-blue-100 dark:bg-blue-900" },
+  { color: "text-teal-700 dark:text-teal-300", bgColor: "bg-teal-100 dark:bg-teal-900" },
+  { color: "text-rose-700 dark:text-rose-300", bgColor: "bg-rose-100 dark:bg-rose-900" },
+  { color: "text-amber-700 dark:text-amber-300", bgColor: "bg-amber-100 dark:bg-amber-900" },
+  { color: "text-lime-700 dark:text-lime-300", bgColor: "bg-lime-100 dark:bg-lime-900" },
+  { color: "text-sky-700 dark:text-sky-300", bgColor: "bg-sky-100 dark:bg-sky-900" },
+  { color: "text-fuchsia-700 dark:text-fuchsia-300", bgColor: "bg-fuchsia-100 dark:bg-fuchsia-900" },
+];
 
-const PROJECT_TAGS = Object.keys(PROJECT_TAG_CONFIG);
+// Generate color for a client based on their ID for consistency
+function getClientColor(clientId: number): { color: string; bgColor: string } {
+  return COLOR_PALETTE[clientId % COLOR_PALETTE.length];
+}
+
+// Fallback static config for internal use
+const INTERNAL_TAG_CONFIG = {
+  "Internal": { color: "text-slate-700 dark:text-slate-300", bgColor: "bg-slate-100 dark:bg-slate-800" },
+};
 
 const VISIBILITY_OPTIONS = [
   { value: "private", label: "Private", icon: Lock, description: "Only you can see" },
@@ -266,6 +278,24 @@ export default function TeamTasks() {
     queryKey: ["/api/team-boards"],
     enabled: isAuthenticated,
   });
+
+  // Fetch client profiles for project dropdown
+  const { data: clientProfiles = [] } = useQuery<ClientProfile[]>({
+    queryKey: ["/api/client-profiles"],
+    enabled: isAuthenticated,
+  });
+
+  // Build dynamic project tag config from client profiles
+  const projectTagConfig: Record<string, { color: string; bgColor: string }> = {
+    ...INTERNAL_TAG_CONFIG,
+    ...Object.fromEntries(
+      clientProfiles.map(client => [
+        client.name,
+        getClientColor(client.id)
+      ])
+    )
+  };
+  const projectTags = Object.keys(projectTagConfig);
 
   // Persist view mode preference
   useEffect(() => {
@@ -743,10 +773,10 @@ export default function TeamTasks() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">All Projects</SelectItem>
-                  {PROJECT_TAGS.map(tag => (
+                  {projectTags.map(tag => (
                     <SelectItem key={tag} value={tag}>
                       <div className="flex items-center gap-2">
-                        <div className={cn("w-2 h-2 rounded-full", PROJECT_TAG_CONFIG[tag]?.bgColor)} />
+                        <div className={cn("w-2 h-2 rounded-full", projectTagConfig[tag]?.bgColor)} />
                         {tag}
                       </div>
                     </SelectItem>
@@ -866,6 +896,7 @@ export default function TeamTasks() {
               onTaskClick={(task) => { setSelectedTask(task); setTaskDetailOpen(true); }}
               onStatusChange={(id, status) => updateTaskMutation.mutate({ id, status: status as "todo" | "in_progress" | "done" })}
               users={allUsers}
+              projectTagConfigMap={projectTagConfig}
             />
           ) : viewMode === "kanban" ? (
             <KanbanView 
@@ -874,6 +905,8 @@ export default function TeamTasks() {
               onStatusChange={(id, status) => updateTaskMutation.mutate({ id, status: status as "todo" | "in_progress" | "done" })}
               swimlaneBy={swimlaneBy}
               users={allUsers}
+              projectTags={projectTags}
+              projectTagConfig={projectTagConfig}
             />
           ) : (
             <CalendarView 
@@ -899,6 +932,8 @@ export default function TeamTasks() {
         onSubmit={(data) => createTaskMutation.mutate(data)}
         isPending={createTaskMutation.isPending}
         users={allUsers}
+        projectTags={projectTags}
+        projectTagConfig={projectTagConfig}
       />
 
       {/* Task Detail Dialog */}
@@ -910,6 +945,8 @@ export default function TeamTasks() {
           onUpdate={(data) => updateTaskMutation.mutate({ id: selectedTask.id, ...data })}
           onDelete={() => deleteTaskMutation.mutate(selectedTask.id)}
           users={allUsers}
+          projectTagsProp={projectTags}
+          projectTagConfigProp={projectTagConfig}
         />
       )}
 
@@ -930,12 +967,14 @@ function ListView({
   tasks, 
   onTaskClick, 
   onStatusChange,
-  users 
+  users,
+  projectTagConfigMap = {}
 }: { 
   tasks: TeamTask[]; 
   onTaskClick: (task: TeamTask) => void;
   onStatusChange: (id: number, status: string) => void;
   users: User[];
+  projectTagConfigMap?: Record<string, { color: string; bgColor: string }>;
 }) {
   const groupedTasks = {
     in_progress: tasks.filter(t => t.status === "in_progress"),
@@ -973,6 +1012,7 @@ function ListView({
               onClick={() => onTaskClick(task)}
               onStatusChange={onStatusChange}
               users={users}
+              projectTagConfigMap={projectTagConfigMap}
             />
           ))}
         </div>
@@ -993,17 +1033,19 @@ function TaskListItem({
   task, 
   onClick, 
   onStatusChange,
-  users 
+  users,
+  projectTagConfigMap = {}
 }: { 
   task: TeamTask; 
   onClick: () => void;
   onStatusChange: (id: number, status: string) => void;
   users: User[];
+  projectTagConfigMap?: Record<string, { color: string; bgColor: string }>;
 }) {
   const priorityConfig = PRIORITY_CONFIG[task.priority as keyof typeof PRIORITY_CONFIG] || PRIORITY_CONFIG.normal;
   const statusConfig = STATUS_CONFIG[task.status as keyof typeof STATUS_CONFIG] || STATUS_CONFIG.todo;
   const taskTypeConfig = TASK_TYPE_CONFIG[(task as any).taskType as keyof typeof TASK_TYPE_CONFIG] || TASK_TYPE_CONFIG.executable;
-  const projectTagConfig = (task as any).projectTag ? PROJECT_TAG_CONFIG[(task as any).projectTag] : null;
+  const projectTagConfig = (task as any).projectTag ? projectTagConfigMap[(task as any).projectTag] : null;
   const assignee = users.find(u => u.id === task.assigneeId);
   const subtasks = task.subtasks as { id: string; title: string; completed: boolean }[] || [];
   const completedSubtasks = subtasks.filter(s => s.completed).length;
@@ -1111,13 +1153,17 @@ function KanbanView({
   onTaskClick,
   onStatusChange,
   swimlaneBy,
-  users = []
+  users = [],
+  projectTags = [],
+  projectTagConfig = {}
 }: { 
   tasks: TeamTask[];
   onTaskClick: (task: TeamTask) => void;
   onStatusChange: (id: number, status: string) => void;
   swimlaneBy: "none" | "project" | "assignee" | "priority";
   users?: User[];
+  projectTags?: string[];
+  projectTagConfig?: Record<string, { color: string; bgColor: string }>;
 }) {
   const [draggedTask, setDraggedTask] = useState<TeamTask | null>(null);
   const [collapsedSwimlanes, setCollapsedSwimlanes] = useState<Set<string>>(new Set());
@@ -1164,9 +1210,9 @@ function KanbanView({
         }
         projectGroups.get(project)!.push(task);
       });
-      PROJECT_TAGS.forEach(tag => {
+      projectTags.forEach(tag => {
         if (projectGroups.has(tag)) {
-          const config = PROJECT_TAG_CONFIG[tag];
+          const config = projectTagConfig[tag];
           groups.push({ 
             key: tag, 
             label: tag, 
@@ -1265,6 +1311,7 @@ function KanbanView({
                       onDragStart={handleDragStart}
                       onClick={() => onTaskClick(task)}
                       users={users}
+                      projectTagConfigMap={projectTagConfig}
                     />
                   ))}
                   {column.tasks.length === 0 && (
@@ -1350,6 +1397,7 @@ function KanbanView({
                             onClick={() => onTaskClick(task)}
                             compact
                             users={users}
+                            projectTagConfigMap={projectTagConfig}
                           />
                         ))}
                         {column.tasks.length === 0 && (
@@ -1376,7 +1424,8 @@ function KanbanCard({
   onDragStart, 
   onClick,
   compact = false,
-  users = []
+  users = [],
+  projectTagConfigMap = {}
 }: { 
   task: TeamTask;
   isDragging: boolean;
@@ -1384,10 +1433,11 @@ function KanbanCard({
   onClick: () => void;
   compact?: boolean;
   users?: User[];
+  projectTagConfigMap?: Record<string, { color: string; bgColor: string }>;
 }) {
   const priorityConfig = PRIORITY_CONFIG[task.priority as keyof typeof PRIORITY_CONFIG] || PRIORITY_CONFIG.normal;
   const taskTypeConfig = TASK_TYPE_CONFIG[(task as any).taskType as keyof typeof TASK_TYPE_CONFIG] || TASK_TYPE_CONFIG.executable;
-  const projectTagConfig = (task as any).projectTag ? PROJECT_TAG_CONFIG[(task as any).projectTag] : null;
+  const projectTagConfig = (task as any).projectTag ? projectTagConfigMap[(task as any).projectTag] : null;
   const subtasks = task.subtasks as { id: string; title: string; completed: boolean }[] || [];
   const completedSubtasks = subtasks.filter(s => s.completed).length;
   const TaskTypeIcon = taskTypeConfig.icon;
@@ -1737,13 +1787,17 @@ function CreateTaskDialog({
   onOpenChange, 
   onSubmit, 
   isPending,
-  users 
+  users,
+  projectTags = [],
+  projectTagConfig = {}
 }: { 
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSubmit: (data: Partial<TeamTask>) => void;
   isPending: boolean;
   users: User[];
+  projectTags?: string[];
+  projectTagConfig?: Record<string, { color: string; bgColor: string }>;
 }) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -1828,12 +1882,12 @@ function CreateTaskDialog({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="none">No Project</SelectItem>
-                {PROJECT_TAGS.map(tag => {
-                  const config = PROJECT_TAG_CONFIG[tag];
+                {projectTags.map(tag => {
+                  const config = projectTagConfig[tag];
                   return (
                     <SelectItem key={tag} value={tag}>
                       <div className="flex items-center gap-2">
-                        <div className={cn("w-2 h-2 rounded-full", config.bgColor)} />
+                        <div className={cn("w-2 h-2 rounded-full", config?.bgColor || "bg-muted")} />
                         {tag}
                       </div>
                     </SelectItem>
@@ -1982,7 +2036,9 @@ function TaskDetailDialog({
   task,
   onUpdate,
   onDelete,
-  users 
+  users,
+  projectTagsProp = [],
+  projectTagConfigProp = {}
 }: { 
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -1990,6 +2046,8 @@ function TaskDetailDialog({
   onUpdate: (data: Partial<TeamTask>) => void;
   onDelete: () => void;
   users: User[];
+  projectTagsProp?: string[];
+  projectTagConfigProp?: Record<string, { color: string; bgColor: string }>;
 }) {
   const [isEditing, setIsEditing] = useState(false);
   const [title, setTitle] = useState(task.title);
@@ -2176,8 +2234,8 @@ function TaskDetailDialog({
               })()}
               
               {/* Project Tag Badge */}
-              {projectTag && PROJECT_TAG_CONFIG[projectTag] && (
-                <Badge variant="secondary" className={cn("text-sm", PROJECT_TAG_CONFIG[projectTag].color, PROJECT_TAG_CONFIG[projectTag].bgColor)}>
+              {projectTag && projectTagConfigProp[projectTag] && (
+                <Badge variant="secondary" className={cn("text-sm", projectTagConfigProp[projectTag].color, projectTagConfigProp[projectTag].bgColor)}>
                   {projectTag}
                 </Badge>
               )}
@@ -2342,12 +2400,12 @@ function TaskDetailDialog({
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">No Project</SelectItem>
-                      {PROJECT_TAGS.map(tag => {
-                        const config = PROJECT_TAG_CONFIG[tag];
+                      {projectTagsProp.map(tag => {
+                        const config = projectTagConfigProp[tag];
                         return (
                           <SelectItem key={tag} value={tag}>
                             <div className="flex items-center gap-2">
-                              <div className={cn("w-2 h-2 rounded-full", config.bgColor)} />
+                              <div className={cn("w-2 h-2 rounded-full", config?.bgColor || "bg-muted")} />
                               {tag}
                             </div>
                           </SelectItem>

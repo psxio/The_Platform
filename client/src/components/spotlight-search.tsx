@@ -31,6 +31,9 @@ import {
   ArrowRight,
   CopyCheck,
   Shield,
+  LayoutGrid,
+  List,
+  Calendar,
 } from "lucide-react";
 
 type SearchResult = {
@@ -80,6 +83,8 @@ type PageItem = SearchResult & { role?: "admin" | "content" | "web3" };
 
 const PAGE_RESULTS: PageItem[] = [
   { id: "page-workspace", type: "page", title: "My Workspace", description: "Personal dashboard", path: "/workspace", icon: Home },
+  { id: "page-tasks", type: "page", title: "Tasks", description: "Kanban boards and task management", path: "/tasks", icon: LayoutGrid },
+  { id: "page-tasks-kanban", type: "page", title: "Open Kanban Board", description: "View tasks in Kanban view", path: "/tasks", icon: LayoutGrid },
   { id: "page-content", type: "page", title: "Content Studio", description: "Content production hub", path: "/content-dashboard", icon: Briefcase, role: "content" },
   { id: "page-onchain", type: "page", title: "Onchain Ops", description: "Web3 tools dashboard", path: "/onchain-ops", icon: Zap, role: "web3" },
   { id: "page-compare", type: "page", title: "Address Compare", description: "Compare address lists", path: "/web3/compare", icon: GitCompare, role: "web3" },

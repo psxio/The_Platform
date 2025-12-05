@@ -21,6 +21,7 @@ import {
   ChevronDown,
   Check,
   LucideIcon,
+  LayoutGrid,
 } from "lucide-react";
 
 interface Space {
@@ -42,6 +43,15 @@ const spaces: Space[] = [
     description: "Personal dashboard and tasks",
     homeRoute: "/workspace",
     pathPrefix: ["/workspace"],
+    roles: ["web3", "content", "admin"],
+  },
+  {
+    id: "tasks",
+    name: "Tasks",
+    icon: LayoutGrid,
+    description: "Kanban boards and task management",
+    homeRoute: "/tasks",
+    pathPrefix: ["/tasks"],
     roles: ["web3", "content", "admin"],
   },
   {

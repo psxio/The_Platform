@@ -51,7 +51,7 @@ const VISIBILITY_OPTIONS = [
 
 export default function TeamTasks() {
   const [selectedBoardId, setSelectedBoardId] = useState<number | null>(null);
-  const [viewMode, setViewMode] = useState<"list" | "kanban" | "calendar">("list");
+  const [viewMode, setViewMode] = useState<"list" | "kanban" | "calendar">("kanban");
   const [createBoardOpen, setCreateBoardOpen] = useState(false);
   const [createTaskOpen, setCreateTaskOpen] = useState(false);
   const [taskDetailOpen, setTaskDetailOpen] = useState(false);

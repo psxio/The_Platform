@@ -124,6 +124,9 @@ function AuthenticatedRouter() {
       {/* Personal Workspace */}
       <Route path="/workspace" component={Workspace} />
 
+      {/* Universal Tasks - Available to all roles */}
+      <Route path="/tasks" component={TeamTasks} />
+
       {/* Web3 Routes */}
       <Route path="/web3/compare">
         <Web3RouteGuard><Home /></Web3RouteGuard>

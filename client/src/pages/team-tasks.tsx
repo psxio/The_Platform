@@ -90,6 +90,127 @@ const VISIBILITY_OPTIONS = [
 ];
 
 const STORAGE_KEY = "team-tasks-view-mode";
+const WIP_LIMIT_DEFAULT = 5; // Default WIP limit per person
+
+// Workload Summary Component
+function WorkloadSummary({ 
+  tasks, 
+  users, 
+  currentUserId,
+  onAssigneeClick
+}: { 
+  tasks: TeamTask[]; 
+  users: User[];
+  currentUserId?: string;
+  onAssigneeClick: (userId: string) => void;
+}) {
+  const [isExpanded, setIsExpanded] = useState(true);
+  
+  // Calculate workload per user (only active tasks - not done)
+  const workloadData = users.map(user => {
+    const userTasks = tasks.filter(t => t.assigneeId === user.id);
+    const activeTasks = userTasks.filter(t => t.status !== "done");
+    const inProgressTasks = userTasks.filter(t => t.status === "in_progress");
+    const todoTasks = userTasks.filter(t => t.status === "todo");
+    const wipLimit = WIP_LIMIT_DEFAULT;
+    const isOverWip = inProgressTasks.length > wipLimit;
+    
+    return {
+      user,
+      totalActive: activeTasks.length,
+      inProgress: inProgressTasks.length,
+      todo: todoTasks.length,
+      wipLimit,
+      isOverWip,
+      isCurrentUser: user.id === currentUserId
+    };
+  }).filter(w => w.totalActive > 0).sort((a, b) => b.totalActive - a.totalActive);
+
+  const unassignedTasks = tasks.filter(t => !t.assigneeId && t.status !== "done");
+  
+  if (workloadData.length === 0 && unassignedTasks.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="border-t">
+      <button
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="w-full p-3 flex items-center justify-between text-left hover-elevate"
+        data-testid="button-toggle-workload"
+      >
+        <div className="flex items-center gap-2">
+          <Users className="w-4 h-4 text-muted-foreground" />
+          <span className="text-xs font-medium">Team Workload</span>
+        </div>
+        <ChevronDown className={cn("w-4 h-4 transition-transform", isExpanded && "rotate-180")} />
+      </button>
+      
+      {isExpanded && (
+        <div className="px-3 pb-3 space-y-2">
+          {workloadData.slice(0, 8).map(({ user, totalActive, inProgress, todo, wipLimit, isOverWip, isCurrentUser }) => (
+            <button
+              key={user.id}
+              onClick={() => onAssigneeClick(user.id)}
+              className={cn(
+                "w-full p-2 rounded-md text-left hover-elevate active-elevate-2 flex items-center gap-2",
+                isCurrentUser && "bg-primary/5 border border-primary/20"
+              )}
+              data-testid={`workload-user-${user.id}`}
+            >
+              <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                <UserIcon className="w-3 h-3" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-medium truncate">{user.firstName || user.email?.split("@")[0]}</span>
+                  {isOverWip && (
+                    <Badge variant="destructive" className="text-[10px] h-4">WIP</Badge>
+                  )}
+                </div>
+                <div className="flex items-center gap-1 mt-1">
+                  <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+                    <div 
+                      className={cn(
+                        "h-full transition-all",
+                        isOverWip ? "bg-red-500" : inProgress > 0 ? "bg-yellow-500" : "bg-primary/40"
+                      )}
+                      style={{ width: `${Math.min(100, (inProgress / wipLimit) * 100)}%` }}
+                    />
+                  </div>
+                  <span className="text-[10px] text-muted-foreground shrink-0">
+                    {inProgress}/{wipLimit}
+                  </span>
+                </div>
+              </div>
+              <Badge variant="secondary" className="text-[10px] shrink-0">{totalActive}</Badge>
+            </button>
+          ))}
+          
+          {unassignedTasks.length > 0 && (
+            <button
+              onClick={() => onAssigneeClick("")}
+              className="w-full p-2 rounded-md text-left hover-elevate flex items-center gap-2"
+              data-testid="workload-unassigned"
+            >
+              <div className="w-6 h-6 rounded-full bg-muted flex items-center justify-center shrink-0">
+                <UserIcon className="w-3 h-3 text-muted-foreground" />
+              </div>
+              <span className="text-xs text-muted-foreground flex-1">Unassigned</span>
+              <Badge variant="outline" className="text-[10px]">{unassignedTasks.length}</Badge>
+            </button>
+          )}
+          
+          {workloadData.length > 8 && (
+            <p className="text-[10px] text-muted-foreground text-center">
+              +{workloadData.length - 8} more team members
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function TeamTasks() {
   const [selectedBoardId, setSelectedBoardId] = useState<number | null>(null);
@@ -208,6 +329,7 @@ export default function TeamTasks() {
     const matchesTaskType = taskTypeFilter === "all" || (task as any).taskType === taskTypeFilter;
     const matchesAssignee = assigneeFilter === "all" || 
                            (assigneeFilter === "me" && task.assigneeId === user?.id) ||
+                           (assigneeFilter === "unassigned" && !task.assigneeId) ||
                            task.assigneeId === assigneeFilter;
     return matchesSearch && matchesStatus && matchesPriority && matchesProjectTag && matchesTaskType && matchesAssignee;
   });
@@ -348,6 +470,21 @@ export default function TeamTasks() {
             )}
           </div>
         </ScrollArea>
+        
+        {/* Workload Summary */}
+        <WorkloadSummary 
+          tasks={tasks}
+          users={allUsers}
+          currentUserId={user?.id}
+          onAssigneeClick={(userId) => {
+            if (userId === "") {
+              setAssigneeFilter("unassigned");
+            } else {
+              setAssigneeFilter(userId);
+            }
+            setQuickFilter("none");
+          }}
+        />
       </div>
 
       {/* Main Content */}
@@ -487,6 +624,7 @@ export default function TeamTasks() {
                 <SelectContent>
                   <SelectItem value="all">All Assignees</SelectItem>
                   <SelectItem value="me">Assigned to Me</SelectItem>
+                  <SelectItem value="unassigned">Unassigned</SelectItem>
                   {allUsers.map(u => (
                     <SelectItem key={u.id} value={u.id}>
                       {u.firstName || u.email}
@@ -1219,6 +1357,20 @@ function KanbanCard({
               <CalendarIcon className="w-3 h-3 mr-1" />
               {new Date(task.dueDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
             </Badge>
+          )}
+          
+          {/* Spacer */}
+          <div className="flex-1" />
+          
+          {/* Assignee Avatar */}
+          {assignee && (
+            <div 
+              className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center shrink-0 border border-primary/20" 
+              title={assignee.firstName || assignee.email}
+              data-testid={`card-assignee-${task.id}`}
+            >
+              <UserIcon className="w-3 h-3" />
+            </div>
           )}
         </div>
       </CardContent>

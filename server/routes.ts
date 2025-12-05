@@ -10917,6 +10917,253 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ==================== ENHANCED SAFE TRANSACTION HISTORY ====================
+
+  // Get transaction history from database (stored/synced data)
+  app.get("/api/dao/safe-wallets/:id/transactions", isAuthenticated, async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const wallet = await storage.getDaoSafeWallet(id);
+      if (!wallet) {
+        return res.status(404).json({ error: "Wallet not found" });
+      }
+      
+      const status = req.query.status as string | undefined;
+      const limit = req.query.limit ? parseInt(req.query.limit) : 50;
+      const offset = req.query.offset ? parseInt(req.query.offset) : 0;
+      
+      const transactions = await storage.getDaoSafeTxHistory(id, { status, limit, offset });
+      
+      // Enrich with signer user info
+      const signers = await storage.getDaoSafeSigners(id);
+      const users = await storage.getAllUsers();
+      const userMap = new Map(users.map(u => [u.id, u]));
+      
+      const enrichedTxs = transactions.map(tx => {
+        const proposerUser = tx.proposerUserId ? userMap.get(tx.proposerUserId) : undefined;
+        const executorUser = tx.executorUserId ? userMap.get(tx.executorUserId) : undefined;
+        
+        // Enrich confirmations with user info
+        const enrichedConfirmations = (tx.confirmations || []).map((conf: any) => {
+          const signerMapping = signers.find(s => s.signerAddress.toLowerCase() === conf.signer?.toLowerCase());
+          const user = signerMapping?.platformUserId ? userMap.get(signerMapping.platformUserId) : undefined;
+          return {
+            ...conf,
+            user: user ? {
+              id: user.id,
+              firstName: user.firstName,
+              lastName: user.lastName,
+              profileImageUrl: user.profileImageUrl,
+            } : undefined,
+            label: signerMapping?.label,
+          };
+        });
+        
+        return {
+          ...tx,
+          proposerUser: proposerUser ? {
+            id: proposerUser.id,
+            firstName: proposerUser.firstName,
+            lastName: proposerUser.lastName,
+            profileImageUrl: proposerUser.profileImageUrl,
+          } : undefined,
+          executorUser: executorUser ? {
+            id: executorUser.id,
+            firstName: executorUser.firstName,
+            lastName: executorUser.lastName,
+            profileImageUrl: executorUser.profileImageUrl,
+          } : undefined,
+          confirmations: enrichedConfirmations,
+        };
+      });
+      
+      res.json(enrichedTxs);
+    } catch (error) {
+      console.error("Error fetching stored transactions:", error);
+      res.status(500).json({ error: "Failed to fetch transactions" });
+    }
+  });
+
+  // Get single transaction by hash
+  app.get("/api/dao/safe-tx/:safeTxHash", isAuthenticated, async (req: any, res) => {
+    try {
+      const tx = await storage.getDaoSafeTxByHash(req.params.safeTxHash);
+      if (!tx) {
+        return res.status(404).json({ error: "Transaction not found" });
+      }
+      res.json(tx);
+    } catch (error) {
+      console.error("Error fetching transaction:", error);
+      res.status(500).json({ error: "Failed to fetch transaction" });
+    }
+  });
+
+  // Get recent transactions across all wallets
+  app.get("/api/dao/safe-transactions/recent", isAuthenticated, async (req: any, res) => {
+    try {
+      const limit = req.query.limit ? parseInt(req.query.limit) : 10;
+      const transactions = await storage.getRecentDaoSafeTxs(limit);
+      
+      // Enrich with wallet info
+      const wallets = await storage.getDaoSafeWallets();
+      const walletMap = new Map(wallets.map(w => [w.id, w]));
+      
+      const enrichedTxs = transactions.map(tx => ({
+        ...tx,
+        wallet: walletMap.get(tx.walletId),
+      }));
+      
+      res.json(enrichedTxs);
+    } catch (error) {
+      console.error("Error fetching recent transactions:", error);
+      res.status(500).json({ error: "Failed to fetch recent transactions" });
+    }
+  });
+
+  // Get pending signature transactions across all wallets
+  app.get("/api/dao/safe-transactions/pending", isAuthenticated, async (req: any, res) => {
+    try {
+      const transactions = await storage.getPendingSignatureTxs();
+      
+      // Enrich with wallet info
+      const wallets = await storage.getDaoSafeWallets();
+      const walletMap = new Map(wallets.map(w => [w.id, w]));
+      
+      const enrichedTxs = transactions.map(tx => ({
+        ...tx,
+        wallet: walletMap.get(tx.walletId),
+      }));
+      
+      res.json(enrichedTxs);
+    } catch (error) {
+      console.error("Error fetching pending transactions:", error);
+      res.status(500).json({ error: "Failed to fetch pending transactions" });
+    }
+  });
+
+  // Sync a specific wallet's transactions
+  app.post("/api/dao/safe-wallets/:id/sync", isAuthenticated, async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const wallet = await storage.getDaoSafeWallet(id);
+      if (!wallet) {
+        return res.status(404).json({ error: "Wallet not found" });
+      }
+      
+      const safeSync = await import("./safe-sync");
+      
+      // Sync signers first
+      await safeSync.syncWalletSigners(wallet);
+      
+      // Then sync transactions
+      const syncedCount = await safeSync.syncWalletTransactions(wallet);
+      
+      res.json({ success: true, synced: syncedCount });
+    } catch (error) {
+      console.error("Error syncing wallet:", error);
+      res.status(500).json({ error: "Failed to sync wallet" });
+    }
+  });
+
+  // Sync all wallets with full transaction history
+  app.post("/api/dao/safe-wallets/sync-transactions", requireRole("admin"), async (req: any, res) => {
+    try {
+      const safeSync = await import("./safe-sync");
+      const result = await safeSync.syncAllWallets();
+      res.json(result);
+    } catch (error) {
+      console.error("Error syncing all wallets:", error);
+      res.status(500).json({ error: "Failed to sync wallets" });
+    }
+  });
+
+  // ==================== SAFE SIGNER MAPPING ROUTES ====================
+
+  // Get signers for a wallet
+  app.get("/api/dao/safe-wallets/:id/signers", isAuthenticated, async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const wallet = await storage.getDaoSafeWallet(id);
+      if (!wallet) {
+        return res.status(404).json({ error: "Wallet not found" });
+      }
+      
+      const signers = await storage.getDaoSafeSigners(id);
+      
+      // Enrich with user info
+      const users = await storage.getAllUsers();
+      const userMap = new Map(users.map(u => [u.id, u]));
+      
+      const enrichedSigners = signers.map(signer => ({
+        ...signer,
+        user: signer.platformUserId ? userMap.get(signer.platformUserId) : undefined,
+      }));
+      
+      res.json(enrichedSigners);
+    } catch (error) {
+      console.error("Error fetching signers:", error);
+      res.status(500).json({ error: "Failed to fetch signers" });
+    }
+  });
+
+  // Link signer to platform user
+  app.post("/api/dao/safe-signers/:id/link", requireRole("admin"), async (req: any, res) => {
+    try {
+      const signerId = parseInt(req.params.id);
+      const { platformUserId, label } = req.body;
+      
+      if (platformUserId) {
+        const signer = await storage.linkSignerToUser(signerId, platformUserId);
+        if (!signer) {
+          return res.status(404).json({ error: "Signer not found" });
+        }
+        res.json(signer);
+      } else if (label !== undefined) {
+        // Just update label
+        const signer = await storage.upsertDaoSafeSigner({ walletId: 0, signerAddress: "", label } as any);
+        res.json(signer);
+      } else {
+        res.status(400).json({ error: "Either platformUserId or label is required" });
+      }
+    } catch (error) {
+      console.error("Error linking signer:", error);
+      res.status(500).json({ error: "Failed to link signer" });
+    }
+  });
+
+  // Bulk update signer mappings
+  app.post("/api/dao/safe-wallets/:id/signers/bulk-link", requireRole("admin"), async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const wallet = await storage.getDaoSafeWallet(id);
+      if (!wallet) {
+        return res.status(404).json({ error: "Wallet not found" });
+      }
+      
+      const { mappings } = req.body; // Array of { signerAddress, platformUserId, label }
+      if (!Array.isArray(mappings)) {
+        return res.status(400).json({ error: "mappings must be an array" });
+      }
+      
+      const results = [];
+      for (const mapping of mappings) {
+        const signer = await storage.upsertDaoSafeSigner({
+          walletId: id,
+          signerAddress: mapping.signerAddress,
+          platformUserId: mapping.platformUserId || undefined,
+          label: mapping.label || undefined,
+          isActive: true,
+        });
+        results.push(signer);
+      }
+      
+      res.json(results);
+    } catch (error) {
+      console.error("Error bulk linking signers:", error);
+      res.status(500).json({ error: "Failed to link signers" });
+    }
+  });
+
   // ==================== DAO MEMBER SKILLS ROUTES ====================
   
   // Helper: Check if user owns membership or is admin

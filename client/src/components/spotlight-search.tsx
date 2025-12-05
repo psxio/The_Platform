@@ -92,8 +92,8 @@ const PAGE_RESULTS: PageItem[] = [
   { id: "page-collections", type: "page", title: "NFT Collections", description: "Manage NFT collections", path: "/web3/collections", icon: FolderOpen, role: "web3" },
   { id: "page-duplicates", type: "page", title: "Duplicate Checker", description: "Find and remove duplicate addresses", path: "/web3/duplicates", icon: CopyCheck, role: "web3" },
   { id: "page-screener", type: "page", title: "Wallet Screener", description: "Screen wallets for bots and sybils", path: "/web3/screener", icon: Shield, role: "web3" },
-  { id: "page-dao", type: "page", title: "DAO Hub", description: "DAO management dashboard", path: "/dao", icon: Crown },
-  { id: "page-dao-catalog", type: "page", title: "Service Catalog", description: "DAO services", path: "/dao/catalog", icon: Briefcase },
+  { id: "page-dao", type: "page", title: "DAO Hub", description: "DAO management dashboard", path: "/dao", icon: Crown, role: "web3" },
+  { id: "page-dao-catalog", type: "page", title: "Service Catalog", description: "DAO services", path: "/dao/catalog", icon: Briefcase, role: "web3" },
   { id: "page-clients", type: "page", title: "Client Directory", description: "Client profiles", path: "/client-directory", icon: Building2 },
   { id: "page-admin", type: "page", title: "Admin Center", description: "System administration", path: "/admin/control-center", icon: Settings, badge: "Admin", role: "admin" },
   { id: "page-internal-team", type: "page", title: "Internal Team", description: "Internal team management", path: "/admin/internal-team", icon: Users, badge: "Admin", role: "admin" },
@@ -117,7 +117,7 @@ export function SpotlightSearch() {
 
   const { data: projects } = useQuery<DaoProject[]>({
     queryKey: ["/api/dao/projects"],
-    enabled: open && (isContent || isAdmin),
+    enabled: open && isWeb3,
   });
 
   const { data: clients } = useQuery<ClientProfile[]>({
@@ -127,7 +127,7 @@ export function SpotlightSearch() {
 
   const { data: wallets } = useQuery<SafeWallet[]>({
     queryKey: ["/api/dao/safe-wallets"],
-    enabled: open && (isContent || isAdmin),
+    enabled: open && isWeb3,
   });
 
   const { data: collections } = useQuery<Collection[]>({

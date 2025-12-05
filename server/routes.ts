@@ -11642,6 +11642,530 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ==================== TEAM BOARDS & ENHANCED TASKS ROUTES ====================
+
+  // Team Boards routes
+  app.get("/api/team-boards", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const boards = await storage.getTeamBoards(user.id, user.role);
+      res.json(boards);
+    } catch (error) {
+      console.error("Error fetching team boards:", error);
+      res.status(500).json({ error: "Failed to fetch team boards" });
+    }
+  });
+
+  app.get("/api/team-boards/personal", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const board = await storage.getOrCreatePersonalBoard(user.id);
+      res.json(board);
+    } catch (error) {
+      console.error("Error getting personal board:", error);
+      res.status(500).json({ error: "Failed to get personal board" });
+    }
+  });
+
+  app.get("/api/team-boards/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const id = parseInt(req.params.id);
+      
+      const canAccess = await storage.canAccessBoard(id, user.id, user.role);
+      if (!canAccess) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      
+      const board = await storage.getTeamBoard(id);
+      if (!board) {
+        return res.status(404).json({ error: "Board not found" });
+      }
+      res.json(board);
+    } catch (error) {
+      console.error("Error fetching team board:", error);
+      res.status(500).json({ error: "Failed to fetch team board" });
+    }
+  });
+
+  app.post("/api/team-boards", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const board = await storage.createTeamBoard({
+        ...req.body,
+        ownerId: user.id,
+      });
+      res.status(201).json(board);
+    } catch (error) {
+      console.error("Error creating team board:", error);
+      res.status(500).json({ error: "Failed to create team board" });
+    }
+  });
+
+  app.patch("/api/team-boards/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const id = parseInt(req.params.id);
+      
+      const canEdit = await storage.canEditBoard(id, user.id);
+      if (!canEdit) {
+        return res.status(403).json({ error: "You don't have permission to edit this board" });
+      }
+      
+      const board = await storage.updateTeamBoard(id, req.body);
+      if (!board) {
+        return res.status(404).json({ error: "Board not found" });
+      }
+      res.json(board);
+    } catch (error) {
+      console.error("Error updating team board:", error);
+      res.status(500).json({ error: "Failed to update team board" });
+    }
+  });
+
+  app.delete("/api/team-boards/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const id = parseInt(req.params.id);
+      
+      const board = await storage.getTeamBoard(id);
+      if (!board) {
+        return res.status(404).json({ error: "Board not found" });
+      }
+      if (board.ownerId !== user.id && user.role !== "admin") {
+        return res.status(403).json({ error: "Only the board owner can delete this board" });
+      }
+      
+      await storage.deleteTeamBoard(id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting team board:", error);
+      res.status(500).json({ error: "Failed to delete team board" });
+    }
+  });
+
+  app.post("/api/team-boards/:id/archive", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const id = parseInt(req.params.id);
+      const { isArchived } = req.body;
+      
+      const canEdit = await storage.canEditBoard(id, user.id);
+      if (!canEdit) {
+        return res.status(403).json({ error: "You don't have permission to archive this board" });
+      }
+      
+      const board = await storage.archiveTeamBoard(id, isArchived);
+      res.json(board);
+    } catch (error) {
+      console.error("Error archiving team board:", error);
+      res.status(500).json({ error: "Failed to archive team board" });
+    }
+  });
+
+  // Board memberships routes
+  app.get("/api/team-boards/:id/members", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const id = parseInt(req.params.id);
+      
+      const canAccess = await storage.canAccessBoard(id, user.id, user.role);
+      if (!canAccess) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      
+      const members = await storage.getBoardMemberships(id);
+      res.json(members);
+    } catch (error) {
+      console.error("Error fetching board members:", error);
+      res.status(500).json({ error: "Failed to fetch board members" });
+    }
+  });
+
+  app.post("/api/team-boards/:id/members", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const boardId = parseInt(req.params.id);
+      
+      const canEdit = await storage.canEditBoard(boardId, user.id);
+      if (!canEdit) {
+        return res.status(403).json({ error: "You don't have permission to add members" });
+      }
+      
+      const membership = await storage.addBoardMember({
+        boardId,
+        ...req.body,
+      });
+      res.status(201).json(membership);
+    } catch (error) {
+      console.error("Error adding board member:", error);
+      res.status(500).json({ error: "Failed to add board member" });
+    }
+  });
+
+  app.patch("/api/team-boards/:id/members/:userId", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const boardId = parseInt(req.params.id);
+      const memberId = req.params.userId;
+      
+      const canEdit = await storage.canEditBoard(boardId, user.id);
+      if (!canEdit) {
+        return res.status(403).json({ error: "You don't have permission to update members" });
+      }
+      
+      const membership = await storage.updateBoardMemberPermission(boardId, memberId, req.body.canEdit);
+      res.json(membership);
+    } catch (error) {
+      console.error("Error updating board member:", error);
+      res.status(500).json({ error: "Failed to update board member" });
+    }
+  });
+
+  app.delete("/api/team-boards/:id/members/:userId", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const boardId = parseInt(req.params.id);
+      const memberId = req.params.userId;
+      
+      const canEdit = await storage.canEditBoard(boardId, user.id);
+      if (!canEdit) {
+        return res.status(403).json({ error: "You don't have permission to remove members" });
+      }
+      
+      await storage.removeBoardMember(boardId, memberId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error removing board member:", error);
+      res.status(500).json({ error: "Failed to remove board member" });
+    }
+  });
+
+  // Team Tasks routes
+  app.get("/api/team-boards/:boardId/tasks", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const boardId = parseInt(req.params.boardId);
+      
+      const canAccess = await storage.canAccessBoard(boardId, user.id, user.role);
+      if (!canAccess) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      
+      const tasks = await storage.getTeamTasks(boardId);
+      res.json(tasks);
+    } catch (error) {
+      console.error("Error fetching team tasks:", error);
+      res.status(500).json({ error: "Failed to fetch team tasks" });
+    }
+  });
+
+  app.get("/api/team-tasks/my-tasks", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const tasks = await storage.getTeamTasksByAssignee(user.id);
+      res.json(tasks);
+    } catch (error) {
+      console.error("Error fetching assigned tasks:", error);
+      res.status(500).json({ error: "Failed to fetch assigned tasks" });
+    }
+  });
+
+  app.get("/api/team-tasks/calendar", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const { start, end, userId } = req.query;
+      
+      const startDate = start ? new Date(start as string) : new Date();
+      const endDate = end ? new Date(end as string) : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+      
+      const tasks = await storage.getTeamTasksByDueDate(startDate, endDate, userId as string | undefined);
+      res.json(tasks);
+    } catch (error) {
+      console.error("Error fetching calendar tasks:", error);
+      res.status(500).json({ error: "Failed to fetch calendar tasks" });
+    }
+  });
+
+  app.get("/api/team-tasks/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const id = parseInt(req.params.id);
+      
+      const task = await storage.getTeamTask(id);
+      if (!task) {
+        return res.status(404).json({ error: "Task not found" });
+      }
+      
+      const canAccess = await storage.canAccessBoard(task.boardId, user.id, user.role);
+      if (!canAccess) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      
+      res.json(task);
+    } catch (error) {
+      console.error("Error fetching team task:", error);
+      res.status(500).json({ error: "Failed to fetch team task" });
+    }
+  });
+
+  app.post("/api/team-boards/:boardId/tasks", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const boardId = parseInt(req.params.boardId);
+      
+      const canEdit = await storage.canEditBoard(boardId, user.id);
+      const canAccess = await storage.canAccessBoard(boardId, user.id, user.role);
+      
+      if (!canAccess && !canEdit) {
+        return res.status(403).json({ error: "You don't have permission to add tasks to this board" });
+      }
+      
+      const task = await storage.createTeamTask({
+        ...req.body,
+        boardId,
+        createdBy: user.id,
+      });
+      
+      if (req.body.assigneeId && req.body.assigneeId !== user.id) {
+        await storage.createNotification({
+          userId: req.body.assigneeId,
+          type: "task_assigned",
+          title: "New task assigned",
+          message: `You've been assigned to: ${req.body.title}`,
+          relatedType: "team_task",
+          relatedId: task.id,
+        });
+      }
+      
+      res.status(201).json(task);
+    } catch (error) {
+      console.error("Error creating team task:", error);
+      res.status(500).json({ error: "Failed to create team task" });
+    }
+  });
+
+  app.patch("/api/team-tasks/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const id = parseInt(req.params.id);
+      
+      const task = await storage.getTeamTask(id);
+      if (!task) {
+        return res.status(404).json({ error: "Task not found" });
+      }
+      
+      const canEdit = await storage.canEditBoard(task.boardId, user.id);
+      const isCreator = task.createdBy === user.id;
+      const isAssignee = task.assigneeId === user.id;
+      
+      if (!canEdit && !isCreator && !isAssignee) {
+        return res.status(403).json({ error: "You don't have permission to edit this task" });
+      }
+      
+      const oldAssignee = task.assigneeId;
+      const updated = await storage.updateTeamTask(id, req.body, user.id);
+      
+      if (req.body.assigneeId && req.body.assigneeId !== oldAssignee && req.body.assigneeId !== user.id) {
+        await storage.createNotification({
+          userId: req.body.assigneeId,
+          type: "task_assigned",
+          title: "Task assigned to you",
+          message: `You've been assigned to: ${task.title}`,
+          relatedType: "team_task",
+          relatedId: id,
+        });
+      }
+      
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating team task:", error);
+      res.status(500).json({ error: "Failed to update team task" });
+    }
+  });
+
+  app.delete("/api/team-tasks/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const id = parseInt(req.params.id);
+      
+      const task = await storage.getTeamTask(id);
+      if (!task) {
+        return res.status(404).json({ error: "Task not found" });
+      }
+      
+      const canEdit = await storage.canEditBoard(task.boardId, user.id);
+      const isCreator = task.createdBy === user.id;
+      
+      if (!canEdit && !isCreator && user.role !== "admin") {
+        return res.status(403).json({ error: "You don't have permission to delete this task" });
+      }
+      
+      await storage.deleteTeamTask(id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting team task:", error);
+      res.status(500).json({ error: "Failed to delete team task" });
+    }
+  });
+
+  app.post("/api/team-boards/:boardId/tasks/reorder", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const boardId = parseInt(req.params.boardId);
+      const { taskIds } = req.body;
+      
+      const canAccess = await storage.canAccessBoard(boardId, user.id, user.role);
+      if (!canAccess) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      
+      await storage.reorderTeamTasks(boardId, taskIds);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error reordering tasks:", error);
+      res.status(500).json({ error: "Failed to reorder tasks" });
+    }
+  });
+
+  app.patch("/api/team-tasks/:id/subtasks", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const id = parseInt(req.params.id);
+      
+      const task = await storage.getTeamTask(id);
+      if (!task) {
+        return res.status(404).json({ error: "Task not found" });
+      }
+      
+      const canAccess = await storage.canAccessBoard(task.boardId, user.id, user.role);
+      if (!canAccess) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      
+      const updated = await storage.updateTeamTaskSubtasks(id, req.body.subtasks);
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating subtasks:", error);
+      res.status(500).json({ error: "Failed to update subtasks" });
+    }
+  });
+
+  // Team Task Comments routes
+  app.get("/api/team-tasks/:taskId/comments", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const taskId = parseInt(req.params.taskId);
+      
+      const task = await storage.getTeamTask(taskId);
+      if (!task) {
+        return res.status(404).json({ error: "Task not found" });
+      }
+      
+      const canAccess = await storage.canAccessBoard(task.boardId, user.id, user.role);
+      if (!canAccess) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      
+      const comments = await storage.getTeamTaskComments(taskId);
+      res.json(comments);
+    } catch (error) {
+      console.error("Error fetching task comments:", error);
+      res.status(500).json({ error: "Failed to fetch task comments" });
+    }
+  });
+
+  app.post("/api/team-tasks/:taskId/comments", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const taskId = parseInt(req.params.taskId);
+      
+      const task = await storage.getTeamTask(taskId);
+      if (!task) {
+        return res.status(404).json({ error: "Task not found" });
+      }
+      
+      const canAccess = await storage.canAccessBoard(task.boardId, user.id, user.role);
+      if (!canAccess) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      
+      const comment = await storage.createTeamTaskComment({
+        taskId,
+        userId: user.id,
+        content: req.body.content,
+      });
+      
+      const notifyUsers = new Set<string>();
+      if (task.createdBy !== user.id) notifyUsers.add(task.createdBy);
+      if (task.assigneeId && task.assigneeId !== user.id) notifyUsers.add(task.assigneeId);
+      
+      for (const userId of notifyUsers) {
+        await storage.createNotification({
+          userId,
+          type: "comment_added",
+          title: "New comment on task",
+          message: `${user.firstName || user.email} commented on: ${task.title}`,
+          relatedType: "team_task",
+          relatedId: taskId,
+        });
+      }
+      
+      res.status(201).json(comment);
+    } catch (error) {
+      console.error("Error creating task comment:", error);
+      res.status(500).json({ error: "Failed to create task comment" });
+    }
+  });
+
+  app.delete("/api/team-tasks/comments/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      await storage.deleteTeamTaskComment(id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting comment:", error);
+      res.status(500).json({ error: "Failed to delete comment" });
+    }
+  });
+
+  // Team Task Activity routes
+  app.get("/api/team-tasks/:taskId/activity", isAuthenticated, async (req: any, res) => {
+    try {
+      const user = req.user as User;
+      const taskId = parseInt(req.params.taskId);
+      const limit = req.query.limit ? parseInt(req.query.limit as string) : undefined;
+      
+      const task = await storage.getTeamTask(taskId);
+      if (!task) {
+        return res.status(404).json({ error: "Task not found" });
+      }
+      
+      const canAccess = await storage.canAccessBoard(task.boardId, user.id, user.role);
+      if (!canAccess) {
+        return res.status(403).json({ error: "Access denied" });
+      }
+      
+      const activity = await storage.getTeamTaskActivity(taskId, limit);
+      res.json(activity);
+    } catch (error) {
+      console.error("Error fetching task activity:", error);
+      res.status(500).json({ error: "Failed to fetch task activity" });
+    }
+  });
+
+  // Migration route (admin only)
+  app.post("/api/team-boards/migrate/:userId", requireRole("admin"), async (req: any, res) => {
+    try {
+      const userId = req.params.userId;
+      await storage.migrateExistingTasksToPersonalBoard(userId);
+      res.json({ success: true, message: "Migration completed" });
+    } catch (error) {
+      console.error("Error migrating tasks:", error);
+      res.status(500).json({ error: "Failed to migrate tasks" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

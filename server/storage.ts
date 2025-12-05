@@ -143,6 +143,13 @@ import {
   type DaoIpContribution, type InsertDaoIpContribution, daoIpContributions,
   type DaoRoleAssignmentHistory, type InsertDaoRoleAssignmentHistory, daoRoleAssignmentHistory,
   type MediaConversion, type InsertMediaConversion, mediaConversions,
+  // Team Boards & Enhanced Tasks
+  type TeamBoard, type InsertTeamBoard, teamBoards,
+  type BoardMembership, type InsertBoardMembership, boardMemberships,
+  type TeamTask, type InsertTeamTask, teamTasks,
+  type TeamTaskComment, type InsertTeamTaskComment, teamTaskComments,
+  type TeamTaskActivity, type InsertTeamTaskActivity, teamTaskActivity,
+  type BoardVisibility, type TeamTaskActivityType,
 } from "@shared/schema";
 import { db } from "./db";
 import { desc, eq, and, sql, or, isNull } from "drizzle-orm";
@@ -710,6 +717,51 @@ export interface IStorage {
   incrementAssetUsage(id: number): Promise<LibraryAsset | undefined>;
   toggleAssetFavorite(id: number): Promise<LibraryAsset | undefined>;
   getAssetStats(): Promise<{ totalAssets: number; byCategory: Record<string, number>; totalSize: number; recentlyAdded: number }>;
+
+  // ==================== TEAM BOARDS & ENHANCED TASKS ====================
+  
+  // Team Boards methods
+  getTeamBoards(userId: string, userRole: string): Promise<TeamBoard[]>;
+  getTeamBoard(id: number): Promise<TeamBoard | undefined>;
+  createTeamBoard(board: InsertTeamBoard): Promise<TeamBoard>;
+  updateTeamBoard(id: number, updates: Partial<InsertTeamBoard>): Promise<TeamBoard | undefined>;
+  deleteTeamBoard(id: number): Promise<boolean>;
+  archiveTeamBoard(id: number, isArchived: boolean): Promise<TeamBoard | undefined>;
+  
+  // Board Memberships methods
+  getBoardMemberships(boardId: number): Promise<BoardMembership[]>;
+  getBoardMembership(boardId: number, userId: string): Promise<BoardMembership | undefined>;
+  addBoardMember(membership: InsertBoardMembership): Promise<BoardMembership>;
+  updateBoardMemberPermission(boardId: number, userId: string, canEdit: boolean): Promise<BoardMembership | undefined>;
+  removeBoardMember(boardId: number, userId: string): Promise<boolean>;
+  canAccessBoard(boardId: number, userId: string, userRole: string): Promise<boolean>;
+  canEditBoard(boardId: number, userId: string): Promise<boolean>;
+  
+  // Team Tasks methods
+  getTeamTasks(boardId: number): Promise<TeamTask[]>;
+  getTeamTask(id: number): Promise<TeamTask | undefined>;
+  getTeamTasksByAssignee(userId: string): Promise<TeamTask[]>;
+  getTeamTasksByDueDate(startDate: Date, endDate: Date, userId?: string): Promise<TeamTask[]>;
+  createTeamTask(task: InsertTeamTask): Promise<TeamTask>;
+  updateTeamTask(id: number, updates: Partial<InsertTeamTask>, userId?: string): Promise<TeamTask | undefined>;
+  deleteTeamTask(id: number): Promise<boolean>;
+  archiveTeamTask(id: number, isArchived: boolean): Promise<TeamTask | undefined>;
+  reorderTeamTasks(boardId: number, taskIds: number[]): Promise<void>;
+  updateTeamTaskSubtasks(id: number, subtasks: { id: string; title: string; completed: boolean }[]): Promise<TeamTask | undefined>;
+  
+  // Team Task Comments methods
+  getTeamTaskComments(taskId: number): Promise<TeamTaskComment[]>;
+  createTeamTaskComment(comment: InsertTeamTaskComment): Promise<TeamTaskComment>;
+  updateTeamTaskComment(id: number, content: string): Promise<TeamTaskComment | undefined>;
+  deleteTeamTaskComment(id: number): Promise<boolean>;
+  
+  // Team Task Activity methods
+  getTeamTaskActivity(taskId: number, limit?: number): Promise<TeamTaskActivity[]>;
+  createTeamTaskActivity(activity: InsertTeamTaskActivity): Promise<TeamTaskActivity>;
+  
+  // Migration helpers
+  migrateExistingTasksToPersonalBoard(userId: string): Promise<void>;
+  getOrCreatePersonalBoard(userId: string): Promise<TeamBoard>;
 
   // ==================== DAO MANAGEMENT SYSTEM ====================
 
@@ -5889,6 +5941,364 @@ export class DbStorage implements IStorage {
   async deleteMediaConversion(id: number): Promise<boolean> {
     const result = await db.delete(mediaConversions).where(eq(mediaConversions.id, id));
     return true;
+  }
+
+  // ==================== TEAM BOARDS & ENHANCED TASKS IMPLEMENTATIONS ====================
+
+  // Team Boards methods
+  async getTeamBoards(userId: string, userRole: string): Promise<TeamBoard[]> {
+    // Get boards based on:
+    // 1. Owned by user (private boards)
+    // 2. User is a member of (shared with user)
+    // 3. Visibility matches user role (web3, content)
+    // 4. Admin can see all_team boards
+    const allBoards = await db.select().from(teamBoards)
+      .where(eq(teamBoards.isArchived, false))
+      .orderBy(desc(teamBoards.createdAt));
+    
+    // Filter based on access
+    const accessibleBoards = await Promise.all(
+      allBoards.map(async (board) => {
+        const canAccess = await this.canAccessBoard(board.id, userId, userRole);
+        return canAccess ? board : null;
+      })
+    );
+    
+    return accessibleBoards.filter((b): b is TeamBoard => b !== null);
+  }
+
+  async getTeamBoard(id: number): Promise<TeamBoard | undefined> {
+    const [board] = await db.select().from(teamBoards)
+      .where(eq(teamBoards.id, id));
+    return board;
+  }
+
+  async createTeamBoard(board: InsertTeamBoard): Promise<TeamBoard> {
+    const [created] = await db.insert(teamBoards).values(board).returning();
+    return created;
+  }
+
+  async updateTeamBoard(id: number, updates: Partial<InsertTeamBoard>): Promise<TeamBoard | undefined> {
+    const [updated] = await db.update(teamBoards)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(teamBoards.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteTeamBoard(id: number): Promise<boolean> {
+    await db.delete(teamBoards).where(eq(teamBoards.id, id));
+    return true;
+  }
+
+  async archiveTeamBoard(id: number, isArchived: boolean): Promise<TeamBoard | undefined> {
+    return this.updateTeamBoard(id, { isArchived });
+  }
+
+  // Board Memberships methods
+  async getBoardMemberships(boardId: number): Promise<BoardMembership[]> {
+    return db.select().from(boardMemberships)
+      .where(eq(boardMemberships.boardId, boardId))
+      .orderBy(desc(boardMemberships.createdAt));
+  }
+
+  async getBoardMembership(boardId: number, userId: string): Promise<BoardMembership | undefined> {
+    const [membership] = await db.select().from(boardMemberships)
+      .where(and(
+        eq(boardMemberships.boardId, boardId),
+        eq(boardMemberships.userId, userId)
+      ));
+    return membership;
+  }
+
+  async addBoardMember(membership: InsertBoardMembership): Promise<BoardMembership> {
+    const [created] = await db.insert(boardMemberships).values(membership).returning();
+    return created;
+  }
+
+  async updateBoardMemberPermission(boardId: number, userId: string, canEdit: boolean): Promise<BoardMembership | undefined> {
+    const [updated] = await db.update(boardMemberships)
+      .set({ canEdit })
+      .where(and(
+        eq(boardMemberships.boardId, boardId),
+        eq(boardMemberships.userId, userId)
+      ))
+      .returning();
+    return updated;
+  }
+
+  async removeBoardMember(boardId: number, userId: string): Promise<boolean> {
+    await db.delete(boardMemberships)
+      .where(and(
+        eq(boardMemberships.boardId, boardId),
+        eq(boardMemberships.userId, userId)
+      ));
+    return true;
+  }
+
+  async canAccessBoard(boardId: number, userId: string, userRole: string): Promise<boolean> {
+    const board = await this.getTeamBoard(boardId);
+    if (!board) return false;
+    
+    // Owner always has access
+    if (board.ownerId === userId) return true;
+    
+    // Check direct membership
+    const membership = await this.getBoardMembership(boardId, userId);
+    if (membership) return true;
+    
+    // Check visibility rules
+    switch (board.visibility) {
+      case "private":
+        return false;
+      case "web3":
+        return userRole === "web3" || userRole === "admin";
+      case "content":
+        return userRole === "content" || userRole === "admin";
+      case "all_team":
+        return userRole === "admin" || userRole === "web3" || userRole === "content";
+      default:
+        return false;
+    }
+  }
+
+  async canEditBoard(boardId: number, userId: string): Promise<boolean> {
+    const board = await this.getTeamBoard(boardId);
+    if (!board) return false;
+    
+    // Owner can always edit
+    if (board.ownerId === userId) return true;
+    
+    // Check membership with edit permission
+    const membership = await this.getBoardMembership(boardId, userId);
+    return membership?.canEdit === true;
+  }
+
+  // Team Tasks methods
+  async getTeamTasks(boardId: number): Promise<TeamTask[]> {
+    return db.select().from(teamTasks)
+      .where(and(
+        eq(teamTasks.boardId, boardId),
+        eq(teamTasks.isArchived, false)
+      ))
+      .orderBy(teamTasks.orderIndex, desc(teamTasks.createdAt));
+  }
+
+  async getTeamTask(id: number): Promise<TeamTask | undefined> {
+    const [task] = await db.select().from(teamTasks)
+      .where(eq(teamTasks.id, id));
+    return task;
+  }
+
+  async getTeamTasksByAssignee(userId: string): Promise<TeamTask[]> {
+    return db.select().from(teamTasks)
+      .where(and(
+        eq(teamTasks.assigneeId, userId),
+        eq(teamTasks.isArchived, false)
+      ))
+      .orderBy(desc(teamTasks.dueDate));
+  }
+
+  async getTeamTasksByDueDate(startDate: Date, endDate: Date, userId?: string): Promise<TeamTask[]> {
+    const conditions = [
+      eq(teamTasks.isArchived, false),
+      sql`${teamTasks.dueDate} >= ${startDate}`,
+      sql`${teamTasks.dueDate} <= ${endDate}`
+    ];
+    
+    if (userId) {
+      conditions.push(eq(teamTasks.assigneeId, userId));
+    }
+    
+    return db.select().from(teamTasks)
+      .where(and(...conditions))
+      .orderBy(teamTasks.dueDate);
+  }
+
+  async createTeamTask(task: InsertTeamTask): Promise<TeamTask> {
+    const [created] = await db.insert(teamTasks).values(task).returning();
+    
+    // Log activity
+    await this.createTeamTaskActivity({
+      taskId: created.id,
+      userId: task.createdBy,
+      activityType: "created",
+      newValue: task.title
+    });
+    
+    return created;
+  }
+
+  async updateTeamTask(id: number, updates: Partial<InsertTeamTask>, userId?: string): Promise<TeamTask | undefined> {
+    const existingTask = await this.getTeamTask(id);
+    if (!existingTask) return undefined;
+    
+    const [updated] = await db.update(teamTasks)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(teamTasks.id, id))
+      .returning();
+    
+    // Log activity if userId provided
+    if (userId && updated) {
+      // Log status change
+      if (updates.status && updates.status !== existingTask.status) {
+        await this.createTeamTaskActivity({
+          taskId: id,
+          userId,
+          activityType: "status_changed",
+          oldValue: existingTask.status || undefined,
+          newValue: updates.status
+        });
+      }
+      
+      // Log assignee change
+      if (updates.assigneeId !== undefined && updates.assigneeId !== existingTask.assigneeId) {
+        await this.createTeamTaskActivity({
+          taskId: id,
+          userId,
+          activityType: "assigned",
+          oldValue: existingTask.assigneeId || undefined,
+          newValue: updates.assigneeId || undefined
+        });
+      }
+      
+      // Log priority change
+      if (updates.priority && updates.priority !== existingTask.priority) {
+        await this.createTeamTaskActivity({
+          taskId: id,
+          userId,
+          activityType: "priority_changed",
+          oldValue: existingTask.priority || undefined,
+          newValue: updates.priority
+        });
+      }
+    }
+    
+    return updated;
+  }
+
+  async deleteTeamTask(id: number): Promise<boolean> {
+    await db.delete(teamTasks).where(eq(teamTasks.id, id));
+    return true;
+  }
+
+  async archiveTeamTask(id: number, isArchived: boolean): Promise<TeamTask | undefined> {
+    return this.updateTeamTask(id, { isArchived });
+  }
+
+  async reorderTeamTasks(boardId: number, taskIds: number[]): Promise<void> {
+    // Update order index for each task
+    await Promise.all(
+      taskIds.map((taskId, index) =>
+        db.update(teamTasks)
+          .set({ orderIndex: index })
+          .where(eq(teamTasks.id, taskId))
+      )
+    );
+  }
+
+  async updateTeamTaskSubtasks(id: number, subtasks: { id: string; title: string; completed: boolean }[]): Promise<TeamTask | undefined> {
+    const [updated] = await db.update(teamTasks)
+      .set({ subtasks, updatedAt: new Date() })
+      .where(eq(teamTasks.id, id))
+      .returning();
+    return updated;
+  }
+
+  // Team Task Comments methods
+  async getTeamTaskComments(taskId: number): Promise<TeamTaskComment[]> {
+    return db.select().from(teamTaskComments)
+      .where(eq(teamTaskComments.taskId, taskId))
+      .orderBy(desc(teamTaskComments.createdAt));
+  }
+
+  async createTeamTaskComment(comment: InsertTeamTaskComment): Promise<TeamTaskComment> {
+    const [created] = await db.insert(teamTaskComments).values(comment).returning();
+    
+    // Log activity
+    await this.createTeamTaskActivity({
+      taskId: comment.taskId,
+      userId: comment.userId,
+      activityType: "commented",
+      newValue: comment.content.substring(0, 100) // Truncate for activity log
+    });
+    
+    return created;
+  }
+
+  async updateTeamTaskComment(id: number, content: string): Promise<TeamTaskComment | undefined> {
+    const [updated] = await db.update(teamTaskComments)
+      .set({ content, updatedAt: new Date() })
+      .where(eq(teamTaskComments.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteTeamTaskComment(id: number): Promise<boolean> {
+    await db.delete(teamTaskComments).where(eq(teamTaskComments.id, id));
+    return true;
+  }
+
+  // Team Task Activity methods
+  async getTeamTaskActivity(taskId: number, limit?: number): Promise<TeamTaskActivity[]> {
+    const query = db.select().from(teamTaskActivity)
+      .where(eq(teamTaskActivity.taskId, taskId))
+      .orderBy(desc(teamTaskActivity.createdAt));
+    
+    if (limit) {
+      return query.limit(limit);
+    }
+    return query;
+  }
+
+  async createTeamTaskActivity(activity: InsertTeamTaskActivity): Promise<TeamTaskActivity> {
+    const [created] = await db.insert(teamTaskActivity).values(activity).returning();
+    return created;
+  }
+
+  // Migration helpers
+  async migrateExistingTasksToPersonalBoard(userId: string): Promise<void> {
+    // Get or create personal board
+    const personalBoard = await this.getOrCreatePersonalBoard(userId);
+    
+    // Get existing tasks for user
+    const existingTasks = await this.getUserTasks(userId);
+    
+    // Create team tasks from existing tasks
+    for (const task of existingTasks) {
+      await this.createTeamTask({
+        boardId: personalBoard.id,
+        title: task.title,
+        status: task.status === "completed" ? "done" : "todo",
+        createdBy: userId,
+        dueDate: task.dueDate ? new Date(task.dueDate) : undefined,
+        tags: task.projectTag ? [task.projectTag] : undefined,
+        subtasks: []
+      });
+    }
+  }
+
+  async getOrCreatePersonalBoard(userId: string): Promise<TeamBoard> {
+    // Check if user already has a personal board
+    const existingBoards = await db.select().from(teamBoards)
+      .where(and(
+        eq(teamBoards.ownerId, userId),
+        eq(teamBoards.name, "Personal"),
+        eq(teamBoards.isArchived, false)
+      ));
+    
+    if (existingBoards.length > 0) {
+      return existingBoards[0];
+    }
+    
+    // Create personal board
+    return this.createTeamBoard({
+      name: "Personal",
+      description: "Your personal task board",
+      ownerId: userId,
+      visibility: "private",
+      icon: "user"
+    });
   }
 }
 

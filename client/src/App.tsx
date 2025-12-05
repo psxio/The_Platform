@@ -46,6 +46,7 @@ import OnchainOps from "@/pages/onchain-ops";
 import DuplicateChecker from "@/pages/duplicate-checker";
 import WalletScreener from "@/pages/wallet-screener";
 import MediaConverter from "@/pages/media-converter";
+import TeamTasks from "@/pages/team-tasks";
 import NotFound from "@/pages/not-found";
 import { Web3WelcomeModal } from "@/components/web3-welcome-modal";
 import { WelcomeModal } from "@/components/welcome-modal";
@@ -205,6 +206,11 @@ function AuthenticatedRouter() {
       {/* Help - accessible to all authenticated users */}
       <Route path="/help">
         <HelpPage />
+      </Route>
+      
+      {/* Team Tasks - accessible to all authenticated users */}
+      <Route path="/team-tasks">
+        <TeamTasks />
       </Route>
 
       {/* Client Directory - accessible to all team members */}

@@ -39,6 +39,7 @@ function getApiKit(chainId: number): SafeApiKit {
   }
   return new SafeApiKit({
     chainId: BigInt(chainId),
+    txServiceUrl: txServiceUrl,
   });
 }
 

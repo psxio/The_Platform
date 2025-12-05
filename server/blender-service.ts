@@ -96,19 +96,43 @@ export async function generateBlenderCode(prompt: string): Promise<string> {
 }
 
 function getExportCode(format: ModelExportFormat, outputPath: string): string {
-  const escapedPath = outputPath.replace(/\\/g, "\\\\");
+  const escapedPath = outputPath.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
   
   switch (format) {
     case "glb":
-      return `bpy.ops.export_scene.gltf(filepath="${escapedPath}", export_format="GLB")`;
+      return `
+# Ensure glTF exporter is enabled
+import addon_utils
+addon_utils.enable("io_scene_gltf2", default_set=True)
+
+# Select all mesh objects for export
+bpy.ops.object.select_all(action='DESELECT')
+for obj in bpy.data.objects:
+    if obj.type == 'MESH':
+        obj.select_set(True)
+        bpy.context.view_layer.objects.active = obj
+
+# Export as GLB
+bpy.ops.export_scene.gltf(
+    filepath="${escapedPath}",
+    export_format="GLB",
+    use_selection=False,
+    export_apply=True
+)`;
     case "fbx":
-      return `bpy.ops.export_scene.fbx(filepath="${escapedPath}")`;
+      return `bpy.ops.export_scene.fbx(filepath="${escapedPath}", use_selection=False)`;
     case "blend":
       return `bpy.ops.wm.save_as_mainfile(filepath="${escapedPath}")`;
     case "obj":
       return `bpy.ops.wm.obj_export(filepath="${escapedPath}")`;
     case "stl":
-      return `bpy.ops.export_mesh.stl(filepath="${escapedPath}")`;
+      return `
+# Select all mesh objects for STL export
+bpy.ops.object.select_all(action='DESELECT')
+for obj in bpy.data.objects:
+    if obj.type == 'MESH':
+        obj.select_set(True)
+bpy.ops.export_mesh.stl(filepath="${escapedPath}", use_selection=True)`;
     default:
       return `bpy.ops.export_scene.gltf(filepath="${escapedPath}", export_format="GLB")`;
   }
@@ -125,11 +149,13 @@ export async function executeBlenderJob(
   onStatusUpdate: (status: ModelGenerationStatus, data?: Partial<BlenderJobResult>) => void
 ): Promise<BlenderJobResult> {
   const startTime = Date.now();
+  let generatedCode = "";
+  let scriptPath = "";
   
   try {
     onStatusUpdate("generating_code");
     
-    const generatedCode = await generateBlenderCode(prompt);
+    generatedCode = await generateBlenderCode(prompt);
     
     onStatusUpdate("running_blender", { generatedCode });
     
@@ -137,34 +163,86 @@ export async function executeBlenderJob(
     const safePrompt = prompt.slice(0, 30).replace(/[^a-zA-Z0-9]/g, "_").toLowerCase();
     const outputFileName = `model_${safePrompt}_${timestamp}${getFileExtension(exportFormat)}`;
     const outputFilePath = path.join(MODELS_DIR, outputFileName);
-    const scriptPath = path.join(SCRIPTS_DIR, `script_${jobId}_${timestamp}.py`);
+    scriptPath = path.join(SCRIPTS_DIR, `script_${jobId}_${timestamp}.py`);
     
-    const fullScript = `${generatedCode}
+    const fullScript = `import bpy
+import sys
+import traceback
 
-# Export the model
-${getExportCode(exportFormat, outputFilePath)}
-print("BLENDER_SUCCESS: Model exported successfully")
+try:
+${generatedCode.split('\n').map(line => '    ' + line).join('\n')}
+
+    # Export the model
+${getExportCode(exportFormat, outputFilePath).split('\n').map(line => '    ' + line).join('\n')}
+    
+    print("BLENDER_SUCCESS: Model exported successfully to ${outputFilePath}")
+except Exception as e:
+    print(f"BLENDER_ERROR: {str(e)}")
+    traceback.print_exc()
+    sys.exit(1)
 `;
 
     fs.writeFileSync(scriptPath, fullScript);
+    console.log(`[Blender] Script written to ${scriptPath}`);
+    console.log(`[Blender] Output will be saved to ${outputFilePath}`);
     
     onStatusUpdate("exporting");
     
-    const { stdout, stderr } = await execAsync(
-      `blender -b --python "${scriptPath}" 2>&1`,
-      { timeout: 120000 }
-    );
+    let stdout = "";
+    let stderr = "";
     
-    const blenderLogs = stdout + (stderr ? `\nSTDERR:\n${stderr}` : "");
+    try {
+      const result = await execAsync(
+        `blender -b -noaudio --python "${scriptPath}" 2>&1`,
+        { 
+          timeout: 180000,
+          maxBuffer: 10 * 1024 * 1024,
+          env: { ...process.env, BLENDER_USER_SCRIPTS: "" }
+        }
+      );
+      stdout = result.stdout || "";
+      stderr = result.stderr || "";
+    } catch (execError: any) {
+      stdout = execError.stdout || "";
+      stderr = execError.stderr || "";
+      console.error("[Blender] Execution error:", execError.message);
+    }
     
-    fs.unlinkSync(scriptPath);
+    const blenderLogs = stdout + (stderr ? `\n--- STDERR ---\n${stderr}` : "");
+    console.log(`[Blender] Logs preview: ${blenderLogs.slice(0, 500)}...`);
+    
+    if (fs.existsSync(scriptPath)) {
+      fs.unlinkSync(scriptPath);
+    }
     
     if (!fs.existsSync(outputFilePath)) {
-      throw new Error("Blender did not produce output file. Check the generated code for errors.");
+      const errorMatch = blenderLogs.match(/BLENDER_ERROR: (.+)/);
+      const pythonError = blenderLogs.match(/Error: (.+)/);
+      const tracebackMatch = blenderLogs.match(/Traceback[\s\S]*?(?=\n\n|$)/);
+      
+      let errorMessage = "Blender did not produce output file.";
+      if (errorMatch) {
+        errorMessage += ` Error: ${errorMatch[1]}`;
+      } else if (pythonError) {
+        errorMessage += ` Error: ${pythonError[1]}`;
+      }
+      if (tracebackMatch) {
+        errorMessage += ` Details: ${tracebackMatch[0].slice(0, 200)}`;
+      }
+      
+      return {
+        status: "failed",
+        generatedCode,
+        errorMessage,
+        blenderLogs,
+        processingTimeMs: Date.now() - startTime,
+      };
     }
     
     const stats = fs.statSync(outputFilePath);
     const processingTimeMs = Date.now() - startTime;
+    
+    console.log(`[Blender] Success! File size: ${stats.size} bytes, Time: ${processingTimeMs}ms`);
     
     return {
       status: "completed",
@@ -176,11 +254,20 @@ print("BLENDER_SUCCESS: Model exported successfully")
       processingTimeMs,
     };
   } catch (error: any) {
+    console.error("[Blender] Job failed:", error);
+    
+    if (scriptPath && fs.existsSync(scriptPath)) {
+      try {
+        fs.unlinkSync(scriptPath);
+      } catch {}
+    }
+    
     const processingTimeMs = Date.now() - startTime;
     return {
       status: "failed",
+      generatedCode: generatedCode || undefined,
       errorMessage: error.message || "Unknown error occurred",
-      blenderLogs: error.stderr || error.stdout,
+      blenderLogs: error.stderr || error.stdout || undefined,
       processingTimeMs,
     };
   }
@@ -192,4 +279,14 @@ export function getModelFilePath(fileName: string): string {
 
 export function modelFileExists(fileName: string): boolean {
   return fs.existsSync(path.join(MODELS_DIR, fileName));
+}
+
+export async function testBlenderHealth(): Promise<{ ok: boolean; version?: string; error?: string }> {
+  try {
+    const { stdout } = await execAsync("blender -b -noaudio --version", { timeout: 10000 });
+    const versionMatch = stdout.match(/Blender (\d+\.\d+\.\d+)/);
+    return { ok: true, version: versionMatch ? versionMatch[1] : "unknown" };
+  } catch (error: any) {
+    return { ok: false, error: error.message };
+  }
 }

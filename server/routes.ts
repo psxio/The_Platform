@@ -13231,6 +13231,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // 3D Model Generation API (Admin Only)
   // ========================================
   
+  app.get("/api/model-generation/health", requireRole("admin"), async (req, res) => {
+    try {
+      const { testBlenderHealth } = await import("./blender-service");
+      const health = await testBlenderHealth();
+      res.json(health);
+    } catch (error: any) {
+      res.status(500).json({ ok: false, error: error.message });
+    }
+  });
+
   app.get("/api/model-generation/jobs", requireRole("admin"), async (req: any, res) => {
     try {
       const jobs = await storage.getModelGenerationJobs(req.user.id);
@@ -13323,17 +13333,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ error: "Model not ready for download" });
       }
 
-      const { modelFileExists } = await import("./blender-service");
+      const { modelFileExists, getModelFilePath } = await import("./blender-service");
       
       if (!modelFileExists(job.outputFileName!)) {
         return res.status(404).json({ error: "File not found" });
       }
 
-      res.download(job.outputFilePath, job.outputFileName!, (err) => {
-        if (err) {
-          console.error("Download error:", err);
-        }
-      });
+      const fs = await import("fs");
+      const filePath = job.outputFilePath;
+      const format = job.exportFormat || "glb";
+      
+      const mimeTypes: Record<string, string> = {
+        glb: "model/gltf-binary",
+        gltf: "model/gltf+json",
+        fbx: "application/octet-stream",
+        obj: "text/plain",
+        stl: "application/sla",
+        blend: "application/octet-stream",
+      };
+
+      const stats = fs.statSync(filePath);
+      res.setHeader("Content-Type", mimeTypes[format] || "application/octet-stream");
+      res.setHeader("Content-Length", stats.size);
+      res.setHeader("Content-Disposition", `inline; filename="${job.outputFileName}"`);
+      res.setHeader("Cache-Control", "public, max-age=3600");
+      
+      const stream = fs.createReadStream(filePath);
+      stream.pipe(res);
     } catch (error) {
       console.error("Error downloading model:", error);
       res.status(500).json({ error: "Failed to download model" });

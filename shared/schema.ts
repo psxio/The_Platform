@@ -3018,9 +3018,9 @@ export type DaoSafeSigner = typeof daoSafeSigners.$inferSelect;
 
 // ================== CLICKUP-INSPIRED TASK ENHANCEMENTS ==================
 
-// Task Types - different kinds of work items (ClickUp-style)
-export const taskTypes = ["task", "milestone", "bug", "feature", "story", "epic", "doc", "whiteboard"] as const;
-export type TaskType = typeof taskTypes[number];
+// Task Categories - different kinds of work items (ClickUp-style)
+export const taskCategories = ["task", "milestone", "bug", "feature", "story", "epic", "doc", "whiteboard"] as const;
+export type TaskCategory = typeof taskCategories[number];
 
 // Dependency types between tasks
 export const dependencyTypes = ["blocks", "blocked_by", "relates_to", "duplicates", "parent_of", "child_of"] as const;

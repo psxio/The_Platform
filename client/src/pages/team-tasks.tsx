@@ -4,7 +4,7 @@ import {
   Plus, Check, Clock, Circle, Trash2, Loader2, LayoutGrid, List, Calendar as CalendarIcon,
   FolderKanban, Settings, Users, Globe, Lock, User as UserIcon, Flag, ChevronDown,
   GripVertical, MessageSquare, CheckSquare, MoreHorizontal, Search, Filter, X, Edit2,
-  Rocket, Lightbulb, Target, FileText, Eye, EyeOff, Shield
+  Rocket, Lightbulb, Target, FileText, Eye, EyeOff, Shield, Layers, Bookmark, Sparkles
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -110,6 +110,11 @@ export default function TeamTasks() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [priorityFilter, setPriorityFilter] = useState<string>("all");
+  const [projectTagFilter, setProjectTagFilter] = useState<string>("all");
+  const [assigneeFilter, setAssigneeFilter] = useState<string>("all");
+  const [taskTypeFilter, setTaskTypeFilter] = useState<string>("all");
+  const [quickFilter, setQuickFilter] = useState<string>("none");
+  const [swimlaneBy, setSwimlaneBy] = useState<"none" | "project" | "assignee" | "priority">("none");
   
   const { toast } = useToast();
   const { user, isAuthenticated } = useAuth();
@@ -160,14 +165,66 @@ export default function TeamTasks() {
 
   const selectedBoard = boards.find(b => b.id === selectedBoardId);
 
+  // Apply quick filter presets first
+  const applyQuickFilter = (filter: string) => {
+    if (filter === "my-work") {
+      setAssigneeFilter("me");
+      setStatusFilter("all");
+      setTaskTypeFilter("all");
+      setProjectTagFilter("all");
+    } else if (filter === "milestones") {
+      setTaskTypeFilter("milestone");
+      setStatusFilter("all");
+      setAssigneeFilter("all");
+      setProjectTagFilter("all");
+    } else if (filter === "ideas") {
+      setTaskTypeFilter("idea");
+      setStatusFilter("all");
+      setAssigneeFilter("all");
+      setProjectTagFilter("all");
+    } else if (filter === "executables") {
+      setTaskTypeFilter("executable");
+      setStatusFilter("all");
+      setAssigneeFilter("all");
+      setProjectTagFilter("all");
+    } else {
+      // Reset all filters
+      setStatusFilter("all");
+      setPriorityFilter("all");
+      setProjectTagFilter("all");
+      setAssigneeFilter("all");
+      setTaskTypeFilter("all");
+    }
+    setQuickFilter(filter);
+  };
+
   // Filter tasks
   const filteredTasks = tasks.filter(task => {
     const matchesSearch = task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           task.description?.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesStatus = statusFilter === "all" || task.status === statusFilter;
     const matchesPriority = priorityFilter === "all" || task.priority === priorityFilter;
-    return matchesSearch && matchesStatus && matchesPriority;
+    const matchesProjectTag = projectTagFilter === "all" || (task as any).projectTag === projectTagFilter;
+    const matchesTaskType = taskTypeFilter === "all" || (task as any).taskType === taskTypeFilter;
+    const matchesAssignee = assigneeFilter === "all" || 
+                           (assigneeFilter === "me" && task.assigneeId === user?.id) ||
+                           task.assigneeId === assigneeFilter;
+    return matchesSearch && matchesStatus && matchesPriority && matchesProjectTag && matchesTaskType && matchesAssignee;
   });
+
+  // Clear all filters
+  const clearFilters = () => {
+    setSearchQuery("");
+    setStatusFilter("all");
+    setPriorityFilter("all");
+    setProjectTagFilter("all");
+    setAssigneeFilter("all");
+    setTaskTypeFilter("all");
+    setQuickFilter("none");
+  };
+
+  const hasActiveFilters = searchQuery || statusFilter !== "all" || priorityFilter !== "all" || 
+                           projectTagFilter !== "all" || assigneeFilter !== "all" || taskTypeFilter !== "all";
 
   // Create board mutation
   const createBoardMutation = useMutation({
@@ -331,10 +388,71 @@ export default function TeamTasks() {
             </div>
           </div>
 
+          {/* Quick Filters Row */}
+          <div className="flex items-center gap-2 mb-3 flex-wrap">
+            <span className="text-xs text-muted-foreground font-medium">Quick:</span>
+            <Button 
+              variant={quickFilter === "my-work" ? "default" : "outline"} 
+              size="sm" 
+              className="h-7 text-xs"
+              onClick={() => applyQuickFilter(quickFilter === "my-work" ? "none" : "my-work")}
+              data-testid="quick-filter-my-work"
+            >
+              <UserIcon className="w-3 h-3 mr-1" />
+              My Work
+            </Button>
+            <Button 
+              variant={quickFilter === "milestones" ? "default" : "outline"} 
+              size="sm" 
+              className="h-7 text-xs"
+              onClick={() => applyQuickFilter(quickFilter === "milestones" ? "none" : "milestones")}
+              data-testid="quick-filter-milestones"
+            >
+              <Target className="w-3 h-3 mr-1" />
+              Milestones
+            </Button>
+            <Button 
+              variant={quickFilter === "executables" ? "default" : "outline"} 
+              size="sm" 
+              className="h-7 text-xs"
+              onClick={() => applyQuickFilter(quickFilter === "executables" ? "none" : "executables")}
+              data-testid="quick-filter-executables"
+            >
+              <Rocket className="w-3 h-3 mr-1" />
+              Executables
+            </Button>
+            <Button 
+              variant={quickFilter === "ideas" ? "default" : "outline"} 
+              size="sm" 
+              className="h-7 text-xs"
+              onClick={() => applyQuickFilter(quickFilter === "ideas" ? "none" : "ideas")}
+              data-testid="quick-filter-ideas"
+            >
+              <Lightbulb className="w-3 h-3 mr-1" />
+              Ideas
+            </Button>
+            {hasActiveFilters && (
+              <Button 
+                variant="ghost" 
+                size="sm" 
+                className="h-7 text-xs text-muted-foreground"
+                onClick={clearFilters}
+                data-testid="button-clear-filters"
+              >
+                <X className="w-3 h-3 mr-1" />
+                Clear
+              </Button>
+            )}
+            <div className="flex-1" />
+            <Badge variant="secondary" className="text-xs">
+              {filteredTasks.length} of {tasks.length} tasks
+            </Badge>
+          </div>
+
           {/* Filters and View Switcher */}
-          <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-2 flex-1">
-              <div className="relative flex-1 max-w-xs">
+          <div className="flex items-center justify-between gap-4 flex-wrap">
+            <div className="flex items-center gap-2 flex-wrap flex-1">
+              <div className="relative flex-1 max-w-xs min-w-[200px]">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <Input
                   placeholder="Search tasks..."
@@ -344,8 +462,41 @@ export default function TeamTasks() {
                   data-testid="input-search-tasks"
                 />
               </div>
+              
+              <Select value={projectTagFilter} onValueChange={setProjectTagFilter}>
+                <SelectTrigger className="w-[130px]" data-testid="select-project-filter">
+                  <SelectValue placeholder="Project" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Projects</SelectItem>
+                  {PROJECT_TAGS.map(tag => (
+                    <SelectItem key={tag} value={tag}>
+                      <div className="flex items-center gap-2">
+                        <div className={cn("w-2 h-2 rounded-full", PROJECT_TAG_CONFIG[tag]?.bgColor)} />
+                        {tag}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select value={assigneeFilter} onValueChange={setAssigneeFilter}>
+                <SelectTrigger className="w-[130px]" data-testid="select-assignee-filter">
+                  <SelectValue placeholder="Assignee" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Assignees</SelectItem>
+                  <SelectItem value="me">Assigned to Me</SelectItem>
+                  {allUsers.map(u => (
+                    <SelectItem key={u.id} value={u.id}>
+                      {u.firstName || u.email}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
               <Select value={statusFilter} onValueChange={setStatusFilter}>
-                <SelectTrigger className="w-[140px]" data-testid="select-status-filter">
+                <SelectTrigger className="w-[120px]" data-testid="select-status-filter">
                   <SelectValue placeholder="Status" />
                 </SelectTrigger>
                 <SelectContent>
@@ -355,8 +506,9 @@ export default function TeamTasks() {
                   <SelectItem value="done">Done</SelectItem>
                 </SelectContent>
               </Select>
+
               <Select value={priorityFilter} onValueChange={setPriorityFilter}>
-                <SelectTrigger className="w-[140px]" data-testid="select-priority-filter">
+                <SelectTrigger className="w-[120px]" data-testid="select-priority-filter">
                   <SelectValue placeholder="Priority" />
                 </SelectTrigger>
                 <SelectContent>
@@ -369,22 +521,54 @@ export default function TeamTasks() {
               </Select>
             </div>
 
-            <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as any)}>
-              <TabsList>
-                <TabsTrigger value="list" data-testid="tab-list-view">
-                  <List className="w-4 h-4 mr-1" />
-                  List
-                </TabsTrigger>
-                <TabsTrigger value="kanban" data-testid="tab-kanban-view">
-                  <LayoutGrid className="w-4 h-4 mr-1" />
-                  Kanban
-                </TabsTrigger>
-                <TabsTrigger value="calendar" data-testid="tab-calendar-view">
-                  <CalendarIcon className="w-4 h-4 mr-1" />
-                  Calendar
-                </TabsTrigger>
-              </TabsList>
-            </Tabs>
+            <div className="flex items-center gap-2">
+              {viewMode === "kanban" && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" data-testid="button-swimlane-toggle">
+                      <Layers className="w-4 h-4 mr-2" />
+                      {swimlaneBy === "none" ? "Swimlanes" : `By ${swimlaneBy.charAt(0).toUpperCase() + swimlaneBy.slice(1)}`}
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => setSwimlaneBy("none")}>
+                      <Check className={cn("w-4 h-4 mr-2", swimlaneBy !== "none" && "opacity-0")} />
+                      No Swimlanes
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => setSwimlaneBy("project")}>
+                      <Check className={cn("w-4 h-4 mr-2", swimlaneBy !== "project" && "opacity-0")} />
+                      By Project
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setSwimlaneBy("assignee")}>
+                      <Check className={cn("w-4 h-4 mr-2", swimlaneBy !== "assignee" && "opacity-0")} />
+                      By Assignee
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setSwimlaneBy("priority")}>
+                      <Check className={cn("w-4 h-4 mr-2", swimlaneBy !== "priority" && "opacity-0")} />
+                      By Priority
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+              
+              <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as any)}>
+                <TabsList>
+                  <TabsTrigger value="list" data-testid="tab-list-view">
+                    <List className="w-4 h-4 mr-1" />
+                    List
+                  </TabsTrigger>
+                  <TabsTrigger value="kanban" data-testid="tab-kanban-view">
+                    <LayoutGrid className="w-4 h-4 mr-1" />
+                    Kanban
+                  </TabsTrigger>
+                  <TabsTrigger value="calendar" data-testid="tab-calendar-view">
+                    <CalendarIcon className="w-4 h-4 mr-1" />
+                    Calendar
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
+            </div>
           </div>
         </div>
 
@@ -413,6 +597,8 @@ export default function TeamTasks() {
               tasks={filteredTasks}
               onTaskClick={(task) => { setSelectedTask(task); setTaskDetailOpen(true); }}
               onStatusChange={(id, status) => updateTaskMutation.mutate({ id, status: status as "todo" | "in_progress" | "done" })}
+              swimlaneBy={swimlaneBy}
+              users={allUsers}
             />
           ) : (
             <CalendarView 
@@ -644,23 +830,22 @@ function TaskListItem({
   );
 }
 
-// Kanban View Component
+// Kanban View Component with Swimlanes
 function KanbanView({ 
   tasks, 
   onTaskClick,
-  onStatusChange 
+  onStatusChange,
+  swimlaneBy,
+  users = []
 }: { 
   tasks: TeamTask[];
   onTaskClick: (task: TeamTask) => void;
   onStatusChange: (id: number, status: string) => void;
+  swimlaneBy: "none" | "project" | "assignee" | "priority";
+  users?: User[];
 }) {
   const [draggedTask, setDraggedTask] = useState<TeamTask | null>(null);
-
-  const columns = [
-    { id: "todo", title: "To Do", tasks: tasks.filter(t => t.status === "todo") },
-    { id: "in_progress", title: "In Progress", tasks: tasks.filter(t => t.status === "in_progress") },
-    { id: "done", title: "Done", tasks: tasks.filter(t => t.status === "done") },
-  ];
+  const [collapsedSwimlanes, setCollapsedSwimlanes] = useState<Set<string>>(new Set());
 
   const handleDragStart = (e: React.DragEvent, task: TeamTask) => {
     setDraggedTask(task);
@@ -675,48 +860,234 @@ function KanbanView({
     setDraggedTask(null);
   };
 
-  return (
-    <div className="flex gap-4 overflow-x-auto pb-4">
-      {columns.map(column => {
-        const config = STATUS_CONFIG[column.id as keyof typeof STATUS_CONFIG];
-        return (
-          <div 
-            key={column.id}
-            className="flex flex-col min-w-[320px] w-[320px]"
-            data-testid={`kanban-column-${column.id}`}
-          >
-            <div className={cn("p-4 rounded-t-xl", config.bgColor)}>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <config.icon className={cn("w-4 h-4", config.color)} />
-                  <h3 className="font-semibold text-sm">{column.title}</h3>
-                </div>
-                <Badge variant="secondary" className="text-xs">{column.tasks.length}</Badge>
-              </div>
-            </div>
-            
-            <ScrollArea 
-              className="flex-1 min-h-[400px] max-h-[calc(100vh-320px)] rounded-b-xl border border-t-0 bg-muted/20"
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={(e) => handleDrop(e, column.id)}
+  const toggleSwimlane = (key: string) => {
+    setCollapsedSwimlanes(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) {
+        next.delete(key);
+      } else {
+        next.add(key);
+      }
+      return next;
+    });
+  };
+
+  // Group tasks by swimlane
+  const getSwimlanesData = () => {
+    if (swimlaneBy === "none") {
+      return [{ key: "all", label: "", tasks, color: "" }];
+    }
+
+    const groups: { key: string; label: string; tasks: TeamTask[]; color?: string }[] = [];
+
+    if (swimlaneBy === "project") {
+      const projectGroups = new Map<string, TeamTask[]>();
+      tasks.forEach(task => {
+        const project = (task as any).projectTag || "Untagged";
+        if (!projectGroups.has(project)) {
+          projectGroups.set(project, []);
+        }
+        projectGroups.get(project)!.push(task);
+      });
+      PROJECT_TAGS.forEach(tag => {
+        if (projectGroups.has(tag)) {
+          const config = PROJECT_TAG_CONFIG[tag];
+          groups.push({ 
+            key: tag, 
+            label: tag, 
+            tasks: projectGroups.get(tag)!, 
+            color: config?.bgColor
+          });
+        }
+      });
+      if (projectGroups.has("Untagged")) {
+        groups.push({ key: "Untagged", label: "Untagged", tasks: projectGroups.get("Untagged")! });
+      }
+    } else if (swimlaneBy === "assignee") {
+      const assigneeGroups = new Map<string, TeamTask[]>();
+      tasks.forEach(task => {
+        const assigneeId = task.assigneeId || "unassigned";
+        if (!assigneeGroups.has(assigneeId)) {
+          assigneeGroups.set(assigneeId, []);
+        }
+        assigneeGroups.get(assigneeId)!.push(task);
+      });
+      assigneeGroups.forEach((groupTasks, assigneeId) => {
+        const user = users.find(u => u.id === assigneeId);
+        groups.push({
+          key: assigneeId,
+          label: assigneeId === "unassigned" ? "Unassigned" : (user?.firstName || user?.email || assigneeId),
+          tasks: groupTasks
+        });
+      });
+    } else if (swimlaneBy === "priority") {
+      const priorityOrder = ["urgent", "high", "normal", "low"];
+      const priorityGroups = new Map<string, TeamTask[]>();
+      tasks.forEach(task => {
+        const priority = task.priority || "normal";
+        if (!priorityGroups.has(priority)) {
+          priorityGroups.set(priority, []);
+        }
+        priorityGroups.get(priority)!.push(task);
+      });
+      priorityOrder.forEach(priority => {
+        if (priorityGroups.has(priority)) {
+          const config = PRIORITY_CONFIG[priority as keyof typeof PRIORITY_CONFIG];
+          groups.push({
+            key: priority,
+            label: config?.label || priority,
+            tasks: priorityGroups.get(priority)!,
+            color: config?.color.split(" ")[1]
+          });
+        }
+      });
+    }
+
+    return groups;
+  };
+
+  const swimlanes = getSwimlanesData();
+
+  // Render a standard Kanban (no swimlanes)
+  if (swimlaneBy === "none") {
+    const columns = [
+      { id: "todo", title: "To Do", tasks: tasks.filter(t => t.status === "todo") },
+      { id: "in_progress", title: "In Progress", tasks: tasks.filter(t => t.status === "in_progress") },
+      { id: "done", title: "Done", tasks: tasks.filter(t => t.status === "done") },
+    ];
+
+    return (
+      <div className="flex gap-4 overflow-x-auto pb-4">
+        {columns.map(column => {
+          const config = STATUS_CONFIG[column.id as keyof typeof STATUS_CONFIG];
+          return (
+            <div 
+              key={column.id}
+              className="flex flex-col min-w-[320px] w-[320px]"
+              data-testid={`kanban-column-${column.id}`}
             >
-              <div className="p-3 space-y-3">
-                {column.tasks.map(task => (
-                  <KanbanCard 
-                    key={task.id}
-                    task={task}
-                    isDragging={draggedTask?.id === task.id}
-                    onDragStart={handleDragStart}
-                    onClick={() => onTaskClick(task)}
-                  />
-                ))}
-                {column.tasks.length === 0 && (
-                  <div className="py-12 text-center rounded-lg border-2 border-dashed border-muted-foreground/20">
-                    <p className="text-sm text-muted-foreground">No tasks</p>
+              <div className={cn("p-4 rounded-t-xl", config.bgColor)}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <config.icon className={cn("w-4 h-4", config.color)} />
+                    <h3 className="font-semibold text-sm">{column.title}</h3>
                   </div>
-                )}
+                  <Badge variant="secondary" className="text-xs">{column.tasks.length}</Badge>
+                </div>
               </div>
-            </ScrollArea>
+              
+              <ScrollArea 
+                className="flex-1 min-h-[400px] max-h-[calc(100vh-400px)] rounded-b-xl border border-t-0 bg-muted/20"
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => handleDrop(e, column.id)}
+              >
+                <div className="p-3 space-y-3">
+                  {column.tasks.map(task => (
+                    <KanbanCard 
+                      key={task.id}
+                      task={task}
+                      isDragging={draggedTask?.id === task.id}
+                      onDragStart={handleDragStart}
+                      onClick={() => onTaskClick(task)}
+                      users={users}
+                    />
+                  ))}
+                  {column.tasks.length === 0 && (
+                    <div className="py-12 text-center rounded-lg border-2 border-dashed border-muted-foreground/20">
+                      <p className="text-sm text-muted-foreground">No tasks</p>
+                    </div>
+                  )}
+                </div>
+              </ScrollArea>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
+  // Render with swimlanes
+  return (
+    <div className="space-y-4 overflow-auto pb-4">
+      {swimlanes.map(swimlane => {
+        const isCollapsed = collapsedSwimlanes.has(swimlane.key);
+        const columns = [
+          { id: "todo", title: "To Do", tasks: swimlane.tasks.filter(t => t.status === "todo") },
+          { id: "in_progress", title: "In Progress", tasks: swimlane.tasks.filter(t => t.status === "in_progress") },
+          { id: "done", title: "Done", tasks: swimlane.tasks.filter(t => t.status === "done") },
+        ];
+
+        return (
+          <div key={swimlane.key} className="border rounded-xl overflow-hidden" data-testid={`swimlane-${swimlane.key}`}>
+            {/* Swimlane Header */}
+            <button
+              onClick={() => toggleSwimlane(swimlane.key)}
+              className={cn(
+                "w-full flex items-center justify-between p-3 hover-elevate",
+                swimlane.color || "bg-muted/50"
+              )}
+            >
+              <div className="flex items-center gap-2">
+                <ChevronDown className={cn("w-4 h-4 transition-transform", isCollapsed && "-rotate-90")} />
+                <span className="font-semibold">{swimlane.label}</span>
+                <Badge variant="secondary" className="text-xs">{swimlane.tasks.length}</Badge>
+              </div>
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span>{columns[0].tasks.length} To Do</span>
+                <span>·</span>
+                <span>{columns[1].tasks.length} In Progress</span>
+                <span>·</span>
+                <span>{columns[2].tasks.length} Done</span>
+              </div>
+            </button>
+
+            {/* Swimlane Content */}
+            {!isCollapsed && (
+              <div className="flex gap-4 p-4 overflow-x-auto bg-background/50">
+                {columns.map(column => {
+                  const config = STATUS_CONFIG[column.id as keyof typeof STATUS_CONFIG];
+                  return (
+                    <div 
+                      key={column.id}
+                      className="flex flex-col min-w-[280px] w-[280px]"
+                    >
+                      <div className={cn("p-3 rounded-t-lg", config.bgColor)}>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <config.icon className={cn("w-3 h-3", config.color)} />
+                            <h4 className="font-medium text-xs">{column.title}</h4>
+                          </div>
+                          <Badge variant="secondary" className="text-xs h-5">{column.tasks.length}</Badge>
+                        </div>
+                      </div>
+                      
+                      <div 
+                        className="flex-1 min-h-[150px] max-h-[300px] overflow-y-auto rounded-b-lg border border-t-0 bg-muted/10 p-2 space-y-2"
+                        onDragOver={(e) => e.preventDefault()}
+                        onDrop={(e) => handleDrop(e, column.id)}
+                      >
+                        {column.tasks.map(task => (
+                          <KanbanCard 
+                            key={task.id}
+                            task={task}
+                            isDragging={draggedTask?.id === task.id}
+                            onDragStart={handleDragStart}
+                            onClick={() => onTaskClick(task)}
+                            compact
+                            users={users}
+                          />
+                        ))}
+                        {column.tasks.length === 0 && (
+                          <div className="py-6 text-center rounded-lg border-2 border-dashed border-muted-foreground/20">
+                            <p className="text-xs text-muted-foreground">Empty</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         );
       })}
@@ -728,12 +1099,16 @@ function KanbanCard({
   task, 
   isDragging,
   onDragStart, 
-  onClick 
+  onClick,
+  compact = false,
+  users = []
 }: { 
   task: TeamTask;
   isDragging: boolean;
   onDragStart: (e: React.DragEvent, task: TeamTask) => void;
   onClick: () => void;
+  compact?: boolean;
+  users?: User[];
 }) {
   const priorityConfig = PRIORITY_CONFIG[task.priority as keyof typeof PRIORITY_CONFIG] || PRIORITY_CONFIG.normal;
   const taskTypeConfig = TASK_TYPE_CONFIG[(task as any).taskType as keyof typeof TASK_TYPE_CONFIG] || TASK_TYPE_CONFIG.executable;
@@ -741,6 +1116,46 @@ function KanbanCard({
   const subtasks = task.subtasks as { id: string; title: string; completed: boolean }[] || [];
   const completedSubtasks = subtasks.filter(s => s.completed).length;
   const TaskTypeIcon = taskTypeConfig.icon;
+  const assignee = users.find(u => u.id === task.assigneeId);
+
+  // Compact version for swimlanes
+  if (compact) {
+    return (
+      <Card
+        draggable
+        onDragStart={(e) => onDragStart(e, task)}
+        onClick={onClick}
+        className={cn(
+          "cursor-pointer hover-elevate active-elevate-2 border-l-2",
+          priorityConfig.borderColor,
+          isDragging && "opacity-50 scale-95 rotate-1"
+        )}
+        data-testid={`kanban-card-${task.id}`}
+      >
+        <CardContent className="p-2 space-y-1.5">
+          <div className="flex items-start gap-1.5">
+            <TaskTypeIcon className={cn("w-3 h-3 shrink-0 mt-0.5", taskTypeConfig.color.split(" ")[0])} />
+            <p className="text-xs font-medium line-clamp-2 flex-1">{task.title}</p>
+            {!(task as any).isPublic && <Lock className="w-3 h-3 text-muted-foreground shrink-0" />}
+          </div>
+          <div className="flex items-center gap-1.5 justify-between">
+            <div className="flex items-center gap-1">
+              {task.dueDate && (
+                <span className="text-[10px] text-muted-foreground">
+                  {new Date(task.dueDate).toLocaleDateString("en-US", { month: "short", day: "numeric" })}
+                </span>
+              )}
+            </div>
+            {assignee && (
+              <div className="w-5 h-5 rounded-full bg-primary/10 flex items-center justify-center shrink-0" title={assignee.firstName || assignee.email}>
+                <UserIcon className="w-2.5 h-2.5" />
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card
@@ -760,7 +1175,6 @@ function KanbanCard({
           <TaskTypeIcon className={cn("w-4 h-4 shrink-0 mt-0.5", taskTypeConfig.color.split(" ")[0])} />
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium line-clamp-2">{task.title}</p>
-            {/* Private indicator */}
             {!(task as any).isPublic && (
               <div className="flex items-center gap-1 mt-1">
                 <Lock className="w-3 h-3 text-muted-foreground" />
@@ -1309,10 +1723,49 @@ function TaskDetailDialog({
   
   const { toast } = useToast();
 
+  const { user } = useAuth();
+  
   // Fetch comments
   const { data: comments = [] } = useQuery<TeamTaskComment[]>({
     queryKey: ["/api/team-tasks", task.id, "comments"],
     enabled: open,
+  });
+
+  // Fetch watchers for the task
+  const { data: watcherData = [] } = useQuery<any[]>({
+    queryKey: ["/api/task-watchers", "team", task.id],
+    enabled: open,
+  });
+
+  // Check if current user is watching
+  const isWatching = watcherData.some((w: any) => w.userId === user?.id);
+
+  // Watch mutation
+  const watchMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("POST", `/api/task-watchers/team/${task.id}/watch`, {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/task-watchers", "team", task.id] });
+      toast({ title: "You're now watching this task" });
+    },
+    onError: () => {
+      toast({ title: "Failed to watch task", variant: "destructive" });
+    },
+  });
+
+  // Unwatch mutation
+  const unwatchMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("DELETE", `/api/task-watchers/team/${task.id}/watch`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/task-watchers", "team", task.id] });
+      toast({ title: "You've stopped watching this task" });
+    },
+    onError: () => {
+      toast({ title: "Failed to unwatch task", variant: "destructive" });
+    },
   });
 
   // Add comment mutation
@@ -1462,7 +1915,55 @@ function TaskDetailDialog({
                   </>
                 )}
               </Badge>
+
+              {/* Watch Button */}
+              <Button
+                variant={isWatching ? "default" : "outline"}
+                size="sm"
+                onClick={() => isWatching ? unwatchMutation.mutate() : watchMutation.mutate()}
+                disabled={watchMutation.isPending || unwatchMutation.isPending}
+                className="ml-auto"
+                data-testid="button-watch-task"
+              >
+                {isWatching ? (
+                  <>
+                    <Eye className="w-4 h-4 mr-1" />
+                    Watching
+                  </>
+                ) : (
+                  <>
+                    <EyeOff className="w-4 h-4 mr-1" />
+                    Watch
+                  </>
+                )}
+              </Button>
             </div>
+
+            {/* Watchers */}
+            {watcherData.length > 0 && (
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Watchers:</span>
+                <div className="flex -space-x-2">
+                  {watcherData.slice(0, 5).map((watcher: any) => {
+                    const watcherUser = users.find(u => u.id === watcher.userId);
+                    return (
+                      <div
+                        key={watcher.id}
+                        className="w-6 h-6 rounded-full bg-primary/10 border-2 border-background flex items-center justify-center"
+                        title={watcherUser?.firstName || watcherUser?.email || "Unknown"}
+                      >
+                        <UserIcon className="w-3 h-3" />
+                      </div>
+                    );
+                  })}
+                  {watcherData.length > 5 && (
+                    <div className="w-6 h-6 rounded-full bg-muted border-2 border-background flex items-center justify-center">
+                      <span className="text-xs">+{watcherData.length - 5}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Status & Priority */}
             <div className="flex items-center gap-4 flex-wrap">

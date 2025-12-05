@@ -31,7 +31,8 @@ import {
   RefreshCw,
   Eye,
   Filter,
-  X
+  X,
+  LayoutGrid,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Link } from "wouter";
@@ -332,10 +333,18 @@ export function ProductionCommandCenter() {
             Real-time overview of production status
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={() => window.location.reload()}>
-          <RefreshCw className="h-4 w-4 mr-1" />
-          Refresh
-        </Button>
+        <div className="flex items-center gap-2">
+          <Link href="/tasks">
+            <Button variant="default" size="sm" data-testid="button-open-kanban">
+              <LayoutGrid className="h-4 w-4 mr-1" />
+              Team Tasks
+            </Button>
+          </Link>
+          <Button variant="outline" size="sm" onClick={() => window.location.reload()}>
+            <RefreshCw className="h-4 w-4 mr-1" />
+            Refresh
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -588,7 +597,7 @@ export function ProductionCommandCenter() {
                     <>
                       <p className="text-sm">No tasks match your filters</p>
                       <Button
-                        variant="link"
+                        variant="ghost"
                         size="sm"
                         onClick={clearAllFilters}
                         className="text-xs mt-1"

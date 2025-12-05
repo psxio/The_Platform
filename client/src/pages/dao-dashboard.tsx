@@ -36,7 +36,8 @@ import {
   CheckCircle2,
   LightbulbIcon,
   History,
-  Send
+  Send,
+  LayoutGrid,
 } from "lucide-react";
 import { Link } from "wouter";
 import { DaoSafeWallets } from "@/components/dao-safe-wallets";
@@ -287,8 +288,14 @@ export default function DaoDashboard() {
             </p>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
+            <Link href="/tasks">
+              <Button variant="default" data-testid="button-team-tasks">
+                <LayoutGrid className="h-4 w-4 mr-2" />
+                Team Tasks
+              </Button>
+            </Link>
             <Link href="/dao/projects/new">
-              <Button data-testid="button-new-project">
+              <Button variant="outline" data-testid="button-new-project">
                 <Plus className="h-4 w-4 mr-2" />
                 New Project
               </Button>

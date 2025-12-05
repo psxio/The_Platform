@@ -52,7 +52,7 @@ const spaces: Space[] = [
     description: "Kanban boards and task management",
     homeRoute: "/tasks",
     pathPrefix: ["/tasks"],
-    roles: ["web3", "content", "admin"],
+    roles: ["web3", "admin"],
   },
   {
     id: "content",

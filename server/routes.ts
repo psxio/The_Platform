@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import multer from "multer";
 import * as XLSX from "xlsx";
 import crypto from "crypto";
+import { z } from "zod";
 import type { ComparisonResult, InsertCollection } from "@shared/schema";
 import { insertInternalTeamMemberSchema, insertTeamPaymentHistorySchema } from "@shared/schema";
 import { storage } from "./storage";
@@ -12410,6 +12411,143 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Error migrating tasks:", error);
       res.status(500).json({ error: "Failed to migrate tasks" });
+    }
+  });
+
+  // Team Task Saved Filters (accessible to all authenticated users)
+  app.get("/api/team-task-filters", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      // Get all saved filters for user and filter by scope
+      const allFilters = await storage.getSavedFilters(userId);
+      const teamFilters = allFilters.filter((f: any) => f.filters?.scope === "team_tasks");
+      res.json(teamFilters);
+    } catch (error) {
+      console.error("Error fetching team task filters:", error);
+      res.status(500).json({ error: "Failed to fetch saved filters" });
+    }
+  });
+
+  // Zod schema for team task filter validation - strips scope field if provided by client
+  const teamTaskFilterSchema = z.object({
+    name: z.string().min(1, "Filter name is required").max(100),
+    filters: z.object({
+      searchQuery: z.string().optional().default(""),
+      statusFilter: z.string().optional().default("all"),
+      priorityFilter: z.string().optional().default("all"),
+      projectTagFilter: z.string().optional().default("all"),
+      assigneeFilter: z.string().optional().default("all"),
+      taskTypeFilter: z.string().optional().default("all"),
+      swimlaneBy: z.string().optional().default("none"),
+    }).passthrough().transform(({ scope, ...rest }) => rest), // Strip scope field
+    isDefault: z.boolean().optional().default(false),
+  });
+
+  app.post("/api/team-task-filters", isAuthenticated, async (req: any, res) => {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+      
+      // Validate request body
+      const validation = teamTaskFilterSchema.safeParse(req.body);
+      if (!validation.success) {
+        return res.status(400).json({ error: validation.error.errors[0]?.message || "Invalid filter data" });
+      }
+      
+      const { name, filters, isDefault } = validation.data;
+      // Add scope to distinguish team task filters
+      const filtersWithScope = { ...filters, scope: "team_tasks" };
+      
+      const savedFilter = await storage.createSavedFilter({
+        userId,
+        name,
+        filters: filtersWithScope,
+        isDefault: isDefault || false,
+      });
+      res.status(201).json(savedFilter);
+    } catch (error) {
+      console.error("Error creating team task filter:", error);
+      res.status(500).json({ error: "Failed to create saved filter" });
+    }
+  });
+
+  const teamTaskFilterUpdateSchema = z.object({
+    name: z.string().min(1, "Filter name is required").max(100).optional(),
+    filters: z.object({
+      searchQuery: z.string().optional(),
+      statusFilter: z.string().optional(),
+      priorityFilter: z.string().optional(),
+      projectTagFilter: z.string().optional(),
+      assigneeFilter: z.string().optional(),
+      taskTypeFilter: z.string().optional(),
+      swimlaneBy: z.string().optional(),
+    }).passthrough().transform(({ scope, ...rest }) => rest).optional(), // Strip scope field
+    isDefault: z.boolean().optional(),
+  });
+
+  app.patch("/api/team-task-filters/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const userId = req.user?.id;
+      
+      // Verify ownership
+      const existing = await storage.getSavedFilter(id);
+      if (!existing || existing.userId !== userId) {
+        return res.status(404).json({ error: "Filter not found" });
+      }
+      
+      // Verify the filter belongs to team_tasks scope
+      const existingFilters = (existing.filters as Record<string, unknown>) || {};
+      if (existingFilters.scope !== "team_tasks") {
+        return res.status(404).json({ error: "Filter not found" });
+      }
+      
+      // Validate request body
+      const validation = teamTaskFilterUpdateSchema.safeParse(req.body);
+      if (!validation.success) {
+        return res.status(400).json({ error: validation.error.errors[0]?.message || "Invalid filter data" });
+      }
+      
+      // Always normalize scope - merge existing filters with update and force scope to team_tasks
+      const updateData = validation.data;
+      const filtersWithScope = {
+        ...existingFilters,            // Start with existing filters
+        ...(updateData.filters || {}), // Overlay with any new filter values
+        scope: "team_tasks",           // Always force scope
+      };
+      
+      const updated = await storage.updateSavedFilter(id, {
+        ...updateData,
+        filters: filtersWithScope,
+      });
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating team task filter:", error);
+      res.status(500).json({ error: "Failed to update saved filter" });
+    }
+  });
+
+  app.delete("/api/team-task-filters/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const userId = req.user?.id;
+      
+      // Verify ownership
+      const existing = await storage.getSavedFilter(id);
+      if (!existing || existing.userId !== userId) {
+        return res.status(404).json({ error: "Filter not found" });
+      }
+      
+      await storage.deleteSavedFilter(id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error deleting team task filter:", error);
+      res.status(500).json({ error: "Failed to delete saved filter" });
     }
   });
 

@@ -336,6 +336,7 @@ export interface IStorage {
   
   // Saved Filter methods
   getSavedFilters(userId: string): Promise<SavedFilter[]>;
+  getSavedFilter(id: number): Promise<SavedFilter | undefined>;
   createSavedFilter(filter: InsertSavedFilter): Promise<SavedFilter>;
   updateSavedFilter(id: number, filter: Partial<InsertSavedFilter>): Promise<SavedFilter | undefined>;
   deleteSavedFilter(id: number): Promise<boolean>;
@@ -2034,6 +2035,11 @@ export class DbStorage implements IStorage {
   // Saved Filter methods
   async getSavedFilters(userId: string): Promise<SavedFilter[]> {
     return await db.select().from(savedFilters).where(eq(savedFilters.userId, userId)).orderBy(savedFilters.name);
+  }
+
+  async getSavedFilter(id: number): Promise<SavedFilter | undefined> {
+    const [filter] = await db.select().from(savedFilters).where(eq(savedFilters.id, id));
+    return filter;
   }
 
   async createSavedFilter(filter: InsertSavedFilter): Promise<SavedFilter> {

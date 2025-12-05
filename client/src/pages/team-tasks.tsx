@@ -30,6 +30,27 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 import type { TeamBoard, TeamTask, TeamTaskComment, User } from "@shared/schema";
 
+// Types for saved filters
+interface SavedFilterData {
+  searchQuery?: string;
+  statusFilter?: string;
+  priorityFilter?: string;
+  projectTagFilter?: string;
+  assigneeFilter?: string;
+  taskTypeFilter?: string;
+  swimlaneBy?: string;
+  scope?: string;
+}
+
+interface SavedFilter {
+  id: number;
+  userId: string;
+  name: string;
+  filters: SavedFilterData;
+  isDefault: boolean;
+  createdAt: string;
+}
+
 const STATUS_CONFIG = {
   todo: { label: "To Do", icon: Circle, color: "text-muted-foreground", bgColor: "bg-slate-100 dark:bg-slate-800" },
   in_progress: { label: "In Progress", icon: Clock, color: "text-yellow-600", bgColor: "bg-yellow-50 dark:bg-yellow-950/30" },
@@ -282,6 +303,64 @@ export default function TeamTasks() {
   const { data: allUsers = [] } = useQuery<User[]>({
     queryKey: ["/api/users"],
     enabled: isAuthenticated,
+  });
+
+  // Fetch saved filters
+  const { data: savedFiltersList = [] } = useQuery<SavedFilter[]>({
+    queryKey: ["/api/team-task-filters"],
+    enabled: isAuthenticated,
+  });
+
+  // Save filter mutation
+  const saveFilterMutation = useMutation({
+    mutationFn: async (data: { name: string; filters: SavedFilterData; isDefault?: boolean }) => {
+      return apiRequest("POST", "/api/team-task-filters", data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/team-task-filters"] });
+      toast({ title: "Filter saved" });
+    },
+    onError: () => {
+      toast({ title: "Failed to save filter", variant: "destructive" });
+    },
+  });
+
+  // Delete saved filter mutation
+  const deleteFilterMutation = useMutation({
+    mutationFn: async (id: number) => {
+      return apiRequest("DELETE", `/api/team-task-filters/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/team-task-filters"] });
+      toast({ title: "Filter deleted" });
+    },
+    onError: () => {
+      toast({ title: "Failed to delete filter", variant: "destructive" });
+    },
+  });
+
+  // Load a saved filter
+  const loadSavedFilter = (filter: SavedFilter) => {
+    const f = filter.filters;
+    setSearchQuery(f.searchQuery || "");
+    setStatusFilter(f.statusFilter || "all");
+    setPriorityFilter(f.priorityFilter || "all");
+    setProjectTagFilter(f.projectTagFilter || "all");
+    setAssigneeFilter(f.assigneeFilter || "all");
+    setTaskTypeFilter(f.taskTypeFilter || "all");
+    setSwimlaneBy(f.swimlaneBy || "none");
+    setQuickFilter("none");
+  };
+
+  // Get current filter state for saving
+  const getCurrentFilterState = (): SavedFilterData => ({
+    searchQuery,
+    statusFilter,
+    priorityFilter,
+    projectTagFilter,
+    assigneeFilter,
+    taskTypeFilter,
+    swimlaneBy,
   });
 
   const selectedBoard = boards.find(b => b.id === selectedBoardId);
@@ -580,6 +659,64 @@ export default function TeamTasks() {
                 Clear
               </Button>
             )}
+            
+            {/* Saved Filters Dropdown */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="h-7 text-xs" data-testid="button-saved-filters">
+                  <Bookmark className="w-3 h-3 mr-1" />
+                  Saved
+                  {savedFiltersList.length > 0 && (
+                    <Badge variant="secondary" className="ml-1 text-[10px] h-4 px-1">{savedFiltersList.length}</Badge>
+                  )}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-56">
+                {savedFiltersList.length > 0 ? (
+                  <>
+                    {savedFiltersList.map((filter) => (
+                      <DropdownMenuItem 
+                        key={filter.id} 
+                        className="flex items-center justify-between group"
+                        onClick={() => loadSavedFilter(filter)}
+                        data-testid={`saved-filter-${filter.id}`}
+                      >
+                        <span className="truncate">{filter.name}</span>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-5 w-5 opacity-0 group-hover:opacity-100"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            deleteFilterMutation.mutate(filter.id);
+                          }}
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
+                      </DropdownMenuItem>
+                    ))}
+                    <DropdownMenuSeparator />
+                  </>
+                ) : (
+                  <div className="px-2 py-1.5 text-xs text-muted-foreground">No saved filters yet</div>
+                )}
+                {hasActiveFilters && (
+                  <DropdownMenuItem
+                    onClick={() => {
+                      const name = prompt("Enter a name for this filter:");
+                      if (name) {
+                        saveFilterMutation.mutate({ name, filters: getCurrentFilterState() });
+                      }
+                    }}
+                    data-testid="button-save-current-filter"
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    Save Current Filter
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+            
             <div className="flex-1" />
             <Badge variant="secondary" className="text-xs">
               {filteredTasks.length} of {tasks.length} tasks

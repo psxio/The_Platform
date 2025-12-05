@@ -2818,3 +2818,99 @@ export const mediaConversions = pgTable("media_conversions", {
 export const insertMediaConversionSchema = createInsertSchema(mediaConversions).omit({ id: true, createdAt: true, completedAt: true });
 export type InsertMediaConversion = z.infer<typeof insertMediaConversionSchema>;
 export type MediaConversion = typeof mediaConversions.$inferSelect;
+
+// ================== TEAM BOARDS & ENHANCED TASKS ==================
+
+// Board visibility options
+export const boardVisibilityOptions = ["private", "web3", "content", "all_team"] as const;
+export type BoardVisibility = typeof boardVisibilityOptions[number];
+
+// Enhanced task statuses for team tasks
+export const teamTaskStatuses = ["todo", "in_progress", "done"] as const;
+export type TeamTaskStatus = typeof teamTaskStatuses[number];
+
+// Team Boards - Groups of tasks with visibility settings
+export const teamBoards = pgTable("team_boards", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  description: text("description"),
+  ownerId: varchar("owner_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  visibility: varchar("visibility", { length: 30 }).$type<BoardVisibility>().default("private"),
+  color: varchar("color", { length: 7 }), // Hex color for UI
+  icon: varchar("icon", { length: 50 }), // Lucide icon name
+  isArchived: boolean("is_archived").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertTeamBoardSchema = createInsertSchema(teamBoards).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertTeamBoard = z.infer<typeof insertTeamBoardSchema>;
+export type TeamBoard = typeof teamBoards.$inferSelect;
+
+// Board Memberships - Who can access each board (beyond visibility rules)
+export const boardMemberships = pgTable("board_memberships", {
+  id: serial("id").primaryKey(),
+  boardId: integer("board_id").notNull().references(() => teamBoards.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  canEdit: boolean("can_edit").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertBoardMembershipSchema = createInsertSchema(boardMemberships).omit({ id: true, createdAt: true });
+export type InsertBoardMembership = z.infer<typeof insertBoardMembershipSchema>;
+export type BoardMembership = typeof boardMemberships.$inferSelect;
+
+// Team Tasks - Enhanced tasks within boards (uses existing TaskPriority type)
+export const teamTasks = pgTable("team_tasks", {
+  id: serial("id").primaryKey(),
+  boardId: integer("board_id").notNull().references(() => teamBoards.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  description: text("description"), // Rich text / markdown
+  status: varchar("status", { length: 30 }).$type<TeamTaskStatus>().default("todo"),
+  priority: varchar("priority", { length: 20 }).$type<TaskPriority>().default("normal"),
+  dueDate: timestamp("due_date"),
+  createdBy: varchar("created_by").notNull().references(() => users.id, { onDelete: "cascade" }),
+  assigneeId: varchar("assignee_id").references(() => users.id, { onDelete: "set null" }),
+  tags: text("tags").array(), // Array of tag strings
+  subtasks: jsonb("subtasks").$type<{ id: string; title: string; completed: boolean }[]>().default([]),
+  orderIndex: integer("order_index").default(0),
+  isArchived: boolean("is_archived").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertTeamTaskSchema = createInsertSchema(teamTasks).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertTeamTask = z.infer<typeof insertTeamTaskSchema>;
+export type TeamTask = typeof teamTasks.$inferSelect;
+
+// Team Task Comments - Discussion on team tasks
+export const teamTaskComments = pgTable("team_task_comments", {
+  id: serial("id").primaryKey(),
+  taskId: integer("task_id").notNull().references(() => teamTasks.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  content: text("content").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertTeamTaskCommentSchema = createInsertSchema(teamTaskComments).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertTeamTaskComment = z.infer<typeof insertTeamTaskCommentSchema>;
+export type TeamTaskComment = typeof teamTaskComments.$inferSelect;
+
+// Team Task Activity Log - Track changes to team tasks
+export const teamTaskActivityTypes = ["created", "status_changed", "assigned", "priority_changed", "due_date_changed", "commented", "subtask_completed", "edited"] as const;
+export type TeamTaskActivityType = typeof teamTaskActivityTypes[number];
+
+export const teamTaskActivity = pgTable("team_task_activity", {
+  id: serial("id").primaryKey(),
+  taskId: integer("task_id").notNull().references(() => teamTasks.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  activityType: varchar("activity_type", { length: 30 }).$type<TeamTaskActivityType>().notNull(),
+  oldValue: text("old_value"),
+  newValue: text("new_value"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertTeamTaskActivitySchema = createInsertSchema(teamTaskActivity).omit({ id: true, createdAt: true });
+export type InsertTeamTaskActivity = z.infer<typeof insertTeamTaskActivitySchema>;
+export type TeamTaskActivity = typeof teamTaskActivity.$inferSelect;

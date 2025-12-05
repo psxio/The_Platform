@@ -23,8 +23,16 @@ import {
   AlertCircle,
   Coins,
   ArrowUpRight,
+  ArrowDownRight,
   Users,
-  Shield
+  Shield,
+  History,
+  Filter,
+  FileText,
+  Send,
+  Settings,
+  LinkIcon,
+  Hash
 } from "lucide-react";
 
 type SafeWallet = {
@@ -70,6 +78,63 @@ type SafePendingTx = {
     method: string;
     parameters: any[];
   };
+};
+
+type SafeTxConfirmation = {
+  signer: string;
+  signature: string;
+  signatureType: string;
+  submittedAt: string;
+  platformUserId?: string;
+  user?: {
+    id: string;
+    firstName: string | null;
+    lastName: string | null;
+    profileImageUrl: string | null;
+  };
+  label?: string;
+};
+
+type SafeTransaction = {
+  id: number;
+  walletId: number;
+  safeTxHash: string;
+  txHash: string | null;
+  chainId: number;
+  safeAddress: string;
+  to: string;
+  value: string;
+  data: string | null;
+  dataDecoded: string | null;
+  operation: number;
+  nonce: number;
+  txType: "transfer" | "contract_interaction" | "settings_change" | "rejection";
+  status: "awaiting_confirmations" | "awaiting_execution" | "executed" | "failed" | "cancelled";
+  confirmationsRequired: number;
+  confirmationsCount: number;
+  confirmations: SafeTxConfirmation[];
+  proposerAddress: string | null;
+  proposerUserId: string | null;
+  proposerUser?: {
+    id: string;
+    firstName: string | null;
+    lastName: string | null;
+    profileImageUrl: string | null;
+  };
+  executorAddress: string | null;
+  executorUserId: string | null;
+  executorUser?: {
+    id: string;
+    firstName: string | null;
+    lastName: string | null;
+    profileImageUrl: string | null;
+  };
+  tokenSymbol: string | null;
+  tokenDecimals: number | null;
+  formattedValue: string | null;
+  submittedAt: string;
+  executedAt: string | null;
+  lastSyncedAt: string | null;
 };
 
 const CHAIN_COLORS: Record<number, string> = {
@@ -157,6 +222,32 @@ export function DaoSafeWallets() {
   const { data: pendingTxs, isLoading: pendingTxsLoading } = useQuery<SafePendingTx[]>({
     queryKey: [`/api/dao/safe-wallets/${selectedWalletId}/pending-txs`],
     enabled: !!selectedWalletId,
+  });
+
+  const { data: transactions, isLoading: txsLoading, refetch: refetchTransactions } = useQuery<SafeTransaction[]>({
+    queryKey: ["/api/dao/safe-wallets", selectedWalletId, "transactions"],
+    enabled: !!selectedWalletId,
+  });
+
+  const syncWalletMutation = useMutation({
+    mutationFn: async (walletId: number) => {
+      return apiRequest("POST", `/api/dao/safe-wallets/${walletId}/sync`, {});
+    },
+    onSuccess: () => {
+      toast({ title: "Wallet transactions synced" });
+      queryClient.invalidateQueries({ queryKey: ["/api/dao/safe-wallets"] });
+      if (selectedWalletId) {
+        refetchTransactions();
+        refetchBalances();
+      }
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Sync failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
   });
 
   const addWalletMutation = useMutation({
@@ -446,6 +537,10 @@ export function DaoSafeWallets() {
                       <Users className="h-4 w-4 mr-2" />
                       Owners
                     </TabsTrigger>
+                    <TabsTrigger value="transactions" data-testid="tab-transactions">
+                      <History className="h-4 w-4 mr-2" />
+                      History
+                    </TabsTrigger>
                   </TabsList>
 
                   <TabsContent value="balances" className="mt-4">
@@ -605,6 +700,181 @@ export function DaoSafeWallets() {
                         <p>Owner information not available</p>
                         <p className="text-sm">Sync the wallet to load owner data</p>
                       </div>
+                    )}
+                  </TabsContent>
+
+                  <TabsContent value="transactions" className="mt-4">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="text-sm text-muted-foreground">
+                        {transactions?.length || 0} transactions synced
+                      </div>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => syncWalletMutation.mutate(selectedWallet.id)}
+                        disabled={syncWalletMutation.isPending}
+                        data-testid="button-sync-transactions"
+                      >
+                        <RefreshCw className={`h-4 w-4 mr-2 ${syncWalletMutation.isPending ? "animate-spin" : ""}`} />
+                        Sync
+                      </Button>
+                    </div>
+                    {txsLoading ? (
+                      <div className="space-y-2">
+                        <Skeleton className="h-20 w-full" />
+                        <Skeleton className="h-20 w-full" />
+                        <Skeleton className="h-20 w-full" />
+                      </div>
+                    ) : transactions?.length === 0 ? (
+                      <div className="text-center py-8 text-muted-foreground">
+                        <History className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                        <p>No transaction history</p>
+                        <p className="text-sm">Click Sync to fetch transactions from Safe</p>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="mt-4"
+                          onClick={() => syncWalletMutation.mutate(selectedWallet.id)}
+                          disabled={syncWalletMutation.isPending}
+                        >
+                          <RefreshCw className={`h-4 w-4 mr-2 ${syncWalletMutation.isPending ? "animate-spin" : ""}`} />
+                          Sync Now
+                        </Button>
+                      </div>
+                    ) : (
+                      <ScrollArea className="h-[400px] pr-4">
+                        <div className="space-y-3">
+                          {transactions?.map((tx) => (
+                            <div
+                              key={tx.safeTxHash}
+                              className="p-4 rounded-lg border space-y-3"
+                              data-testid={`tx-item-${tx.safeTxHash.slice(0, 8)}`}
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-2">
+                                  {tx.txType === "transfer" ? (
+                                    <div className="p-2 rounded-lg bg-green-500/10">
+                                      <Send className="h-4 w-4 text-green-500" />
+                                    </div>
+                                  ) : tx.txType === "settings_change" ? (
+                                    <div className="p-2 rounded-lg bg-yellow-500/10">
+                                      <Settings className="h-4 w-4 text-yellow-500" />
+                                    </div>
+                                  ) : tx.txType === "rejection" ? (
+                                    <div className="p-2 rounded-lg bg-red-500/10">
+                                      <AlertCircle className="h-4 w-4 text-red-500" />
+                                    </div>
+                                  ) : (
+                                    <div className="p-2 rounded-lg bg-blue-500/10">
+                                      <FileText className="h-4 w-4 text-blue-500" />
+                                    </div>
+                                  )}
+                                  <div>
+                                    <div className="font-medium text-sm capitalize">
+                                      {tx.txType.replace("_", " ")}
+                                    </div>
+                                    {tx.formattedValue && tx.value !== "0" && (
+                                      <div className="text-xs text-muted-foreground">
+                                        {tx.formattedValue}
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <Badge
+                                    variant={
+                                      tx.status === "executed" ? "default" :
+                                      tx.status === "awaiting_execution" ? "secondary" :
+                                      tx.status === "awaiting_confirmations" ? "outline" :
+                                      tx.status === "failed" ? "destructive" : "outline"
+                                    }
+                                  >
+                                    {tx.status === "awaiting_confirmations" ? "Awaiting Sigs" :
+                                     tx.status === "awaiting_execution" ? "Ready" :
+                                     tx.status}
+                                  </Badge>
+                                  <Badge variant="outline" className="font-mono">
+                                    #{tx.nonce}
+                                  </Badge>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-4 text-xs">
+                                <div className="flex items-center gap-1 text-muted-foreground">
+                                  <ArrowUpRight className="h-3 w-3" />
+                                  <span className="font-mono">{shortenAddress(tx.to)}</span>
+                                </div>
+                                {tx.txHash && (
+                                  <a
+                                    href={`${getExplorerUrl(tx.txHash, tx.chainId).replace('/address/', '/tx/')}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="flex items-center gap-1 text-primary hover:underline"
+                                  >
+                                    <Hash className="h-3 w-3" />
+                                    View TX
+                                  </a>
+                                )}
+                              </div>
+
+                              <div className="flex items-center gap-2 text-xs">
+                                <div className="flex items-center gap-1">
+                                  {tx.confirmationsCount >= tx.confirmationsRequired ? (
+                                    <CheckCircle2 className="h-3 w-3 text-green-500" />
+                                  ) : (
+                                    <Clock className="h-3 w-3 text-yellow-500" />
+                                  )}
+                                  <span>
+                                    {tx.confirmationsCount}/{tx.confirmationsRequired} signatures
+                                  </span>
+                                </div>
+                                <span className="text-muted-foreground">|</span>
+                                <span className="text-muted-foreground">
+                                  {new Date(tx.submittedAt).toLocaleDateString()}
+                                </span>
+                              </div>
+
+                              {tx.proposerUser && (
+                                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                  <span>Proposed by:</span>
+                                  <span className="font-medium text-foreground">
+                                    {tx.proposerUser.firstName} {tx.proposerUser.lastName}
+                                  </span>
+                                </div>
+                              )}
+
+                              {tx.executorUser && tx.status === "executed" && (
+                                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                                  <span>Executed by:</span>
+                                  <span className="font-medium text-foreground">
+                                    {tx.executorUser.firstName} {tx.executorUser.lastName}
+                                  </span>
+                                </div>
+                              )}
+
+                              {tx.confirmations && tx.confirmations.length > 0 && (
+                                <div className="pt-2 border-t">
+                                  <div className="text-xs text-muted-foreground mb-2">Signatures:</div>
+                                  <div className="flex flex-wrap gap-1">
+                                    {tx.confirmations.map((conf, idx) => (
+                                      <Badge
+                                        key={idx}
+                                        variant="outline"
+                                        className="text-xs"
+                                      >
+                                        {conf.user
+                                          ? `${conf.user.firstName || ''} ${conf.user.lastName || ''}`.trim() || conf.label || shortenAddress(conf.signer)
+                                          : conf.label || shortenAddress(conf.signer)
+                                        }
+                                      </Badge>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </ScrollArea>
                     )}
                   </TabsContent>
                 </Tabs>

@@ -34,7 +34,9 @@ import {
   Zap,
   Hand,
   CheckCircle2,
-  LightbulbIcon
+  LightbulbIcon,
+  History,
+  Send
 } from "lucide-react";
 import { Link } from "wouter";
 import { DaoSafeWallets } from "@/components/dao-safe-wallets";
@@ -111,6 +113,26 @@ type DaoConsistencyMetrics = {
   coreRoleCount: number | null;
   supportRoleCount: number | null;
   overallReliabilityScore: number | null;
+};
+
+type SafeTransaction = {
+  id: number;
+  safeTxHash: string;
+  txHash: string | null;
+  to: string;
+  value: string;
+  txType: string;
+  status: string;
+  confirmationsRequired: number;
+  confirmationsCount: number;
+  formattedValue: string | null;
+  submittedAt: string;
+  executedAt: string | null;
+  wallet?: {
+    id: number;
+    label: string;
+    chainId: number;
+  };
 };
 
 type FairnessSummary = {
@@ -195,6 +217,14 @@ export default function DaoDashboard() {
 
   const { data: consistencyMetrics } = useQuery<DaoConsistencyMetrics[]>({
     queryKey: ["/api/dao/consistency-metrics"],
+  });
+
+  const { data: recentTxs } = useQuery<SafeTransaction[]>({
+    queryKey: ["/api/dao/safe-transactions/recent"],
+  });
+
+  const { data: pendingTxs } = useQuery<SafeTransaction[]>({
+    queryKey: ["/api/dao/safe-transactions/pending"],
   });
 
   const activeProjects = projects?.filter(p => p.status === "active") || [];
@@ -661,6 +691,87 @@ export default function DaoDashboard() {
                       </div>
                     ))}
                   </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <CardTitle className="text-lg flex items-center gap-2">
+                        <History className="h-5 w-5" />
+                        Safe Transactions
+                      </CardTitle>
+                      <CardDescription>Recent multi-sig activity</CardDescription>
+                    </div>
+                    {pendingTxs && pendingTxs.length > 0 && (
+                      <Badge variant="secondary" className="bg-yellow-500/10 text-yellow-600 border-yellow-500/20">
+                        <Clock className="h-3 w-3 mr-1" />
+                        {pendingTxs.length} pending
+                      </Badge>
+                    )}
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <ScrollArea className="h-[200px]">
+                    {recentTxs && recentTxs.length > 0 ? (
+                      <div className="space-y-3">
+                        {recentTxs.slice(0, 5).map((tx) => (
+                          <div
+                            key={tx.safeTxHash}
+                            className="flex items-center justify-between p-3 rounded-lg border hover-elevate"
+                            data-testid={`safe-tx-${tx.safeTxHash.slice(0, 8)}`}
+                          >
+                            <div className="flex items-center gap-3">
+                              {tx.txType === "transfer" ? (
+                                <div className="p-2 rounded-lg bg-green-500/10">
+                                  <Send className="h-4 w-4 text-green-500" />
+                                </div>
+                              ) : tx.txType === "settings_change" ? (
+                                <div className="p-2 rounded-lg bg-yellow-500/10">
+                                  <Settings className="h-4 w-4 text-yellow-500" />
+                                </div>
+                              ) : (
+                                <div className="p-2 rounded-lg bg-blue-500/10">
+                                  <FileText className="h-4 w-4 text-blue-500" />
+                                </div>
+                              )}
+                              <div>
+                                <p className="text-sm font-medium capitalize">
+                                  {tx.txType.replace("_", " ")}
+                                </p>
+                                {tx.formattedValue && tx.value !== "0" && (
+                                  <p className="text-xs text-muted-foreground">{tx.formattedValue}</p>
+                                )}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Badge
+                                variant={
+                                  tx.status === "executed" ? "default" :
+                                  tx.status === "awaiting_execution" ? "secondary" :
+                                  tx.status === "awaiting_confirmations" ? "outline" :
+                                  tx.status === "failed" ? "destructive" : "outline"
+                                }
+                              >
+                                {tx.status === "awaiting_confirmations" ? "Pending" :
+                                 tx.status === "awaiting_execution" ? "Ready" :
+                                 tx.status}
+                              </Badge>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+                        <Vault className="h-8 w-8 mb-2" />
+                        <p>No transactions synced</p>
+                        <Button variant="ghost" size="sm" onClick={() => setActiveTab("safe-wallets")}>
+                          Sync wallets
+                        </Button>
+                      </div>
+                    )}
+                  </ScrollArea>
                 </CardContent>
               </Card>
             </div>

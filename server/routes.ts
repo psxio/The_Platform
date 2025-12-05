@@ -12524,6 +12524,498 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ================== CLICKUP-INSPIRED TASK ENHANCEMENTS ==================
+
+  // Task Dependencies API
+  app.get("/api/task-dependencies/:taskType/:taskId", isAuthenticated, async (req, res) => {
+    try {
+      const { taskType, taskId } = req.params;
+      const dependencies = await storage.getTaskDependencies(taskType, parseInt(taskId));
+      res.json(dependencies);
+    } catch (error) {
+      console.error("Error fetching task dependencies:", error);
+      res.status(500).json({ error: "Failed to fetch dependencies" });
+    }
+  });
+
+  app.post("/api/task-dependencies", isAuthenticated, async (req: any, res) => {
+    try {
+      const { taskType, sourceTaskId, targetTaskId, dependencyType } = req.body;
+      const dependency = await storage.createTaskDependency({
+        taskType,
+        sourceTaskId,
+        targetTaskId,
+        dependencyType,
+        createdBy: req.user.id
+      });
+      res.status(201).json(dependency);
+    } catch (error) {
+      console.error("Error creating task dependency:", error);
+      res.status(500).json({ error: "Failed to create dependency" });
+    }
+  });
+
+  app.delete("/api/task-dependencies/:id", isAuthenticated, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      await storage.deleteTaskDependency(id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting task dependency:", error);
+      res.status(500).json({ error: "Failed to delete dependency" });
+    }
+  });
+
+  // Enhanced Subtasks API
+  app.get("/api/enhanced-subtasks/:taskType/:taskId", isAuthenticated, async (req, res) => {
+    try {
+      const { taskType, taskId } = req.params;
+      const subtasks = await storage.getEnhancedSubtasks(taskType, parseInt(taskId));
+      res.json(subtasks);
+    } catch (error) {
+      console.error("Error fetching enhanced subtasks:", error);
+      res.status(500).json({ error: "Failed to fetch subtasks" });
+    }
+  });
+
+  app.post("/api/enhanced-subtasks", isAuthenticated, async (req: any, res) => {
+    try {
+      const subtask = await storage.createEnhancedSubtask({
+        ...req.body,
+        createdBy: req.user.id
+      });
+      res.status(201).json(subtask);
+    } catch (error) {
+      console.error("Error creating enhanced subtask:", error);
+      res.status(500).json({ error: "Failed to create subtask" });
+    }
+  });
+
+  app.patch("/api/enhanced-subtasks/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const updates = req.body;
+      
+      // Handle completion
+      if (updates.completed && !updates.completedAt) {
+        updates.completedAt = new Date();
+        updates.completedBy = req.user.id;
+      } else if (updates.completed === false) {
+        updates.completedAt = null;
+        updates.completedBy = null;
+      }
+      
+      const subtask = await storage.updateEnhancedSubtask(id, updates);
+      res.json(subtask);
+    } catch (error) {
+      console.error("Error updating enhanced subtask:", error);
+      res.status(500).json({ error: "Failed to update subtask" });
+    }
+  });
+
+  app.delete("/api/enhanced-subtasks/:id", isAuthenticated, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      await storage.deleteEnhancedSubtask(id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting enhanced subtask:", error);
+      res.status(500).json({ error: "Failed to delete subtask" });
+    }
+  });
+
+  // Reorder enhanced subtasks
+  app.post("/api/enhanced-subtasks/reorder", isAuthenticated, async (req, res) => {
+    try {
+      const { subtaskIds } = req.body; // Array of IDs in desired order
+      await storage.reorderEnhancedSubtasks(subtaskIds);
+      res.json({ success: true });
+    } catch (error) {
+      console.error("Error reordering subtasks:", error);
+      res.status(500).json({ error: "Failed to reorder subtasks" });
+    }
+  });
+
+  // Task Docs API
+  app.get("/api/task-docs", isAuthenticated, async (req, res) => {
+    try {
+      const filters = {
+        taskType: req.query.taskType as string,
+        taskId: req.query.taskId ? parseInt(req.query.taskId as string) : undefined,
+        projectId: req.query.projectId ? parseInt(req.query.projectId as string) : undefined,
+        clientProfileId: req.query.clientProfileId ? parseInt(req.query.clientProfileId as string) : undefined,
+        isTemplate: req.query.isTemplate === 'true',
+        isArchived: req.query.isArchived === 'true'
+      };
+      const docs = await storage.getTaskDocs(filters);
+      res.json(docs);
+    } catch (error) {
+      console.error("Error fetching task docs:", error);
+      res.status(500).json({ error: "Failed to fetch docs" });
+    }
+  });
+
+  app.get("/api/task-docs/:id", isAuthenticated, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const doc = await storage.getTaskDoc(id);
+      if (!doc) {
+        return res.status(404).json({ error: "Doc not found" });
+      }
+      // Increment view count
+      await storage.incrementDocViewCount(id);
+      res.json(doc);
+    } catch (error) {
+      console.error("Error fetching task doc:", error);
+      res.status(500).json({ error: "Failed to fetch doc" });
+    }
+  });
+
+  app.post("/api/task-docs", isAuthenticated, async (req: any, res) => {
+    try {
+      const doc = await storage.createTaskDoc({
+        ...req.body,
+        createdBy: req.user.id
+      });
+      res.status(201).json(doc);
+    } catch (error) {
+      console.error("Error creating task doc:", error);
+      res.status(500).json({ error: "Failed to create doc" });
+    }
+  });
+
+  app.patch("/api/task-docs/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const updates = {
+        ...req.body,
+        lastEditedBy: req.user.id,
+        lastEditedAt: new Date()
+      };
+      const doc = await storage.updateTaskDoc(id, updates);
+      res.json(doc);
+    } catch (error) {
+      console.error("Error updating task doc:", error);
+      res.status(500).json({ error: "Failed to update doc" });
+    }
+  });
+
+  app.delete("/api/task-docs/:id", isAuthenticated, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      await storage.deleteTaskDoc(id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting task doc:", error);
+      res.status(500).json({ error: "Failed to delete doc" });
+    }
+  });
+
+  // Task Doc Comments API
+  app.get("/api/task-docs/:docId/comments", isAuthenticated, async (req, res) => {
+    try {
+      const docId = parseInt(req.params.docId);
+      const comments = await storage.getTaskDocComments(docId);
+      res.json(comments);
+    } catch (error) {
+      console.error("Error fetching doc comments:", error);
+      res.status(500).json({ error: "Failed to fetch comments" });
+    }
+  });
+
+  app.post("/api/task-docs/:docId/comments", isAuthenticated, async (req: any, res) => {
+    try {
+      const docId = parseInt(req.params.docId);
+      const comment = await storage.createTaskDocComment({
+        docId,
+        userId: req.user.id,
+        content: req.body.content,
+        parentCommentId: req.body.parentCommentId
+      });
+      res.status(201).json(comment);
+    } catch (error) {
+      console.error("Error creating doc comment:", error);
+      res.status(500).json({ error: "Failed to create comment" });
+    }
+  });
+
+  app.patch("/api/task-doc-comments/:id", isAuthenticated, async (req: any, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const updates = req.body;
+      
+      // Handle resolution
+      if (updates.isResolved && !updates.resolvedAt) {
+        updates.resolvedAt = new Date();
+        updates.resolvedBy = req.user.id;
+      }
+      
+      const comment = await storage.updateTaskDocComment(id, updates);
+      res.json(comment);
+    } catch (error) {
+      console.error("Error updating doc comment:", error);
+      res.status(500).json({ error: "Failed to update comment" });
+    }
+  });
+
+  app.delete("/api/task-doc-comments/:id", isAuthenticated, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      await storage.deleteTaskDocComment(id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting doc comment:", error);
+      res.status(500).json({ error: "Failed to delete comment" });
+    }
+  });
+
+  // Client Uploads API
+  app.get("/api/client-uploads/:clientProfileId", isAuthenticated, async (req, res) => {
+    try {
+      const clientProfileId = parseInt(req.params.clientProfileId);
+      const category = req.query.category as string;
+      const uploads = await storage.getClientUploads(clientProfileId, category);
+      res.json(uploads);
+    } catch (error) {
+      console.error("Error fetching client uploads:", error);
+      res.status(500).json({ error: "Failed to fetch uploads" });
+    }
+  });
+
+  app.post("/api/client-uploads/:clientProfileId", isAuthenticated, upload.single("file"), async (req: any, res) => {
+    try {
+      const clientProfileId = parseInt(req.params.clientProfileId);
+      
+      if (!req.file) {
+        return res.status(400).json({ error: "No file uploaded" });
+      }
+      
+      // Save file to uploads directory
+      const fs = await import("fs/promises");
+      const path = await import("path");
+      const uploadsDir = path.join(process.cwd(), "uploads", "client-files", clientProfileId.toString());
+      await fs.mkdir(uploadsDir, { recursive: true });
+      
+      const fileName = `${Date.now()}-${req.file.originalname}`;
+      const filePath = path.join(uploadsDir, fileName);
+      await fs.writeFile(filePath, req.file.buffer);
+      
+      const upload = await storage.createClientUpload({
+        clientProfileId,
+        uploadedBy: req.user.id,
+        fileName,
+        originalName: req.file.originalname,
+        filePath: `/uploads/client-files/${clientProfileId}/${fileName}`,
+        fileSize: req.file.size,
+        mimeType: req.file.mimetype,
+        category: req.body.category || "general",
+        description: req.body.description,
+        tags: req.body.tags ? JSON.parse(req.body.tags) : [],
+        linkedTaskId: req.body.linkedTaskId ? parseInt(req.body.linkedTaskId) : null,
+        linkedDocId: req.body.linkedDocId ? parseInt(req.body.linkedDocId) : null
+      });
+      
+      res.status(201).json(upload);
+    } catch (error) {
+      console.error("Error creating client upload:", error);
+      res.status(500).json({ error: "Failed to upload file" });
+    }
+  });
+
+  app.patch("/api/client-uploads/:id", isAuthenticated, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const upload = await storage.updateClientUpload(id, req.body);
+      res.json(upload);
+    } catch (error) {
+      console.error("Error updating client upload:", error);
+      res.status(500).json({ error: "Failed to update upload" });
+    }
+  });
+
+  app.delete("/api/client-uploads/:id", isAuthenticated, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      // Get upload to find file path
+      const upload = await storage.getClientUpload(id);
+      if (upload) {
+        // Delete physical file
+        try {
+          const fs = await import("fs/promises");
+          const path = await import("path");
+          const fullPath = path.join(process.cwd(), upload.filePath);
+          await fs.unlink(fullPath);
+        } catch (e) {
+          console.warn("Could not delete file:", e);
+        }
+      }
+      await storage.deleteClientUpload(id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting client upload:", error);
+      res.status(500).json({ error: "Failed to delete upload" });
+    }
+  });
+
+  // Kanban Config API
+  app.get("/api/kanban-config/:boardType", isAuthenticated, async (req: any, res) => {
+    try {
+      const { boardType } = req.params;
+      const boardId = req.query.boardId ? parseInt(req.query.boardId as string) : undefined;
+      
+      // Try to get user-specific config first, then fall back to board default
+      let config = await storage.getKanbanConfig(boardType, boardId, req.user.id);
+      if (!config) {
+        config = await storage.getKanbanConfig(boardType, boardId);
+      }
+      res.json(config || { columns: [], swimlaneEnabled: false });
+    } catch (error) {
+      console.error("Error fetching kanban config:", error);
+      res.status(500).json({ error: "Failed to fetch kanban config" });
+    }
+  });
+
+  app.post("/api/kanban-config", isAuthenticated, async (req: any, res) => {
+    try {
+      const config = await storage.createKanbanConfig({
+        ...req.body,
+        userId: req.body.isPersonal ? req.user.id : null
+      });
+      res.status(201).json(config);
+    } catch (error) {
+      console.error("Error creating kanban config:", error);
+      res.status(500).json({ error: "Failed to create kanban config" });
+    }
+  });
+
+  app.patch("/api/kanban-config/:id", isAuthenticated, async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const config = await storage.updateKanbanConfig(id, req.body);
+      res.json(config);
+    } catch (error) {
+      console.error("Error updating kanban config:", error);
+      res.status(500).json({ error: "Failed to update kanban config" });
+    }
+  });
+
+  // Custom Fields API
+  app.get("/api/custom-fields", isAuthenticated, async (req, res) => {
+    try {
+      const filters = {
+        scope: req.query.scope as string,
+        clientProfileId: req.query.clientProfileId ? parseInt(req.query.clientProfileId as string) : undefined,
+        boardId: req.query.boardId ? parseInt(req.query.boardId as string) : undefined,
+        campaignId: req.query.campaignId ? parseInt(req.query.campaignId as string) : undefined
+      };
+      const fields = await storage.getTaskCustomFields(filters);
+      res.json(fields);
+    } catch (error) {
+      console.error("Error fetching custom fields:", error);
+      res.status(500).json({ error: "Failed to fetch custom fields" });
+    }
+  });
+
+  app.post("/api/custom-fields", requireRole("content"), async (req: any, res) => {
+    try {
+      const field = await storage.createTaskCustomField({
+        ...req.body,
+        createdBy: req.user.id
+      });
+      res.status(201).json(field);
+    } catch (error) {
+      console.error("Error creating custom field:", error);
+      res.status(500).json({ error: "Failed to create custom field" });
+    }
+  });
+
+  app.patch("/api/custom-fields/:id", requireRole("content"), async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const field = await storage.updateTaskCustomField(id, req.body);
+      res.json(field);
+    } catch (error) {
+      console.error("Error updating custom field:", error);
+      res.status(500).json({ error: "Failed to update custom field" });
+    }
+  });
+
+  app.delete("/api/custom-fields/:id", requireRole("content"), async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      await storage.deleteTaskCustomField(id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting custom field:", error);
+      res.status(500).json({ error: "Failed to delete custom field" });
+    }
+  });
+
+  // Custom Field Values API
+  app.get("/api/custom-field-values/:taskType/:taskId", isAuthenticated, async (req, res) => {
+    try {
+      const { taskType, taskId } = req.params;
+      const values = await storage.getTaskCustomFieldValues(taskType, parseInt(taskId));
+      res.json(values);
+    } catch (error) {
+      console.error("Error fetching custom field values:", error);
+      res.status(500).json({ error: "Failed to fetch field values" });
+    }
+  });
+
+  app.post("/api/custom-field-values", isAuthenticated, async (req, res) => {
+    try {
+      const value = await storage.upsertTaskCustomFieldValue(req.body);
+      res.status(201).json(value);
+    } catch (error) {
+      console.error("Error saving custom field value:", error);
+      res.status(500).json({ error: "Failed to save field value" });
+    }
+  });
+
+  // Watcher Auto-Add Rules API
+  app.get("/api/watcher-rules", requireRole("content"), async (req, res) => {
+    try {
+      const rules = await storage.getWatcherAutoAddRules();
+      res.json(rules);
+    } catch (error) {
+      console.error("Error fetching watcher rules:", error);
+      res.status(500).json({ error: "Failed to fetch rules" });
+    }
+  });
+
+  app.post("/api/watcher-rules", requireRole("admin"), async (req, res) => {
+    try {
+      const rule = await storage.createWatcherAutoAddRule(req.body);
+      res.status(201).json(rule);
+    } catch (error) {
+      console.error("Error creating watcher rule:", error);
+      res.status(500).json({ error: "Failed to create rule" });
+    }
+  });
+
+  app.patch("/api/watcher-rules/:id", requireRole("admin"), async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const rule = await storage.updateWatcherAutoAddRule(id, req.body);
+      res.json(rule);
+    } catch (error) {
+      console.error("Error updating watcher rule:", error);
+      res.status(500).json({ error: "Failed to update rule" });
+    }
+  });
+
+  app.delete("/api/watcher-rules/:id", requireRole("admin"), async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      await storage.deleteWatcherAutoAddRule(id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting watcher rule:", error);
+      res.status(500).json({ error: "Failed to delete rule" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

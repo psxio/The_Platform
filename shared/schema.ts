@@ -2984,3 +2984,233 @@ export const daoSafeSigners = pgTable("dao_safe_signers", {
 export const insertDaoSafeSignerSchema = createInsertSchema(daoSafeSigners).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertDaoSafeSigner = z.infer<typeof insertDaoSafeSignerSchema>;
 export type DaoSafeSigner = typeof daoSafeSigners.$inferSelect;
+
+// ================== CLICKUP-INSPIRED TASK ENHANCEMENTS ==================
+
+// Task Types - different kinds of work items (ClickUp-style)
+export const taskTypes = ["task", "milestone", "bug", "feature", "story", "epic", "doc", "whiteboard"] as const;
+export type TaskType = typeof taskTypes[number];
+
+// Dependency types between tasks
+export const dependencyTypes = ["blocks", "blocked_by", "relates_to", "duplicates", "parent_of", "child_of"] as const;
+export type DependencyType = typeof dependencyTypes[number];
+
+// Task Dependencies - relationships between tasks
+export const taskDependencies = pgTable("task_dependencies", {
+  id: serial("id").primaryKey(),
+  taskType: varchar("task_type", { length: 20 }).notNull().default("content"), // "content" or "team"
+  sourceTaskId: integer("source_task_id").notNull(), // The task that has the dependency
+  targetTaskId: integer("target_task_id").notNull(), // The related task
+  dependencyType: varchar("dependency_type", { length: 20 }).$type<DependencyType>().notNull().default("blocks"),
+  createdBy: varchar("created_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertTaskDependencySchema = createInsertSchema(taskDependencies).omit({ id: true, createdAt: true });
+export type InsertTaskDependency = z.infer<typeof insertTaskDependencySchema>;
+export type TaskDependency = typeof taskDependencies.$inferSelect;
+
+// Enhanced Subtasks - subtasks with full task capabilities (ClickUp-style)
+export const enhancedSubtasks = pgTable("enhanced_subtasks", {
+  id: serial("id").primaryKey(),
+  parentTaskType: varchar("parent_task_type", { length: 20 }).notNull().default("content"), // "content" or "team"
+  parentTaskId: integer("parent_task_id").notNull(),
+  title: text("title").notNull(),
+  description: text("description"),
+  status: varchar("status", { length: 30 }).default("todo"), // todo, in_progress, done
+  priority: varchar("priority", { length: 20 }).$type<TaskPriority>().default("normal"),
+  assigneeId: varchar("assignee_id").references(() => users.id, { onDelete: "set null" }),
+  dueDate: timestamp("due_date"),
+  estimatedMinutes: integer("estimated_minutes"),
+  actualMinutes: integer("actual_minutes").default(0),
+  order: integer("order").notNull().default(0),
+  completed: boolean("completed").notNull().default(false),
+  completedAt: timestamp("completed_at"),
+  completedBy: varchar("completed_by").references(() => users.id, { onDelete: "set null" }),
+  createdBy: varchar("created_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertEnhancedSubtaskSchema = createInsertSchema(enhancedSubtasks).omit({ id: true, createdAt: true, updatedAt: true, completedAt: true });
+export type InsertEnhancedSubtask = z.infer<typeof insertEnhancedSubtaskSchema>;
+export type EnhancedSubtask = typeof enhancedSubtasks.$inferSelect;
+
+// Task Docs - rich documents attached to tasks (ClickUp Docs-style)
+export const taskDocs = pgTable("task_docs", {
+  id: serial("id").primaryKey(),
+  title: varchar("title", { length: 255 }).notNull(),
+  content: text("content"), // Rich text / markdown content
+  taskType: varchar("task_type", { length: 20 }), // "content" or "team" - null for standalone docs
+  taskId: integer("task_id"), // Associated task ID - null for standalone docs
+  projectId: integer("project_id").references(() => daoProjects.id, { onDelete: "set null" }),
+  clientProfileId: integer("client_profile_id").references(() => clientProfiles.id, { onDelete: "set null" }),
+  whiteboardId: integer("whiteboard_id").references(() => whiteboards.id, { onDelete: "set null" }),
+  docType: varchar("doc_type", { length: 30 }).default("note"), // note, spec, meeting_notes, requirements, wiki
+  coverImage: text("cover_image"), // URL or base64 for doc cover
+  icon: varchar("icon", { length: 50 }), // Emoji or icon name
+  isTemplate: boolean("is_template").default(false),
+  isPublic: boolean("is_public").default(false),
+  viewCount: integer("view_count").default(0),
+  parentDocId: integer("parent_doc_id"), // For nested docs
+  order: integer("order").default(0),
+  createdBy: varchar("created_by").notNull().references(() => users.id, { onDelete: "cascade" }),
+  lastEditedBy: varchar("last_edited_by").references(() => users.id, { onDelete: "set null" }),
+  lastEditedAt: timestamp("last_edited_at"),
+  isArchived: boolean("is_archived").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertTaskDocSchema = createInsertSchema(taskDocs).omit({ id: true, createdAt: true, updatedAt: true, lastEditedAt: true });
+export type InsertTaskDoc = z.infer<typeof insertTaskDocSchema>;
+export type TaskDoc = typeof taskDocs.$inferSelect;
+
+// Task Doc Comments - comments on docs
+export const taskDocComments = pgTable("task_doc_comments", {
+  id: serial("id").primaryKey(),
+  docId: integer("doc_id").notNull().references(() => taskDocs.id, { onDelete: "cascade" }),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  content: text("content").notNull(),
+  parentCommentId: integer("parent_comment_id"), // For threaded comments
+  isResolved: boolean("is_resolved").default(false),
+  resolvedBy: varchar("resolved_by").references(() => users.id, { onDelete: "set null" }),
+  resolvedAt: timestamp("resolved_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertTaskDocCommentSchema = createInsertSchema(taskDocComments).omit({ id: true, createdAt: true, updatedAt: true, resolvedAt: true });
+export type InsertTaskDocComment = z.infer<typeof insertTaskDocCommentSchema>;
+export type TaskDocComment = typeof taskDocComments.$inferSelect;
+
+// Per-Client Uploads - files uploaded directly to client profiles
+export const clientUploads = pgTable("client_uploads", {
+  id: serial("id").primaryKey(),
+  clientProfileId: integer("client_profile_id").notNull().references(() => clientProfiles.id, { onDelete: "cascade" }),
+  uploadedBy: varchar("uploaded_by").notNull().references(() => users.id, { onDelete: "cascade" }),
+  fileName: varchar("file_name", { length: 255 }).notNull(),
+  originalName: varchar("original_name", { length: 255 }).notNull(),
+  filePath: text("file_path").notNull(),
+  fileSize: integer("file_size"), // Size in bytes
+  mimeType: varchar("mime_type", { length: 100 }),
+  category: varchar("category", { length: 50 }).default("general"), // general, contract, asset, reference, deliverable
+  description: text("description"),
+  tags: text("tags").array(),
+  linkedTaskId: integer("linked_task_id").references(() => contentTasks.id, { onDelete: "set null" }),
+  linkedDocId: integer("linked_doc_id").references(() => taskDocs.id, { onDelete: "set null" }),
+  isArchived: boolean("is_archived").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertClientUploadSchema = createInsertSchema(clientUploads).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertClientUpload = z.infer<typeof insertClientUploadSchema>;
+export type ClientUpload = typeof clientUploads.$inferSelect;
+
+// Kanban Board Configuration - per-board settings for enhanced Kanban
+export const kanbanConfigs = pgTable("kanban_configs", {
+  id: serial("id").primaryKey(),
+  boardType: varchar("board_type", { length: 20 }).notNull().default("content"), // "content", "team", or custom board ID
+  boardId: integer("board_id"), // For team boards, references teamBoards.id
+  userId: varchar("user_id").references(() => users.id, { onDelete: "cascade" }), // Personal config if set
+  // Column settings
+  columns: jsonb("columns").$type<{
+    id: string;
+    name: string;
+    wipLimit?: number;
+    color?: string;
+    collapsed?: boolean;
+    order: number;
+  }[]>().default([]),
+  // Swimlane configuration
+  swimlaneEnabled: boolean("swimlane_enabled").default(false),
+  swimlaneGroupBy: varchar("swimlane_group_by", { length: 30 }), // "assignee", "client", "priority", "type", "campaign"
+  swimlaneCollapsed: jsonb("swimlane_collapsed").$type<string[]>().default([]), // IDs of collapsed swimlanes
+  // Card display settings
+  showSubtasks: boolean("show_subtasks").default(true),
+  showDueDate: boolean("show_due_date").default(true),
+  showAssignee: boolean("show_assignee").default(true),
+  showPriority: boolean("show_priority").default(true),
+  showTimeTracking: boolean("show_time_tracking").default(false),
+  showWatchers: boolean("show_watchers").default(false),
+  showDependencies: boolean("show_dependencies").default(true),
+  showProgress: boolean("show_progress").default(true),
+  cardSize: varchar("card_size", { length: 20 }).default("medium"), // compact, medium, large
+  // Filters
+  savedFilters: jsonb("saved_filters").$type<{
+    id: string;
+    name: string;
+    filters: Record<string, any>;
+    isDefault?: boolean;
+  }[]>().default([]),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertKanbanConfigSchema = createInsertSchema(kanbanConfigs).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertKanbanConfig = z.infer<typeof insertKanbanConfigSchema>;
+export type KanbanConfig = typeof kanbanConfigs.$inferSelect;
+
+// Task Custom Fields - dynamic fields for tasks (ClickUp-style)
+export const customFieldTypes = ["text", "number", "dropdown", "date", "checkbox", "url", "email", "phone", "currency", "rating", "labels", "people"] as const;
+export type CustomFieldType = typeof customFieldTypes[number];
+
+export const taskCustomFields = pgTable("task_custom_fields", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 100 }).notNull(),
+  fieldType: varchar("field_type", { length: 20 }).$type<CustomFieldType>().notNull(),
+  description: text("description"),
+  options: jsonb("options"), // For dropdown/labels: [{id, label, color}]
+  isRequired: boolean("is_required").default(false),
+  showInCard: boolean("show_in_card").default(false), // Show on Kanban card
+  showInList: boolean("show_in_list").default(true), // Show in list view
+  defaultValue: text("default_value"),
+  // Scope - which tasks this field applies to
+  scope: varchar("scope", { length: 20 }).default("all"), // "all", "content", "team", "client"
+  clientProfileId: integer("client_profile_id").references(() => clientProfiles.id, { onDelete: "cascade" }), // If client-specific
+  boardId: integer("board_id").references(() => teamBoards.id, { onDelete: "cascade" }), // If board-specific
+  campaignId: integer("campaign_id").references(() => campaigns.id, { onDelete: "cascade" }), // If campaign-specific
+  order: integer("order").default(0),
+  createdBy: varchar("created_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertTaskCustomFieldSchema = createInsertSchema(taskCustomFields).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertTaskCustomField = z.infer<typeof insertTaskCustomFieldSchema>;
+export type TaskCustomField = typeof taskCustomFields.$inferSelect;
+
+// Task Custom Field Values - values for custom fields on specific tasks
+export const taskCustomFieldValues = pgTable("task_custom_field_values", {
+  id: serial("id").primaryKey(),
+  customFieldId: integer("custom_field_id").notNull().references(() => taskCustomFields.id, { onDelete: "cascade" }),
+  taskType: varchar("task_type", { length: 20 }).notNull().default("content"), // "content" or "team"
+  taskId: integer("task_id").notNull(),
+  value: text("value"), // Stored as string, parsed based on field type
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertTaskCustomFieldValueSchema = createInsertSchema(taskCustomFieldValues).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertTaskCustomFieldValue = z.infer<typeof insertTaskCustomFieldValueSchema>;
+export type TaskCustomFieldValue = typeof taskCustomFieldValues.$inferSelect;
+
+// Watcher Auto-Add Rules - when to automatically add watchers
+export const watcherAutoAddTriggers = ["create", "comment", "edit", "assign", "mention"] as const;
+export type WatcherAutoAddTrigger = typeof watcherAutoAddTriggers[number];
+
+export const watcherAutoAddRules = pgTable("watcher_auto_add_rules", {
+  id: serial("id").primaryKey(),
+  trigger: varchar("trigger", { length: 20 }).$type<WatcherAutoAddTrigger>().notNull(),
+  isEnabled: boolean("is_enabled").default(true),
+  scope: varchar("scope", { length: 20 }).default("all"), // "all", "content", "team"
+  boardId: integer("board_id").references(() => teamBoards.id, { onDelete: "cascade" }),
+  campaignId: integer("campaign_id").references(() => campaigns.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertWatcherAutoAddRuleSchema = createInsertSchema(watcherAutoAddRules).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertWatcherAutoAddRule = z.infer<typeof insertWatcherAutoAddRuleSchema>;
+export type WatcherAutoAddRule = typeof watcherAutoAddRules.$inferSelect;

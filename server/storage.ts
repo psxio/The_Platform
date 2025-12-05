@@ -153,6 +153,16 @@ import {
   // Safe Transaction History
   type DaoSafeTxHistory, type InsertDaoSafeTxHistory, daoSafeTxHistory,
   type DaoSafeSigner, type InsertDaoSafeSigner, daoSafeSigners,
+  // ClickUp-inspired Task Enhancements
+  type TaskDependency, type InsertTaskDependency, taskDependencies,
+  type EnhancedSubtask, type InsertEnhancedSubtask, enhancedSubtasks,
+  type TaskDoc, type InsertTaskDoc, taskDocs,
+  type TaskDocComment, type InsertTaskDocComment, taskDocComments,
+  type ClientUpload, type InsertClientUpload, clientUploads,
+  type KanbanConfig, type InsertKanbanConfig, kanbanConfigs,
+  type TaskCustomField, type InsertTaskCustomField, taskCustomFields,
+  type TaskCustomFieldValue, type InsertTaskCustomFieldValue, taskCustomFieldValues,
+  type WatcherAutoAddRule, type InsertWatcherAutoAddRule, watcherAutoAddRules,
 } from "@shared/schema";
 import { db } from "./db";
 import { desc, eq, and, sql, or, isNull } from "drizzle-orm";
@@ -957,6 +967,62 @@ export interface IStorage {
   createMediaConversion(conversion: InsertMediaConversion): Promise<MediaConversion>;
   updateMediaConversion(id: number, updates: Partial<InsertMediaConversion>): Promise<MediaConversion | undefined>;
   deleteMediaConversion(id: number): Promise<boolean>;
+
+  // ==================== CLICKUP-INSPIRED TASK ENHANCEMENTS ====================
+
+  // Task Dependencies
+  getTaskDependencies(taskType: string, taskId: number): Promise<TaskDependency[]>;
+  createTaskDependency(dependency: InsertTaskDependency): Promise<TaskDependency>;
+  deleteTaskDependency(id: number): Promise<boolean>;
+
+  // Enhanced Subtasks
+  getEnhancedSubtasks(taskType: string, taskId: number): Promise<EnhancedSubtask[]>;
+  createEnhancedSubtask(subtask: InsertEnhancedSubtask): Promise<EnhancedSubtask>;
+  updateEnhancedSubtask(id: number, updates: Partial<InsertEnhancedSubtask>): Promise<EnhancedSubtask | undefined>;
+  deleteEnhancedSubtask(id: number): Promise<boolean>;
+  reorderEnhancedSubtasks(subtaskIds: number[]): Promise<void>;
+
+  // Task Docs
+  getTaskDocs(filters?: { taskType?: string; taskId?: number; projectId?: number; clientProfileId?: number; isTemplate?: boolean; isArchived?: boolean }): Promise<TaskDoc[]>;
+  getTaskDoc(id: number): Promise<TaskDoc | undefined>;
+  createTaskDoc(doc: InsertTaskDoc): Promise<TaskDoc>;
+  updateTaskDoc(id: number, updates: Partial<InsertTaskDoc>): Promise<TaskDoc | undefined>;
+  deleteTaskDoc(id: number): Promise<boolean>;
+  incrementDocViewCount(id: number): Promise<void>;
+
+  // Task Doc Comments
+  getTaskDocComments(docId: number): Promise<TaskDocComment[]>;
+  createTaskDocComment(comment: InsertTaskDocComment): Promise<TaskDocComment>;
+  updateTaskDocComment(id: number, updates: Partial<InsertTaskDocComment>): Promise<TaskDocComment | undefined>;
+  deleteTaskDocComment(id: number): Promise<boolean>;
+
+  // Client Uploads
+  getClientUploads(clientProfileId: number, category?: string): Promise<ClientUpload[]>;
+  getClientUpload(id: number): Promise<ClientUpload | undefined>;
+  createClientUpload(upload: InsertClientUpload): Promise<ClientUpload>;
+  updateClientUpload(id: number, updates: Partial<InsertClientUpload>): Promise<ClientUpload | undefined>;
+  deleteClientUpload(id: number): Promise<boolean>;
+
+  // Kanban Config
+  getKanbanConfig(boardType: string, boardId?: number, userId?: string): Promise<KanbanConfig | undefined>;
+  createKanbanConfig(config: InsertKanbanConfig): Promise<KanbanConfig>;
+  updateKanbanConfig(id: number, updates: Partial<InsertKanbanConfig>): Promise<KanbanConfig | undefined>;
+
+  // Task Custom Fields
+  getTaskCustomFields(filters?: { scope?: string; clientProfileId?: number; boardId?: number; campaignId?: number }): Promise<TaskCustomField[]>;
+  createTaskCustomField(field: InsertTaskCustomField): Promise<TaskCustomField>;
+  updateTaskCustomField(id: number, updates: Partial<InsertTaskCustomField>): Promise<TaskCustomField | undefined>;
+  deleteTaskCustomField(id: number): Promise<boolean>;
+
+  // Task Custom Field Values
+  getTaskCustomFieldValues(taskType: string, taskId: number): Promise<TaskCustomFieldValue[]>;
+  upsertTaskCustomFieldValue(value: InsertTaskCustomFieldValue): Promise<TaskCustomFieldValue>;
+
+  // Watcher Auto-Add Rules
+  getWatcherAutoAddRules(): Promise<WatcherAutoAddRule[]>;
+  createWatcherAutoAddRule(rule: InsertWatcherAutoAddRule): Promise<WatcherAutoAddRule>;
+  updateWatcherAutoAddRule(id: number, updates: Partial<InsertWatcherAutoAddRule>): Promise<WatcherAutoAddRule | undefined>;
+  deleteWatcherAutoAddRule(id: number): Promise<boolean>;
 }
 
 export class DbStorage implements IStorage {
@@ -6443,6 +6509,325 @@ export class DbStorage implements IStorage {
       visibility: "private",
       icon: "user"
     });
+  }
+
+  // ==================== CLICKUP-INSPIRED TASK ENHANCEMENTS ====================
+
+  // Task Dependencies
+  async getTaskDependencies(taskType: string, taskId: number): Promise<TaskDependency[]> {
+    return db.select().from(taskDependencies)
+      .where(and(
+        eq(taskDependencies.taskType, taskType),
+        or(
+          eq(taskDependencies.sourceTaskId, taskId),
+          eq(taskDependencies.targetTaskId, taskId)
+        )
+      ))
+      .orderBy(desc(taskDependencies.createdAt));
+  }
+
+  async createTaskDependency(dependency: InsertTaskDependency): Promise<TaskDependency> {
+    const [created] = await db.insert(taskDependencies).values(dependency).returning();
+    return created;
+  }
+
+  async deleteTaskDependency(id: number): Promise<boolean> {
+    await db.delete(taskDependencies).where(eq(taskDependencies.id, id));
+    return true;
+  }
+
+  // Enhanced Subtasks
+  async getEnhancedSubtasks(taskType: string, taskId: number): Promise<EnhancedSubtask[]> {
+    return db.select().from(enhancedSubtasks)
+      .where(and(
+        eq(enhancedSubtasks.parentTaskType, taskType),
+        eq(enhancedSubtasks.parentTaskId, taskId)
+      ))
+      .orderBy(enhancedSubtasks.order);
+  }
+
+  async createEnhancedSubtask(subtask: InsertEnhancedSubtask): Promise<EnhancedSubtask> {
+    // Get max order for this parent
+    const existing = await db.select().from(enhancedSubtasks)
+      .where(and(
+        eq(enhancedSubtasks.parentTaskType, subtask.parentTaskType),
+        eq(enhancedSubtasks.parentTaskId, subtask.parentTaskId)
+      ));
+    const maxOrder = existing.reduce((max, s) => Math.max(max, s.order), -1);
+    
+    const [created] = await db.insert(enhancedSubtasks)
+      .values({ ...subtask, order: maxOrder + 1 })
+      .returning();
+    return created;
+  }
+
+  async updateEnhancedSubtask(id: number, updates: Partial<InsertEnhancedSubtask>): Promise<EnhancedSubtask | undefined> {
+    const [updated] = await db.update(enhancedSubtasks)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(enhancedSubtasks.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteEnhancedSubtask(id: number): Promise<boolean> {
+    await db.delete(enhancedSubtasks).where(eq(enhancedSubtasks.id, id));
+    return true;
+  }
+
+  async reorderEnhancedSubtasks(subtaskIds: number[]): Promise<void> {
+    await Promise.all(
+      subtaskIds.map((id, index) =>
+        db.update(enhancedSubtasks)
+          .set({ order: index })
+          .where(eq(enhancedSubtasks.id, id))
+      )
+    );
+  }
+
+  // Task Docs
+  async getTaskDocs(filters?: { taskType?: string; taskId?: number; projectId?: number; clientProfileId?: number; isTemplate?: boolean; isArchived?: boolean }): Promise<TaskDoc[]> {
+    let conditions = [];
+    
+    if (filters?.taskType && filters?.taskId) {
+      conditions.push(and(
+        eq(taskDocs.taskType, filters.taskType),
+        eq(taskDocs.taskId, filters.taskId)
+      ));
+    }
+    if (filters?.projectId) {
+      conditions.push(eq(taskDocs.projectId, filters.projectId));
+    }
+    if (filters?.clientProfileId) {
+      conditions.push(eq(taskDocs.clientProfileId, filters.clientProfileId));
+    }
+    if (filters?.isTemplate !== undefined) {
+      conditions.push(eq(taskDocs.isTemplate, filters.isTemplate));
+    }
+    if (filters?.isArchived !== undefined) {
+      conditions.push(eq(taskDocs.isArchived, filters.isArchived));
+    } else {
+      conditions.push(eq(taskDocs.isArchived, false)); // Default to non-archived
+    }
+    
+    return db.select().from(taskDocs)
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(desc(taskDocs.createdAt));
+  }
+
+  async getTaskDoc(id: number): Promise<TaskDoc | undefined> {
+    const [doc] = await db.select().from(taskDocs).where(eq(taskDocs.id, id));
+    return doc;
+  }
+
+  async createTaskDoc(doc: InsertTaskDoc): Promise<TaskDoc> {
+    const [created] = await db.insert(taskDocs).values(doc).returning();
+    return created;
+  }
+
+  async updateTaskDoc(id: number, updates: Partial<InsertTaskDoc>): Promise<TaskDoc | undefined> {
+    const [updated] = await db.update(taskDocs)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(taskDocs.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteTaskDoc(id: number): Promise<boolean> {
+    await db.delete(taskDocs).where(eq(taskDocs.id, id));
+    return true;
+  }
+
+  async incrementDocViewCount(id: number): Promise<void> {
+    await db.update(taskDocs)
+      .set({ viewCount: sql`${taskDocs.viewCount} + 1` })
+      .where(eq(taskDocs.id, id));
+  }
+
+  // Task Doc Comments
+  async getTaskDocComments(docId: number): Promise<TaskDocComment[]> {
+    return db.select().from(taskDocComments)
+      .where(eq(taskDocComments.docId, docId))
+      .orderBy(taskDocComments.createdAt);
+  }
+
+  async createTaskDocComment(comment: InsertTaskDocComment): Promise<TaskDocComment> {
+    const [created] = await db.insert(taskDocComments).values(comment).returning();
+    return created;
+  }
+
+  async updateTaskDocComment(id: number, updates: Partial<InsertTaskDocComment>): Promise<TaskDocComment | undefined> {
+    const [updated] = await db.update(taskDocComments)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(taskDocComments.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteTaskDocComment(id: number): Promise<boolean> {
+    await db.delete(taskDocComments).where(eq(taskDocComments.id, id));
+    return true;
+  }
+
+  // Client Uploads
+  async getClientUploads(clientProfileId: number, category?: string): Promise<ClientUpload[]> {
+    let query = db.select().from(clientUploads)
+      .where(eq(clientUploads.clientProfileId, clientProfileId));
+    
+    if (category) {
+      query = db.select().from(clientUploads)
+        .where(and(
+          eq(clientUploads.clientProfileId, clientProfileId),
+          eq(clientUploads.category, category)
+        ));
+    }
+    
+    return query.orderBy(desc(clientUploads.createdAt));
+  }
+
+  async getClientUpload(id: number): Promise<ClientUpload | undefined> {
+    const [upload] = await db.select().from(clientUploads).where(eq(clientUploads.id, id));
+    return upload;
+  }
+
+  async createClientUpload(upload: InsertClientUpload): Promise<ClientUpload> {
+    const [created] = await db.insert(clientUploads).values(upload).returning();
+    return created;
+  }
+
+  async updateClientUpload(id: number, updates: Partial<InsertClientUpload>): Promise<ClientUpload | undefined> {
+    const [updated] = await db.update(clientUploads)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(clientUploads.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteClientUpload(id: number): Promise<boolean> {
+    await db.delete(clientUploads).where(eq(clientUploads.id, id));
+    return true;
+  }
+
+  // Kanban Config
+  async getKanbanConfig(boardType: string, boardId?: number, userId?: string): Promise<KanbanConfig | undefined> {
+    let conditions = [eq(kanbanConfigs.boardType, boardType)];
+    
+    if (boardId !== undefined) {
+      conditions.push(eq(kanbanConfigs.boardId, boardId));
+    }
+    if (userId) {
+      conditions.push(eq(kanbanConfigs.userId, userId));
+    }
+    
+    const [config] = await db.select().from(kanbanConfigs)
+      .where(and(...conditions));
+    return config;
+  }
+
+  async createKanbanConfig(config: InsertKanbanConfig): Promise<KanbanConfig> {
+    const [created] = await db.insert(kanbanConfigs).values(config).returning();
+    return created;
+  }
+
+  async updateKanbanConfig(id: number, updates: Partial<InsertKanbanConfig>): Promise<KanbanConfig | undefined> {
+    const [updated] = await db.update(kanbanConfigs)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(kanbanConfigs.id, id))
+      .returning();
+    return updated;
+  }
+
+  // Task Custom Fields
+  async getTaskCustomFields(filters?: { scope?: string; clientProfileId?: number; boardId?: number; campaignId?: number }): Promise<TaskCustomField[]> {
+    let conditions = [];
+    
+    if (filters?.scope) {
+      conditions.push(eq(taskCustomFields.scope, filters.scope));
+    }
+    if (filters?.clientProfileId) {
+      conditions.push(eq(taskCustomFields.clientProfileId, filters.clientProfileId));
+    }
+    if (filters?.boardId) {
+      conditions.push(eq(taskCustomFields.boardId, filters.boardId));
+    }
+    if (filters?.campaignId) {
+      conditions.push(eq(taskCustomFields.campaignId, filters.campaignId));
+    }
+    
+    return db.select().from(taskCustomFields)
+      .where(conditions.length > 0 ? and(...conditions) : undefined)
+      .orderBy(taskCustomFields.order);
+  }
+
+  async createTaskCustomField(field: InsertTaskCustomField): Promise<TaskCustomField> {
+    const [created] = await db.insert(taskCustomFields).values(field).returning();
+    return created;
+  }
+
+  async updateTaskCustomField(id: number, updates: Partial<InsertTaskCustomField>): Promise<TaskCustomField | undefined> {
+    const [updated] = await db.update(taskCustomFields)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(taskCustomFields.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteTaskCustomField(id: number): Promise<boolean> {
+    await db.delete(taskCustomFields).where(eq(taskCustomFields.id, id));
+    return true;
+  }
+
+  // Task Custom Field Values
+  async getTaskCustomFieldValues(taskType: string, taskId: number): Promise<TaskCustomFieldValue[]> {
+    return db.select().from(taskCustomFieldValues)
+      .where(and(
+        eq(taskCustomFieldValues.taskType, taskType),
+        eq(taskCustomFieldValues.taskId, taskId)
+      ));
+  }
+
+  async upsertTaskCustomFieldValue(value: InsertTaskCustomFieldValue): Promise<TaskCustomFieldValue> {
+    // Check if value exists
+    const [existing] = await db.select().from(taskCustomFieldValues)
+      .where(and(
+        eq(taskCustomFieldValues.customFieldId, value.customFieldId),
+        eq(taskCustomFieldValues.taskType, value.taskType),
+        eq(taskCustomFieldValues.taskId, value.taskId)
+      ));
+    
+    if (existing) {
+      const [updated] = await db.update(taskCustomFieldValues)
+        .set({ value: value.value, updatedAt: new Date() })
+        .where(eq(taskCustomFieldValues.id, existing.id))
+        .returning();
+      return updated;
+    }
+    
+    const [created] = await db.insert(taskCustomFieldValues).values(value).returning();
+    return created;
+  }
+
+  // Watcher Auto-Add Rules
+  async getWatcherAutoAddRules(): Promise<WatcherAutoAddRule[]> {
+    return db.select().from(watcherAutoAddRules)
+      .where(eq(watcherAutoAddRules.isEnabled, true));
+  }
+
+  async createWatcherAutoAddRule(rule: InsertWatcherAutoAddRule): Promise<WatcherAutoAddRule> {
+    const [created] = await db.insert(watcherAutoAddRules).values(rule).returning();
+    return created;
+  }
+
+  async updateWatcherAutoAddRule(id: number, updates: Partial<InsertWatcherAutoAddRule>): Promise<WatcherAutoAddRule | undefined> {
+    const [updated] = await db.update(watcherAutoAddRules)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(watcherAutoAddRules.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteWatcherAutoAddRule(id: number): Promise<boolean> {
+    await db.delete(watcherAutoAddRules).where(eq(watcherAutoAddRules.id, id));
+    return true;
   }
 }
 

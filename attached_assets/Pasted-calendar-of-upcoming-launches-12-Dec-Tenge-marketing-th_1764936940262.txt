@@ -1,0 +1,276 @@
+calendar of upcoming launches 
+- 12 Dec : Tenge marketing thing? 
+- 12 Dec : Titanium Launch
+- 15 Dec : Peach and Pablo (Miggles)
+- 18 Dec : Signals Launch
+
+
+
+
+IMPORTANT EXECUTABLES HERE
+
+[Internal] Finish content app + publish and onboard content guys
+[Miggles] Peach & Pablo Portal
+[Internal] Agency website
+[Fireside] Work out OPEX budget and burn rate / current funds / holdings overview 
+[Internal] Signal website
+[Internal] Signal portal
+[Internal] Reach out to the 90 partners get promo posts scheduled for launches & pfp reveal 
+[Internal] work on PSX tingz
+[Internal] PFP traits complete
+[Internal] PFP Generator functional 
+[TITANIUM] Edit titanium NFT teaster video 
+[Fireside] create port-mortem / x article
+
+
+
+IDEA UPGRADES/ IMPROVMEENTS / not as important executables  BELOW 
+
+[TASK 1 4444 Portal]
+
+is there a way to make the winners on here when an admin in admi ndashobard wnats to push the latest winners onto the scatter.art our collectio nis scatter.art/collection/4444 platform to push a new mint list how would htis be possible think deeply this owuld be for 4444 collection this would also have to go through safe.global as its set in a multi sig the ocntrratc 4444 is tied to the mult isig but we can change the wallet owner to anythign so mayb e do soemthing like thgat like transfer
+
+
+Scatter.art Mint List Integration - Future Reference
+Goal
+Automatically push whitelist winners from wl.theagency.vc admin dashboard to create new mint lists on Scatter.art for the 4444 collection on Base.
+
+What We Know
+Collection: 4444 on Base
+Contract Address: 0x4B199051b674f16B04EB1d5074AD24d2c9d4b3a4
+Scatter URL: scatter.art/collection/4444
+Multi-sig: Collection is tied to a Safe multi-sig wallet
+Our Portal: wl.theagency.vc - users complete tasks to earn spots
+What We Need From Scatter
+Is there an API to create mint lists programmatically?
+
+Endpoint URL
+Authentication method (API key, OAuth, wallet signature?)
+Required payload format (wallet addresses, pricing, limits, timing)
+If no API exists:
+
+Is this on their roadmap?
+Can we call the contract directly to add mint lists?
+What contract function would we call and what parameters?
+If contract-level integration:
+
+What's the function signature for adding a mint list?
+Does it use Merkle roots or direct address arrays?
+Who needs to be the caller (contract owner/Safe)?
+Implementation Options (Pending Scatter Response)
+If API Available:
+
+Backend endpoint: POST /api/admin/push-to-scatter
+Takes selected winner addresses from our dashboard
+Authenticates with Scatter API
+Creates mint list with configured parameters
+If Contract-Level Only:
+
+Generate Merkle root from winner addresses
+Create Safe transaction proposal with contract call
+Multi-sig owners approve on safe.global
+Transaction executes to add mint list on-chain
+If No Programmatic Option:
+
+CSV export from our admin dashboard
+Admin manually uploads to Scatter creator dashboard
+Admin Dashboard Flow (Once Known)
+Admin selects winners in whitelist-admin page
+Clicks "Push to Scatter" button
+Configures mint list settings (price, wallet limit, start/end time)
+System either calls API or generates Safe proposal
+Displays confirmation/status
+
+
+
+[TASK 2 4444 portal]
+is the google auth database backup system functional and when is the lasttime we backedup the databases ans is this anyhwere in the admin panel?
+
+
+You need to add this redirect URI in Google Cloud Console:
+
+https://wl.theagency.vc/api/admin/google-sheets/oauth2callback
+
+Steps to fix:
+
+Go to Google Cloud Console
+Select your project
+Go to APIs & Services → Credentials
+Click on your OAuth 2.0 Client ID
+Under Authorized redirect URIs, add:
+https://wl.theagency.vc/api/admin/google-sheets/oauth2callback
+(Also keep https://thecreators.com/api/admin/google-sheets/oauth2callback if needed)
+Save
+
+
+
+
+
+
+also add an in broweser viewer so we can see the models here and link entire page  this in the onchain ops toolkit but only viewable if your an admin 
+
+
+
+
+[TASK 3 4444 portal]
+think about how to make this self serve where clients go on our website and can do all of this think deeply about how thta would would and expand heavily at a massive scale  they can setup a portal and ongifure t exactly to the level i can htink security think scale thinmjk optimization think apis think ui, think backend, think redudency, everything just like zealy.io but way better because we're much more powerful and think about how much it would cost to spin these things up per client how muc we should charge etc etc etc also we wanna make it limited not everyone can sign up for the swelf server and use it make a detailed document plan for this incorporating eveyrhign about this security how to make it work the ui enhancments ow it first givne current portal how to make sure nothing affectsd  antyuhgi else how to ubild htiso ut while still having eveyrthning functional from the cureent stage of this platform etc etc like everything thtas n the amdin panel should be configureable and setup in a streaminelined most effectient way possible for this self server think very very deeply 
+
+
+
+
+[TASK 4 4444 portal]
+USEER SIGN UP EMAIL LIST WHAT MAKES A USER A USER HOW WOULD THTA BE VALUABLE DO WE HAVE UYSERS? THAT LIEK A REAOSN COMPANY HAS 
+
+
+[TASK 5 admin app the platform]
+how can we integreata features like https://motioncue.com/portfolio/
+
+
+
+[TASK 6 4444 portal]
+Add a dynamic tutorial system that adapts to user progress and highlights new features as they become available.
+
+
+
+[TASK 7]
+when your bored af or fried your tough tasks. can you forward him a message about our reveal date of 12/12 for that main webpage shoutout.
+
+
+[TASK 8 tenge portal]
+hook tenge portal up to 4444 backend or push live 
+
+
+
+[TASK 9 4444 portal]
+finalize rewards.exe "THE HUB" app  and push live
+
+
+
+[TASK 10 admin app the platform]
+make text based prompt blender 3d model generation 
+
+
+
+[TASK 11 4444 portal]
+lets say i have multiple of these exact app isnatnces urnning and ive made idffernetp ortals for many prijects like 5 each using a different instance of htis app on replit for their prject i need to connect them into one on the backend here as those all dont have any of the latets updates they dont veen have the desktop enviorment they were fokred a while ago how would i go about integrating them into here like if we see whitelists there 4444 fireside and one more but they arent hookedu p to any other ones they are rela but not on here htye areo n the other instances how do i link them to hook up to hgere instead so i can jus tadd the odfmanss here and have them go to their specific portal ours is wl.theagency.vc theres w.firesidebase.com theres wl.titanium.finance thres wl.entertheryft.com
+
+Multi-Portal Consolidation Guide
+Overview
+Consolidate multiple SIGNALS portal instances (Tenge, Fireside, Titanium, RYFT) into the main backend at wl.theagency.vc, allowing all portals to share one codebase while maintaining separate branding, data, and admin access.
+
+Current Setup
+Portal	Domain	Replit Instance	Status
+The Agency (4444)	wl.theagency.vc	THIS INSTANCE	Live
+Fireside	w.firesidebase.com	Separate Replit	Live
+Titanium	wl.titanium.finance	Separate Replit	Live
+RYFT	wl.entertheryft.com	Separate Replit	Live
+Tenge	tenge--psxonbase.replit.app	Separate Replit	Test
+Target Setup
+All domains point to this single backend. Domain detection loads the correct theme/whitelist automatically.
+
+How It Works
+User visits wl.titanium.finance
+Backend detects hostname from request
+Database lookup finds whitelist where domains array contains "titanium.finance"
+Returns project config (theme, whitelist ID, branding)
+Frontend loads Titanium theme, shows only Titanium data
+Backend Changes Required
+1. Database: Add Domains Column
+ALTER TABLE whitelists ADD COLUMN domains TEXT[] DEFAULT '{}';
+
+Each whitelist gets its domains:
+
+Tenge: ["tenge--psxonbase.replit.app", "wl.tenge.xyz"]
+Fireside: ["firesidebase.com", "w.firesidebase.com"]
+2. New API Endpoint
+GET /api/resolve-project?host=wl.titanium.finance
+
+Returns:
+
+{
+  "whitelistId": 7,
+  "slug": "titanium",
+  "theme": "titanium",
+  "name": "Titanium Finance"
+}
+
+3. Admin Project Scoping
+New table admin_project_roles:
+
+Links admin wallet → whitelist IDs they can access
+Superadmins see everything
+Project admins only see their project
+Migration Steps Per Portal
+Step 1: Export Data from Source Instance
+SSH into the source Replit and run:
+
+# Export whitelist entries
+psql $DATABASE_URL -c "\COPY (SELECT wallet_address, email, x_username, discord_username, created_at FROM whitelist_entries) TO '/tmp/entries.csv' WITH CSV HEADER"
+# Export tasks (if applicable)
+psql $DATABASE_URL -c "\COPY (SELECT * FROM tasks) TO '/tmp/tasks.csv' WITH CSV HEADER"
+# Export claim drops (if applicable)  
+psql $DATABASE_URL -c "\COPY (SELECT * FROM claim_drops) TO '/tmp/claims.csv' WITH CSV HEADER"
+
+Download CSVs from the file browser.
+
+Step 2: Collect Theme Assets
+From the source instance, gather:
+
+Logo files (SVG/PNG)
+Color palette (check tailwind.config or CSS variables)
+Fonts (if custom)
+Background images (if any)
+Step 3: Create Whitelist in Main Backend
+Via admin dashboard or direct DB:
+
+INSERT INTO whitelists (name, slug, route, theme, domains)
+VALUES ('Tenge', 'tenge', '/tenge', 'tenge', 
+        ARRAY['tenge--psxonbase.replit.app']);
+
+Step 4: Add Theme to Main Codebase
+Add theme configuration to client/src/lib/theme-loader.ts:
+
+tenge: {
+  primary: "#...",
+  background: "#...",
+  logo: "/assets/tenge-logo.svg"
+}
+
+Step 5: Import Entries
+Upload CSV and map to new whitelist ID:
+
+INSERT INTO whitelist_entries (whitelist_id, wallet_address, email, ...)
+SELECT [NEW_WHITELIST_ID], wallet_address, email, ...
+FROM imported_csv;
+
+Step 6: Assign Project Admins
+INSERT INTO admin_project_roles (admin_wallet, whitelist_id, role)
+VALUES ('0x...tengeAdmin', [TENGE_WHITELIST_ID], 'admin');
+
+Step 7: Update DNS (When Ready)
+Point the custom domain to this Replit's deployment URL in DNS settings.
+
+Step 8: Test & Verify
+Visit the domain
+Confirm correct theme loads
+Check entries appear in admin
+Test task completion flows
+Verify claim drops work
+Step 9: Decommission Old Instance
+Once verified, stop/delete the old Replit instance.
+
+Testing with Tenge
+Since Tenge uses a Replit subdomain (no real domain yet), it's perfect for testing:
+
+Build the domain detection system
+Add Tenge whitelist with tenge--psxonbase.replit.app domain
+Import Tenge data
+Visit tenge--psxonbase.replit.app (still hits old instance)
+Can't fully test until DNS points here - but can test via direct API calls with ?host=tenge--psxonbase.replit.app parameter
+Order of Operations
+✅ Build domain detection system in main backend
+✅ Test with Tenge (safe, not live)
+🔄 Migrate Fireside
+🔄 Migrate Titanium
+🔄 Migrate RYFT
+🔄 Update remaining features as needed

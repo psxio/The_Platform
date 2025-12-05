@@ -13,7 +13,7 @@ The frontend is built with React and TypeScript using Vite, Wouter for routing, 
 
 ### Navigation Architecture (December 2024)
 The platform uses a **space-based navigation** system with role-gated access:
-- **SpaceSwitcher**: Top-level navigation between spaces (My Workspace, Content, Onchain, DAO, Admin)
+- **SpaceSwitcher**: Top-level navigation between spaces (My Workspace, Tasks, Content, Onchain, DAO, Admin)
 - **SpaceTabs**: Secondary navigation within each space
 - **SpotlightSearch**: Global Cmd+K search across all spaces with role-filtered results
 
@@ -22,10 +22,17 @@ The platform uses a **space-based navigation** system with role-gated access:
 - **content**: `/content-dashboard` - Content Studio with grouped tabs (Work, Team, Library, Reports, Settings)
 - **admin**: `/content-dashboard` + `/admin/control-center` - Full access plus unified admin dashboard
 
+**Tasks Navigation (All Roles):**
+- `/tasks` route accessible by ALL roles (web3, content, admin) for universal task management
+- Defaults to Kanban view for intuitive visual task management
+- Supports List, Kanban, and Calendar views with user preference persistence (localStorage)
+- Quick access "Team Tasks" buttons in Production Command Center and DAO Dashboard headers
+
 **Spotlight Search** (Cmd+K or click search button):
 - Role-filtered page navigation (content/web3/admin pages only shown to authorized users)
 - Dynamic search across tasks, projects, clients, wallets, and collections
 - Quick keyboard shortcut access from anywhere in the app
+- Includes "Tasks" and "Open Kanban Board" quick actions
 
 ### Role Architecture
 The system uses three roles: `web3`, `content`, and `admin`, with role-based access control enforced throughout. Clients in the buy power system are `content`-role users accessing a self-service portal.

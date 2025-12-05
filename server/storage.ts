@@ -163,6 +163,9 @@ import {
   type TaskCustomField, type InsertTaskCustomField, taskCustomFields,
   type TaskCustomFieldValue, type InsertTaskCustomFieldValue, taskCustomFieldValues,
   type WatcherAutoAddRule, type InsertWatcherAutoAddRule, watcherAutoAddRules,
+  // 3D Model Generation
+  type ModelGenerationJob, type InsertModelGenerationJob, modelGenerationJobs,
+  type ModelGenerationStatus,
 } from "@shared/schema";
 import { db } from "./db";
 import { desc, eq, and, sql, or, isNull } from "drizzle-orm";
@@ -6827,6 +6830,37 @@ export class DbStorage implements IStorage {
 
   async deleteWatcherAutoAddRule(id: number): Promise<boolean> {
     await db.delete(watcherAutoAddRules).where(eq(watcherAutoAddRules.id, id));
+    return true;
+  }
+
+  // 3D Model Generation Jobs
+  async getModelGenerationJobs(userId: string): Promise<ModelGenerationJob[]> {
+    return db.select().from(modelGenerationJobs)
+      .where(eq(modelGenerationJobs.userId, userId))
+      .orderBy(desc(modelGenerationJobs.createdAt));
+  }
+
+  async getModelGenerationJob(id: number): Promise<ModelGenerationJob | undefined> {
+    const [job] = await db.select().from(modelGenerationJobs)
+      .where(eq(modelGenerationJobs.id, id));
+    return job;
+  }
+
+  async createModelGenerationJob(job: InsertModelGenerationJob): Promise<ModelGenerationJob> {
+    const [created] = await db.insert(modelGenerationJobs).values(job).returning();
+    return created;
+  }
+
+  async updateModelGenerationJob(id: number, updates: Partial<ModelGenerationJob>): Promise<ModelGenerationJob | undefined> {
+    const [updated] = await db.update(modelGenerationJobs)
+      .set(updates)
+      .where(eq(modelGenerationJobs.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteModelGenerationJob(id: number): Promise<boolean> {
+    await db.delete(modelGenerationJobs).where(eq(modelGenerationJobs.id, id));
     return true;
   }
 }

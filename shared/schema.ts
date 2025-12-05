@@ -3215,3 +3215,45 @@ export const watcherAutoAddRules = pgTable("watcher_auto_add_rules", {
 export const insertWatcherAutoAddRuleSchema = createInsertSchema(watcherAutoAddRules).omit({ id: true, createdAt: true, updatedAt: true });
 export type InsertWatcherAutoAddRule = z.infer<typeof insertWatcherAutoAddRuleSchema>;
 export type WatcherAutoAddRule = typeof watcherAutoAddRules.$inferSelect;
+
+// ============================================================
+// 3D Model Generation (Admin-only Blender Pipeline)
+// ============================================================
+
+export const modelGenerationStatuses = ["pending", "generating_code", "running_blender", "exporting", "completed", "failed"] as const;
+export type ModelGenerationStatus = typeof modelGenerationStatuses[number];
+
+export const modelExportFormats = ["glb", "fbx", "blend", "obj", "stl"] as const;
+export type ModelExportFormat = typeof modelExportFormats[number];
+
+export const modelGenerationJobs = pgTable("model_generation_jobs", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  prompt: text("prompt").notNull(),
+  exportFormat: varchar("export_format", { length: 20 }).$type<ModelExportFormat>().notNull().default("glb"),
+  status: varchar("status", { length: 30 }).$type<ModelGenerationStatus>().notNull().default("pending"),
+  generatedCode: text("generated_code"), // The Blender Python script
+  outputFilePath: varchar("output_file_path", { length: 500 }), // Path to exported file
+  outputFileName: varchar("output_file_name", { length: 255 }), // Original filename for download
+  fileSize: integer("file_size"), // Size in bytes
+  errorMessage: text("error_message"), // Error details if failed
+  blenderLogs: text("blender_logs"), // Stdout/stderr from Blender
+  processingTimeMs: integer("processing_time_ms"), // How long it took
+  createdAt: timestamp("created_at").defaultNow(),
+  completedAt: timestamp("completed_at"),
+});
+
+export const insertModelGenerationJobSchema = createInsertSchema(modelGenerationJobs).omit({ 
+  id: true, 
+  createdAt: true, 
+  completedAt: true,
+  generatedCode: true,
+  outputFilePath: true,
+  outputFileName: true,
+  fileSize: true,
+  errorMessage: true,
+  blenderLogs: true,
+  processingTimeMs: true,
+});
+export type InsertModelGenerationJob = z.infer<typeof insertModelGenerationJobSchema>;
+export type ModelGenerationJob = typeof modelGenerationJobs.$inferSelect;

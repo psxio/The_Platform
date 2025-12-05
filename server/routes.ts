@@ -13016,6 +13016,139 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ========================================
+  // 3D Model Generation API (Admin Only)
+  // ========================================
+  
+  app.get("/api/model-generation/jobs", requireRole("admin"), async (req: any, res) => {
+    try {
+      const jobs = await storage.getModelGenerationJobs(req.user.id);
+      res.json(jobs);
+    } catch (error) {
+      console.error("Error fetching model generation jobs:", error);
+      res.status(500).json({ error: "Failed to fetch jobs" });
+    }
+  });
+
+  app.get("/api/model-generation/jobs/:id", requireRole("admin"), async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const job = await storage.getModelGenerationJob(id);
+      if (!job) {
+        return res.status(404).json({ error: "Job not found" });
+      }
+      res.json(job);
+    } catch (error) {
+      console.error("Error fetching job:", error);
+      res.status(500).json({ error: "Failed to fetch job" });
+    }
+  });
+
+  app.post("/api/model-generation/jobs", requireRole("admin"), async (req: any, res) => {
+    try {
+      const { prompt, exportFormat = "glb" } = req.body;
+      
+      if (!prompt || prompt.trim().length === 0) {
+        return res.status(400).json({ error: "Prompt is required" });
+      }
+
+      const job = await storage.createModelGenerationJob({
+        userId: req.user.id,
+        prompt: prompt.trim(),
+        exportFormat,
+        status: "pending",
+      });
+
+      // Start processing in background
+      const { executeBlenderJob } = await import("./blender-service");
+      
+      executeBlenderJob(
+        job.id,
+        job.prompt,
+        job.exportFormat as any,
+        async (status, data) => {
+          await storage.updateModelGenerationJob(job.id, {
+            status,
+            ...data,
+          });
+        }
+      ).then(async (result) => {
+        await storage.updateModelGenerationJob(job.id, {
+          status: result.status,
+          generatedCode: result.generatedCode,
+          outputFilePath: result.outputFilePath,
+          outputFileName: result.outputFileName,
+          fileSize: result.fileSize,
+          errorMessage: result.errorMessage,
+          blenderLogs: result.blenderLogs,
+          processingTimeMs: result.processingTimeMs,
+          completedAt: new Date(),
+        });
+      }).catch(async (error) => {
+        await storage.updateModelGenerationJob(job.id, {
+          status: "failed",
+          errorMessage: error.message,
+          completedAt: new Date(),
+        });
+      });
+
+      res.status(201).json(job);
+    } catch (error) {
+      console.error("Error creating model generation job:", error);
+      res.status(500).json({ error: "Failed to create job" });
+    }
+  });
+
+  app.get("/api/model-generation/download/:id", requireRole("admin"), async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const job = await storage.getModelGenerationJob(id);
+      
+      if (!job) {
+        return res.status(404).json({ error: "Job not found" });
+      }
+      
+      if (job.status !== "completed" || !job.outputFilePath) {
+        return res.status(400).json({ error: "Model not ready for download" });
+      }
+
+      const { modelFileExists } = await import("./blender-service");
+      
+      if (!modelFileExists(job.outputFileName!)) {
+        return res.status(404).json({ error: "File not found" });
+      }
+
+      res.download(job.outputFilePath, job.outputFileName!, (err) => {
+        if (err) {
+          console.error("Download error:", err);
+        }
+      });
+    } catch (error) {
+      console.error("Error downloading model:", error);
+      res.status(500).json({ error: "Failed to download model" });
+    }
+  });
+
+  app.delete("/api/model-generation/jobs/:id", requireRole("admin"), async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const job = await storage.getModelGenerationJob(id);
+      
+      if (job?.outputFilePath) {
+        const fs = await import("fs");
+        if (fs.existsSync(job.outputFilePath)) {
+          fs.unlinkSync(job.outputFilePath);
+        }
+      }
+      
+      await storage.deleteModelGenerationJob(id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting job:", error);
+      res.status(500).json({ error: "Failed to delete job" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

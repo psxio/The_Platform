@@ -47,6 +47,7 @@ import DuplicateChecker from "@/pages/duplicate-checker";
 import WalletScreener from "@/pages/wallet-screener";
 import MediaConverter from "@/pages/media-converter";
 import TeamTasks from "@/pages/team-tasks";
+import ModelGenerator from "@/pages/model-generator";
 import NotFound from "@/pages/not-found";
 import { Web3WelcomeModal } from "@/components/web3-welcome-modal";
 import { WelcomeModal } from "@/components/welcome-modal";
@@ -274,6 +275,9 @@ function AuthenticatedRouter() {
       </Route>
       <Route path="/admin/team-structure">
         <AdminRouteGuard><TeamStructure /></AdminRouteGuard>
+      </Route>
+      <Route path="/admin/3d-generator">
+        <AdminRouteGuard><ModelGenerator /></AdminRouteGuard>
       </Route>
       <Route path="/admin">
         <AdminRouteGuard><Redirect to="/admin/control-center" /></AdminRouteGuard>

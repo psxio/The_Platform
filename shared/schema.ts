@@ -2914,3 +2914,73 @@ export const teamTaskActivity = pgTable("team_task_activity", {
 export const insertTeamTaskActivitySchema = createInsertSchema(teamTaskActivity).omit({ id: true, createdAt: true });
 export type InsertTeamTaskActivity = z.infer<typeof insertTeamTaskActivitySchema>;
 export type TeamTaskActivity = typeof teamTaskActivity.$inferSelect;
+
+// ================== SAFE TRANSACTION HISTORY ==================
+
+// Transaction types for categorization
+export const safeTxTypes = ["transfer", "contract_interaction", "module_transaction", "rejection", "settings_change"] as const;
+export type SafeTxType = typeof safeTxTypes[number];
+
+// Full transaction history for Safe wallets (includes executed and pending)
+export const daoSafeTxHistory = pgTable("dao_safe_tx_history", {
+  id: serial("id").primaryKey(),
+  walletId: integer("wallet_id").notNull().references(() => daoSafeWallets.id, { onDelete: "cascade" }),
+  safeTxHash: varchar("safe_tx_hash", { length: 66 }).notNull().unique(),
+  txHash: varchar("tx_hash", { length: 66 }), // On-chain tx hash (null if not executed)
+  chainId: integer("chain_id").notNull(),
+  safeAddress: varchar("safe_address", { length: 42 }).notNull(),
+  to: varchar("to", { length: 42 }).notNull(),
+  value: varchar("value", { length: 78 }).default("0"), // Wei value as string
+  data: text("data"), // Calldata
+  dataDecoded: text("data_decoded"), // JSON decoded method call
+  operation: integer("operation").default(0), // 0 = CALL, 1 = DELEGATECALL
+  nonce: integer("nonce").notNull(),
+  txType: varchar("tx_type", { length: 30 }).$type<SafeTxType>().default("transfer"),
+  // Status tracking
+  status: varchar("status", { length: 30 }).$type<SafeTxStatus>().default("awaiting_confirmations"),
+  confirmationsRequired: integer("confirmations_required").notNull(),
+  confirmationsCount: integer("confirmations_count").default(0),
+  // Signatures/confirmations stored as JSON
+  confirmations: jsonb("confirmations").$type<{
+    signer: string;
+    signature: string;
+    signatureType?: string;
+    submittedAt?: string;
+    platformUserId?: string;
+  }[]>().default([]),
+  // User attribution - who initiated/executed (links to platform users)
+  proposerAddress: varchar("proposer_address", { length: 42 }),
+  proposerUserId: varchar("proposer_user_id").references(() => users.id, { onDelete: "set null" }),
+  executorAddress: varchar("executor_address", { length: 42 }),
+  executorUserId: varchar("executor_user_id").references(() => users.id, { onDelete: "set null" }),
+  // Token/value metadata for UI display
+  tokenSymbol: varchar("token_symbol", { length: 20 }),
+  tokenDecimals: integer("token_decimals"),
+  formattedValue: varchar("formatted_value", { length: 100 }), // Human-readable value
+  // Timestamps
+  submittedAt: timestamp("submitted_at"),
+  executedAt: timestamp("executed_at"),
+  lastSyncedAt: timestamp("last_synced_at").defaultNow(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertDaoSafeTxHistorySchema = createInsertSchema(daoSafeTxHistory).omit({ id: true, createdAt: true, lastSyncedAt: true });
+export type InsertDaoSafeTxHistory = z.infer<typeof insertDaoSafeTxHistorySchema>;
+export type DaoSafeTxHistory = typeof daoSafeTxHistory.$inferSelect;
+
+// Signer to User Mapping - Link Safe wallet owners to platform users
+export const daoSafeSigners = pgTable("dao_safe_signers", {
+  id: serial("id").primaryKey(),
+  walletId: integer("wallet_id").notNull().references(() => daoSafeWallets.id, { onDelete: "cascade" }),
+  signerAddress: varchar("signer_address", { length: 42 }).notNull(),
+  platformUserId: varchar("platform_user_id").references(() => users.id, { onDelete: "set null" }),
+  label: varchar("label", { length: 100 }), // Optional display name
+  isActive: boolean("is_active").default(true), // Still an owner on the Safe
+  lastSeenAt: timestamp("last_seen_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertDaoSafeSignerSchema = createInsertSchema(daoSafeSigners).omit({ id: true, createdAt: true, updatedAt: true });
+export type InsertDaoSafeSigner = z.infer<typeof insertDaoSafeSignerSchema>;
+export type DaoSafeSigner = typeof daoSafeSigners.$inferSelect;

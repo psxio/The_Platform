@@ -73,6 +73,8 @@ import { TaskWatchers } from "./task-watchers";
 import { TaskApprovals } from "./task-approvals";
 import { YouTubeReferences } from "./youtube-references";
 import { SaveButton } from "./saved-items";
+import { EnhancedSubtasks } from "./enhanced-subtasks";
+import { TaskDependencies } from "./task-dependencies";
 
 interface TaskDetailsDialogProps {
   open: boolean;
@@ -1076,6 +1078,26 @@ export function TaskDetailsDialog({ open, onOpenChange, task, onEdit, currentUse
                 </div>
               )}
             </div>
+
+            <Separator />
+
+            {/* Enhanced Subtasks Section (ClickUp-style) */}
+            <EnhancedSubtasks
+              taskType="content"
+              taskId={task.id}
+              canEdit={permissions.canAddSubtasks}
+              canAdd={permissions.canAddSubtasks}
+              canDelete={permissions.canDeleteSubtasks}
+            />
+
+            <Separator />
+
+            {/* Task Dependencies Section */}
+            <TaskDependencies
+              taskType="content"
+              taskId={task.id}
+              canEdit={isAdmin || isTaskOwner || isTaskCreator}
+            />
 
             <Separator />
 

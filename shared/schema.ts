@@ -2998,8 +2998,9 @@ export type DependencyType = typeof dependencyTypes[number];
 // Task Dependencies - relationships between tasks
 export const taskDependencies = pgTable("task_dependencies", {
   id: serial("id").primaryKey(),
-  taskType: varchar("task_type", { length: 20 }).notNull().default("content"), // "content" or "team"
+  taskType: varchar("task_type", { length: 20 }).notNull().default("content"), // "content" or "team" (source task type)
   sourceTaskId: integer("source_task_id").notNull(), // The task that has the dependency
+  targetTaskType: varchar("target_task_type", { length: 20 }).notNull().default("content"), // "content" or "team" (target task type)
   targetTaskId: integer("target_task_id").notNull(), // The related task
   dependencyType: varchar("dependency_type", { length: 20 }).$type<DependencyType>().notNull().default("blocks"),
   createdBy: varchar("created_by").references(() => users.id, { onDelete: "set null" }),

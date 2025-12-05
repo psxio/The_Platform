@@ -1,0 +1,12 @@
+is there a way to make the winners on here when an admin in admi ndashobard wnats to push the latest winners onto the scatter.art platform to push a new mint list how would htis be possible think deeply this owuld be for 4444 collection this would also have to go through safe.global as its set in a multi sig the ocntrratc 4444 is tied to the mult isig but we can change the wallet owner to anythign so mayb e do soemthing like thgat like transfer
+
+is there a bug sunmission bug report place where if someone encounters a bug on the mobile or the desktop environment they can rport it and we cna view it in the amdin panel someonwere n liek a new page called bug submissions or something add a section in the desktop enviorment where users can report bugs they find and this pops up a a notifaction for us to see in a new page in the admin panlel think abot this deeply think about how people can abuse this and think about intuitive ness and htin kahow it would be different from mobile ot desktop etc etc thin kdeeply 
+
+is the google auth database backup system functional and when is the lasttime we backedup the databases ans is this anyhwere in the admin panel?
+
+auto tasks being posted fomr an active x account thats configures is not being created as required, also when you fix that ensure it autoremoves that after 2 days and itsj ust in the approporiate category no longer required so we dont have 10000 required tasks 
+
+where is the notifcation system on desktop enviorment is it there and where is it in the admin panel? think deeply
+
+think about how to make this self serve where clients go on our website and can do all of this think deeply about how thta would would and expand heavily at a massive scale  they can setup a portal and ongifure t exactly to the level i can htink security think scale thinmjk optimization think apis think ui, think backend, think redudency, everything 
+

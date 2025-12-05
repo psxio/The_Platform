@@ -79,7 +79,7 @@ const spaces: Space[] = [
     description: "Treasury, projects, and governance",
     homeRoute: "/dao",
     pathPrefix: ["/dao"],
-    roles: ["content", "admin"],
+    roles: ["web3", "content", "admin"],
   },
   {
     id: "admin",

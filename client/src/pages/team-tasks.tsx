@@ -49,9 +49,19 @@ const VISIBILITY_OPTIONS = [
   { value: "all_team", label: "All Team", icon: Users, description: "Everyone can access" },
 ];
 
+const STORAGE_KEY = "team-tasks-view-mode";
+
 export default function TeamTasks() {
   const [selectedBoardId, setSelectedBoardId] = useState<number | null>(null);
-  const [viewMode, setViewMode] = useState<"list" | "kanban" | "calendar">("kanban");
+  const [viewMode, setViewMode] = useState<"list" | "kanban" | "calendar">(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved === "list" || saved === "kanban" || saved === "calendar") {
+        return saved;
+      }
+    }
+    return "kanban";
+  });
   const [createBoardOpen, setCreateBoardOpen] = useState(false);
   const [createTaskOpen, setCreateTaskOpen] = useState(false);
   const [taskDetailOpen, setTaskDetailOpen] = useState(false);
@@ -69,6 +79,11 @@ export default function TeamTasks() {
     queryKey: ["/api/team-boards"],
     enabled: isAuthenticated,
   });
+
+  // Persist view mode preference
+  useEffect(() => {
+    localStorage.setItem(STORAGE_KEY, viewMode);
+  }, [viewMode]);
 
   // Auto-select first board or personal board
   useEffect(() => {

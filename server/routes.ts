@@ -12211,9 +12211,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(403).json({ error: "You don't have permission to edit this task" });
       }
       
+      const oldStatus = task.status;
       const oldAssignee = task.assigneeId;
+      const oldDueDate = task.dueDate;
       const updated = await storage.updateTeamTask(id, req.body, user.id);
       
+      // Notify new assignee
       if (req.body.assigneeId && req.body.assigneeId !== oldAssignee && req.body.assigneeId !== user.id) {
         await storage.createNotification({
           userId: req.body.assigneeId,
@@ -12223,6 +12226,59 @@ export async function registerRoutes(app: Express): Promise<Server> {
           relatedType: "team_task",
           relatedId: id,
         });
+      }
+      
+      // Notify watchers about status change
+      if (req.body.status && req.body.status !== oldStatus) {
+        const watchers = await storage.getTaskWatchersByType("team", id);
+        for (const watcher of watchers) {
+          if (watcher.userId !== user.id && watcher.notifyOnStatusChange) {
+            await storage.createNotification({
+              userId: watcher.userId,
+              type: "task_status_change",
+              title: "Task status updated",
+              message: `"${task.title}" status changed from ${oldStatus} to ${req.body.status}`,
+              relatedType: "team_task",
+              relatedId: id,
+            });
+          }
+        }
+      }
+      
+      // Notify watchers about assignee change
+      if (req.body.assigneeId && req.body.assigneeId !== oldAssignee) {
+        const watchers = await storage.getTaskWatchersByType("team", id);
+        for (const watcher of watchers) {
+          if (watcher.userId !== user.id && watcher.notifyOnAssignment) {
+            await storage.createNotification({
+              userId: watcher.userId,
+              type: "task_assignee_change",
+              title: "Task assignee updated",
+              message: `"${task.title}" assignee was changed`,
+              relatedType: "team_task",
+              relatedId: id,
+            });
+          }
+        }
+      }
+      
+      // Notify watchers about due date change
+      if (req.body.dueDate !== undefined && req.body.dueDate !== oldDueDate) {
+        const watchers = await storage.getTaskWatchersByType("team", id);
+        for (const watcher of watchers) {
+          if (watcher.userId !== user.id && watcher.notifyOnStatusChange) {
+            await storage.createNotification({
+              userId: watcher.userId,
+              type: "task_due_date_change",
+              title: "Task due date updated",
+              message: req.body.dueDate 
+                ? `"${task.title}" due date changed to ${new Date(req.body.dueDate).toLocaleDateString()}`
+                : `"${task.title}" due date was removed`,
+              relatedType: "team_task",
+              relatedId: id,
+            });
+          }
+        }
       }
       
       res.json(updated);
@@ -12344,6 +12400,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         content: req.body.content,
       });
       
+      // Notify task creator and assignee
       const notifyUsers = new Set<string>();
       if (task.createdBy !== user.id) notifyUsers.add(task.createdBy);
       if (task.assigneeId && task.assigneeId !== user.id) notifyUsers.add(task.assigneeId);
@@ -12357,6 +12414,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
           relatedType: "team_task",
           relatedId: taskId,
         });
+      }
+      
+      // Notify watchers about new comment
+      const watchers = await storage.getTaskWatchersByType("team", taskId);
+      for (const watcher of watchers) {
+        // Skip if already notified as creator/assignee, or is the commenter
+        if (!notifyUsers.has(watcher.userId) && watcher.userId !== user.id && watcher.notifyOnComment) {
+          await storage.createNotification({
+            userId: watcher.userId,
+            type: "comment_added",
+            title: "New comment on watched task",
+            message: `${user.firstName || user.email} commented on: ${task.title}`,
+            relatedType: "team_task",
+            relatedId: taskId,
+          });
+        }
       }
       
       res.status(201).json(comment);

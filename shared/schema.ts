@@ -3293,7 +3293,7 @@ export type ModelGenerationJob = typeof modelGenerationJobs.$inferSelect;
 // Unified Chat Terminal (Admin-only Multi-Platform Messaging)
 // ============================================================
 
-export const chatPlatformTypes = ["discord", "telegram", "farcaster"] as const;
+export const chatPlatformTypes = ["discord", "telegram", "farcaster", "email", "whatsapp", "irc", "nntp"] as const;
 export type ChatPlatformType = typeof chatPlatformTypes[number];
 
 export const chatConnectionStatuses = ["disconnected", "connecting", "connected", "error"] as const;

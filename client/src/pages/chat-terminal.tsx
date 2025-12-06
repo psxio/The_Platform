@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, type ComponentType } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -42,9 +42,12 @@ import {
   Trash2,
   X,
   Key,
+  Hash,
+  Globe,
+  MessageCircle,
 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
-import { SiDiscord, SiTelegram } from "react-icons/si";
+import { SiDiscord, SiTelegram, SiWhatsapp } from "react-icons/si";
 import type { 
   ChatPlatform, 
   ChatContact, 
@@ -57,12 +60,20 @@ const PLATFORM_COLORS: Record<ChatPlatformType, string> = {
   discord: "bg-[#5865F2]",
   telegram: "bg-[#0088cc]",
   farcaster: "bg-gradient-to-r from-purple-500 to-purple-700",
+  email: "bg-[#EA4335]",
+  whatsapp: "bg-[#25D366]",
+  irc: "bg-[#7289da]",
+  nntp: "bg-[#4B5563]",
 };
 
-const PLATFORM_ICONS: Record<ChatPlatformType, typeof SiDiscord> = {
+const PLATFORM_ICONS: Record<ChatPlatformType, ComponentType<{ className?: string }>> = {
   discord: SiDiscord,
   telegram: SiTelegram,
   farcaster: SiTelegram,
+  email: Mail,
+  whatsapp: SiWhatsapp,
+  irc: Hash,
+  nntp: Globe,
 };
 
 function PlatformIcon({ platform, className }: { platform: ChatPlatformType; className?: string }) {
@@ -163,6 +174,10 @@ function SetupDialog({ platform, onClose }: { platform: ChatPlatformType; onClos
       case "discord": return "DISCORD_BOT_TOKEN";
       case "telegram": return "TELEGRAM_BOT_TOKEN";
       case "farcaster": return "NEYNAR_API_KEY";
+      case "email": return "EMAIL_SMTP_PASSWORD";
+      case "whatsapp": return "WHATSAPP_API_TOKEN";
+      case "irc": return "IRC_SERVER_PASSWORD";
+      case "nntp": return "NNTP_SERVER_PASSWORD";
       default: return "API_KEY";
     }
   };
@@ -397,20 +412,249 @@ function SetupDialog({ platform, onClose }: { platform: ChatPlatformType; onClos
     </div>
   );
 
+  const renderEmailSetup = () => (
+    <div className="space-y-4">
+      {step === 1 && (
+        <>
+          <div className="p-4 bg-muted rounded-lg">
+            <h4 className="font-medium mb-2">Step 1: Get SMTP Credentials</h4>
+            <ol className="text-sm text-muted-foreground space-y-2 list-decimal list-inside">
+              <li>Get your SMTP server details from your email provider</li>
+              <li>For Gmail, enable 2FA and create an App Password</li>
+              <li>For other providers, check their SMTP documentation</li>
+              <li>Note your SMTP host, port, username, and password</li>
+            </ol>
+          </div>
+          <Button onClick={() => setStep(2)} className="w-full">I have my SMTP credentials</Button>
+        </>
+      )}
+      {step === 2 && (
+        <>
+          <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+            <h4 className="font-medium mb-2 flex items-center gap-2">
+              <Key className="h-4 w-4 text-amber-500" />
+              Step 2: Set Environment Secrets
+            </h4>
+            <div className="text-sm text-muted-foreground space-y-2">
+              <p>Configure the following environment secrets:</p>
+              <div className="p-2 bg-background rounded font-mono text-xs space-y-1">
+                <div>EMAIL_SMTP_HOST=smtp.gmail.com</div>
+                <div>EMAIL_SMTP_PORT=587</div>
+                <div>EMAIL_SMTP_USER=your@email.com</div>
+                <div>EMAIL_SMTP_PASSWORD=your_app_password</div>
+              </div>
+            </div>
+          </div>
+          <div className="space-y-3">
+            <div>
+              <Label htmlFor="label">Connection Name</Label>
+              <Input id="label" value={label} onChange={(e) => setLabel(e.target.value)} placeholder="e.g., Work Email" data-testid="input-email-label" />
+            </div>
+            <div className="flex items-center gap-2">
+              <Checkbox id="secret-configured" checked={secretConfigured} onCheckedChange={(checked) => setSecretConfigured(checked === true)} data-testid="checkbox-secret-configured" />
+              <Label htmlFor="secret-configured" className="text-sm cursor-pointer">I've configured the email secrets</Label>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setStep(1)}>Back</Button>
+            <Button onClick={handleSubmit} disabled={setupMutation.isPending || !secretConfigured} className="flex-1" data-testid="button-connect-email">
+              {setupMutation.isPending ? <RefreshCw className="w-4 h-4 animate-spin mr-2" /> : null}
+              Register Email
+            </Button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+
+  const renderWhatsAppSetup = () => (
+    <div className="space-y-4">
+      {step === 1 && (
+        <>
+          <div className="p-4 bg-muted rounded-lg">
+            <h4 className="font-medium mb-2">Step 1: Get WhatsApp Business API Access</h4>
+            <ol className="text-sm text-muted-foreground space-y-2 list-decimal list-inside">
+              <li>Go to <a href="https://developers.facebook.com" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Meta for Developers</a></li>
+              <li>Create an app with WhatsApp Business API access</li>
+              <li>Set up a WhatsApp Business Account</li>
+              <li>Generate a permanent access token</li>
+            </ol>
+          </div>
+          <Button onClick={() => setStep(2)} className="w-full">I have my API access</Button>
+        </>
+      )}
+      {step === 2 && (
+        <>
+          <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+            <h4 className="font-medium mb-2 flex items-center gap-2">
+              <Key className="h-4 w-4 text-amber-500" />
+              Step 2: Set Environment Secret
+            </h4>
+            <div className="text-sm text-muted-foreground space-y-2">
+              <p>For security, tokens are stored as environment secrets.</p>
+              <div className="p-2 bg-background rounded font-mono text-xs">
+                WHATSAPP_API_TOKEN=your_whatsapp_api_token
+              </div>
+            </div>
+          </div>
+          <div className="space-y-3">
+            <div>
+              <Label htmlFor="label">Connection Name</Label>
+              <Input id="label" value={label} onChange={(e) => setLabel(e.target.value)} placeholder="e.g., Business WhatsApp" data-testid="input-whatsapp-label" />
+            </div>
+            <div className="flex items-center gap-2">
+              <Checkbox id="secret-configured" checked={secretConfigured} onCheckedChange={(checked) => setSecretConfigured(checked === true)} data-testid="checkbox-secret-configured" />
+              <Label htmlFor="secret-configured" className="text-sm cursor-pointer">I've added WHATSAPP_API_TOKEN to Secrets</Label>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setStep(1)}>Back</Button>
+            <Button onClick={handleSubmit} disabled={setupMutation.isPending || !secretConfigured} className="flex-1" data-testid="button-connect-whatsapp">
+              {setupMutation.isPending ? <RefreshCw className="w-4 h-4 animate-spin mr-2" /> : null}
+              Register WhatsApp
+            </Button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+
+  const renderIRCSetup = () => (
+    <div className="space-y-4">
+      {step === 1 && (
+        <>
+          <div className="p-4 bg-muted rounded-lg">
+            <h4 className="font-medium mb-2">Step 1: Get IRC Server Details</h4>
+            <ol className="text-sm text-muted-foreground space-y-2 list-decimal list-inside">
+              <li>Choose an IRC network (e.g., Libera.Chat, OFTC, Freenode)</li>
+              <li>Register your nickname if required</li>
+              <li>Note the server address and port (usually 6667 or 6697 for SSL)</li>
+              <li>Get your registered password if applicable</li>
+            </ol>
+          </div>
+          <Button onClick={() => setStep(2)} className="w-full">I have my IRC details</Button>
+        </>
+      )}
+      {step === 2 && (
+        <>
+          <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+            <h4 className="font-medium mb-2 flex items-center gap-2">
+              <Key className="h-4 w-4 text-amber-500" />
+              Step 2: Set Environment Secrets
+            </h4>
+            <div className="text-sm text-muted-foreground space-y-2">
+              <p>Configure the following environment secrets:</p>
+              <div className="p-2 bg-background rounded font-mono text-xs space-y-1">
+                <div>IRC_SERVER=irc.libera.chat</div>
+                <div>IRC_PORT=6697</div>
+                <div>IRC_NICKNAME=YourNick</div>
+                <div>IRC_SERVER_PASSWORD=your_password</div>
+              </div>
+            </div>
+          </div>
+          <div className="space-y-3">
+            <div>
+              <Label htmlFor="label">Connection Name</Label>
+              <Input id="label" value={label} onChange={(e) => setLabel(e.target.value)} placeholder="e.g., Libera.Chat" data-testid="input-irc-label" />
+            </div>
+            <div className="flex items-center gap-2">
+              <Checkbox id="secret-configured" checked={secretConfigured} onCheckedChange={(checked) => setSecretConfigured(checked === true)} data-testid="checkbox-secret-configured" />
+              <Label htmlFor="secret-configured" className="text-sm cursor-pointer">I've configured the IRC secrets</Label>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setStep(1)}>Back</Button>
+            <Button onClick={handleSubmit} disabled={setupMutation.isPending || !secretConfigured} className="flex-1" data-testid="button-connect-irc">
+              {setupMutation.isPending ? <RefreshCw className="w-4 h-4 animate-spin mr-2" /> : null}
+              Register IRC
+            </Button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+
+  const renderNNTPSetup = () => (
+    <div className="space-y-4">
+      {step === 1 && (
+        <>
+          <div className="p-4 bg-muted rounded-lg">
+            <h4 className="font-medium mb-2">Step 1: Get NNTP Server Details</h4>
+            <ol className="text-sm text-muted-foreground space-y-2 list-decimal list-inside">
+              <li>Identify your NNTP/Usenet server (from ISP or paid provider)</li>
+              <li>Get the server address (e.g., news.example.com)</li>
+              <li>Note the port (usually 119 or 563 for SSL)</li>
+              <li>Obtain your username and password if authentication is required</li>
+            </ol>
+          </div>
+          <Button onClick={() => setStep(2)} className="w-full">I have my NNTP details</Button>
+        </>
+      )}
+      {step === 2 && (
+        <>
+          <div className="p-4 bg-amber-500/10 border border-amber-500/20 rounded-lg">
+            <h4 className="font-medium mb-2 flex items-center gap-2">
+              <Key className="h-4 w-4 text-amber-500" />
+              Step 2: Set Environment Secrets
+            </h4>
+            <div className="text-sm text-muted-foreground space-y-2">
+              <p>Configure the following environment secrets:</p>
+              <div className="p-2 bg-background rounded font-mono text-xs space-y-1">
+                <div>NNTP_SERVER=news.example.com</div>
+                <div>NNTP_PORT=563</div>
+                <div>NNTP_USERNAME=your_username</div>
+                <div>NNTP_SERVER_PASSWORD=your_password</div>
+              </div>
+            </div>
+          </div>
+          <div className="space-y-3">
+            <div>
+              <Label htmlFor="label">Connection Name</Label>
+              <Input id="label" value={label} onChange={(e) => setLabel(e.target.value)} placeholder="e.g., Usenet Server" data-testid="input-nntp-label" />
+            </div>
+            <div className="flex items-center gap-2">
+              <Checkbox id="secret-configured" checked={secretConfigured} onCheckedChange={(checked) => setSecretConfigured(checked === true)} data-testid="checkbox-secret-configured" />
+              <Label htmlFor="secret-configured" className="text-sm cursor-pointer">I've configured the NNTP secrets</Label>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => setStep(1)}>Back</Button>
+            <Button onClick={handleSubmit} disabled={setupMutation.isPending || !secretConfigured} className="flex-1" data-testid="button-connect-nntp">
+              {setupMutation.isPending ? <RefreshCw className="w-4 h-4 animate-spin mr-2" /> : null}
+              Register NNTP
+            </Button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+
+  const getPlatformDisplayName = (p: ChatPlatformType) => {
+    switch (p) {
+      case "nntp": return "Net Protocol (NNTP)";
+      case "irc": return "IRC";
+      default: return p.charAt(0).toUpperCase() + p.slice(1);
+    }
+  };
+
   return (
     <DialogContent className="max-w-md">
       <DialogHeader>
         <DialogTitle className="flex items-center gap-2">
           <PlatformBadge platform={platform} />
-          Connect {platform.charAt(0).toUpperCase() + platform.slice(1)}
+          Connect {getPlatformDisplayName(platform)}
         </DialogTitle>
         <DialogDescription>
-          Follow the steps to connect your {platform} account.
+          Follow the steps to connect your {getPlatformDisplayName(platform)} account.
         </DialogDescription>
       </DialogHeader>
       {platform === "discord" && renderDiscordSetup()}
       {platform === "telegram" && renderTelegramSetup()}
       {platform === "farcaster" && renderFarcasterSetup()}
+      {platform === "email" && renderEmailSetup()}
+      {platform === "whatsapp" && renderWhatsAppSetup()}
+      {platform === "irc" && renderIRCSetup()}
+      {platform === "nntp" && renderNNTPSetup()}
     </DialogContent>
   );
 }
@@ -550,6 +794,16 @@ function EmptyState() {
 }
 
 function NoPlatformsState({ onSetup }: { onSetup: (platform: ChatPlatformType) => void }) {
+  const allPlatforms: { type: ChatPlatformType; label: string; primary?: boolean }[] = [
+    { type: "discord", label: "Discord", primary: true },
+    { type: "telegram", label: "Telegram" },
+    { type: "farcaster", label: "Farcaster" },
+    { type: "email", label: "Email" },
+    { type: "whatsapp", label: "WhatsApp" },
+    { type: "irc", label: "IRC" },
+    { type: "nntp", label: "Net Protocol" },
+  ];
+
   return (
     <div className="flex flex-col items-center justify-center h-full text-center p-8">
       <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mb-4">
@@ -557,21 +811,21 @@ function NoPlatformsState({ onSetup }: { onSetup: (platform: ChatPlatformType) =
       </div>
       <h3 className="font-semibold text-lg mb-2">Connect Your Platforms</h3>
       <p className="text-muted-foreground text-sm max-w-sm mb-6">
-        Set up your messaging platforms to unify all your DMs in one place.
+        Set up your messaging platforms to unify all your communications in one place.
       </p>
-      <div className="flex flex-col sm:flex-row gap-3">
-        <Button onClick={() => onSetup("discord")} className="gap-2" data-testid="button-setup-discord">
-          <SiDiscord className="h-4 w-4" />
-          Connect Discord
-        </Button>
-        <Button onClick={() => onSetup("telegram")} variant="outline" className="gap-2" data-testid="button-setup-telegram">
-          <SiTelegram className="h-4 w-4" />
-          Connect Telegram
-        </Button>
-        <Button onClick={() => onSetup("farcaster")} variant="outline" className="gap-2" data-testid="button-setup-farcaster">
-          <PlatformIcon platform="farcaster" className="h-4 w-4" />
-          Connect Farcaster
-        </Button>
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+        {allPlatforms.map(({ type, label, primary }) => (
+          <Button 
+            key={type}
+            onClick={() => onSetup(type)} 
+            variant={primary ? "default" : "outline"} 
+            className="gap-2" 
+            data-testid={`button-setup-${type}`}
+          >
+            <PlatformIcon platform={type} className="h-4 w-4" />
+            {label}
+          </Button>
+        ))}
       </div>
     </div>
   );
@@ -762,62 +1016,41 @@ export default function ChatTerminal() {
                   Add Platform
                 </Button>
               </DialogTrigger>
-              <DialogContent>
+              <DialogContent className="max-w-lg">
                 <DialogHeader>
                   <DialogTitle>Add Platform</DialogTitle>
                   <DialogDescription>
                     Choose a platform to connect.
                   </DialogDescription>
                 </DialogHeader>
-                <div className="grid gap-3 py-4">
-                  <Button 
-                    variant="outline" 
-                    className="justify-start h-auto py-4"
-                    onClick={() => setSetupPlatform("discord")}
-                    data-testid="button-add-discord"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${PLATFORM_COLORS.discord}`}>
-                        <SiDiscord className="h-5 w-5 text-white" />
+                <div className="grid grid-cols-2 gap-3 py-4">
+                  {([
+                    { type: "discord" as ChatPlatformType, name: "Discord", desc: "Connect your Discord bot for DMs" },
+                    { type: "telegram" as ChatPlatformType, name: "Telegram", desc: "Connect your Telegram bot" },
+                    { type: "farcaster" as ChatPlatformType, name: "Farcaster", desc: "Connect via Neynar API" },
+                    { type: "email" as ChatPlatformType, name: "Email", desc: "Connect via SMTP/IMAP" },
+                    { type: "whatsapp" as ChatPlatformType, name: "WhatsApp", desc: "WhatsApp Business API" },
+                    { type: "irc" as ChatPlatformType, name: "IRC", desc: "Internet Relay Chat" },
+                    { type: "nntp" as ChatPlatformType, name: "Net Protocol", desc: "NNTP/Usenet access" },
+                  ]).map(({ type, name, desc }) => (
+                    <Button 
+                      key={type}
+                      variant="outline" 
+                      className="justify-start h-auto py-3"
+                      onClick={() => setSetupPlatform(type)}
+                      data-testid={`button-add-${type}`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className={`w-9 h-9 rounded-lg flex items-center justify-center ${PLATFORM_COLORS[type]}`}>
+                          <PlatformIcon platform={type} className="h-4 w-4 text-white" />
+                        </div>
+                        <div className="text-left">
+                          <p className="font-medium text-sm">{name}</p>
+                          <p className="text-xs text-muted-foreground">{desc}</p>
+                        </div>
                       </div>
-                      <div className="text-left">
-                        <p className="font-medium">Discord</p>
-                        <p className="text-xs text-muted-foreground">Connect your Discord bot for DMs</p>
-                      </div>
-                    </div>
-                  </Button>
-                  <Button 
-                    variant="outline" 
-                    className="justify-start h-auto py-4"
-                    onClick={() => setSetupPlatform("telegram")}
-                    data-testid="button-add-telegram"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${PLATFORM_COLORS.telegram}`}>
-                        <SiTelegram className="h-5 w-5 text-white" />
-                      </div>
-                      <div className="text-left">
-                        <p className="font-medium">Telegram</p>
-                        <p className="text-xs text-muted-foreground">Connect your Telegram bot</p>
-                      </div>
-                    </div>
-                  </Button>
-                  <Button 
-                    variant="outline" 
-                    className="justify-start h-auto py-4"
-                    onClick={() => setSetupPlatform("farcaster")}
-                    data-testid="button-add-farcaster"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${PLATFORM_COLORS.farcaster}`}>
-                        <PlatformIcon platform="farcaster" className="h-5 w-5 text-white" />
-                      </div>
-                      <div className="text-left">
-                        <p className="font-medium">Farcaster</p>
-                        <p className="text-xs text-muted-foreground">Connect via Neynar API</p>
-                      </div>
-                    </div>
-                  </Button>
+                    </Button>
+                  ))}
                 </div>
               </DialogContent>
             </Dialog>
@@ -858,7 +1091,7 @@ export default function ChatTerminal() {
                         <Badge className="ml-1 h-4 px-1">{totalUnread}</Badge>
                       )}
                     </Button>
-                    {(["discord", "telegram", "farcaster"] as ChatPlatformType[]).map(platform => {
+                    {(["discord", "telegram", "farcaster", "email", "whatsapp", "irc", "nntp"] as ChatPlatformType[]).map(platform => {
                       const platformConvs = conversations.filter(c => c.platform?.platform === platform);
                       const platformUnread = platformConvs.reduce((sum, c) => sum + (c.unreadCount || 0), 0);
                       const hasConnection = platformCounts[platform] > 0;

@@ -3288,3 +3288,224 @@ export const insertModelGenerationJobSchema = createInsertSchema(modelGeneration
 });
 export type InsertModelGenerationJob = z.infer<typeof insertModelGenerationJobSchema>;
 export type ModelGenerationJob = typeof modelGenerationJobs.$inferSelect;
+
+// ============================================================
+// Unified Chat Terminal (Admin-only Multi-Platform Messaging)
+// ============================================================
+
+export const chatPlatformTypes = ["discord", "telegram", "farcaster"] as const;
+export type ChatPlatformType = typeof chatPlatformTypes[number];
+
+export const chatConnectionStatuses = ["disconnected", "connecting", "connected", "error"] as const;
+export type ChatConnectionStatus = typeof chatConnectionStatuses[number];
+
+// Chat Platform Connections - stores bot tokens and connection settings
+export const chatPlatforms = pgTable("chat_platforms", {
+  id: serial("id").primaryKey(),
+  platform: varchar("platform", { length: 20 }).$type<ChatPlatformType>().notNull(),
+  label: varchar("label", { length: 100 }).notNull(), // User-friendly name like "Main Discord Bot"
+  isEnabled: boolean("is_enabled").default(true),
+  connectionStatus: varchar("connection_status", { length: 20 }).$type<ChatConnectionStatus>().default("disconnected"),
+  lastConnectedAt: timestamp("last_connected_at"),
+  lastErrorMessage: text("last_error_message"),
+  // Platform-specific settings stored as JSON
+  settings: jsonb("settings").$type<{
+    // Discord: { botToken, applicationId, guildIds? }
+    // Telegram: { botToken, webhookUrl? }
+    // Farcaster: { apiKey, signerUuid?, fid? }
+    [key: string]: any;
+  }>(),
+  createdBy: varchar("created_by").references(() => users.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertChatPlatformSchema = createInsertSchema(chatPlatforms).omit({ 
+  id: true, 
+  createdAt: true, 
+  updatedAt: true,
+  connectionStatus: true,
+  lastConnectedAt: true,
+  lastErrorMessage: true,
+});
+export type InsertChatPlatform = z.infer<typeof insertChatPlatformSchema>;
+export type ChatPlatform = typeof chatPlatforms.$inferSelect;
+
+// Chat Contacts - unified contacts across platforms
+export const chatContacts = pgTable("chat_contacts", {
+  id: serial("id").primaryKey(),
+  platformId: integer("platform_id").notNull().references(() => chatPlatforms.id, { onDelete: "cascade" }),
+  platformUserId: varchar("platform_user_id", { length: 100 }).notNull(), // Discord/TG/FC user ID
+  username: varchar("username", { length: 100 }), // @handle or display name
+  displayName: varchar("display_name", { length: 200 }),
+  avatarUrl: varchar("avatar_url", { length: 500 }),
+  // Metadata from platform
+  metadata: jsonb("metadata").$type<{
+    // Discord: { discriminator, globalName, banner }
+    // Telegram: { firstName, lastName, phoneNumber, languageCode }
+    // Farcaster: { bio, pfpUrl, followerCount, followingCount }
+    [key: string]: any;
+  }>(),
+  lastSeenAt: timestamp("last_seen_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertChatContactSchema = createInsertSchema(chatContacts).omit({ 
+  id: true, 
+  createdAt: true, 
+  updatedAt: true,
+  lastSeenAt: true,
+});
+export type InsertChatContact = z.infer<typeof insertChatContactSchema>;
+export type ChatContact = typeof chatContacts.$inferSelect;
+
+// Chat Conversations - one per contact-platform pair for DMs
+export const chatConversations = pgTable("chat_conversations", {
+  id: serial("id").primaryKey(),
+  platformId: integer("platform_id").notNull().references(() => chatPlatforms.id, { onDelete: "cascade" }),
+  contactId: integer("contact_id").notNull().references(() => chatContacts.id, { onDelete: "cascade" }),
+  platformConversationId: varchar("platform_conversation_id", { length: 100 }), // Platform's channel/chat ID
+  unreadCount: integer("unread_count").default(0),
+  lastMessageAt: timestamp("last_message_at"),
+  lastMessagePreview: text("last_message_preview"),
+  isMuted: boolean("is_muted").default(false),
+  isArchived: boolean("is_archived").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertChatConversationSchema = createInsertSchema(chatConversations).omit({ 
+  id: true, 
+  createdAt: true, 
+  updatedAt: true,
+  unreadCount: true,
+  lastMessageAt: true,
+  lastMessagePreview: true,
+});
+export type InsertChatConversation = z.infer<typeof insertChatConversationSchema>;
+export type ChatConversation = typeof chatConversations.$inferSelect;
+
+// Chat Messages - all messages across platforms
+export const chatMessageDirections = ["inbound", "outbound"] as const;
+export type ChatMessageDirection = typeof chatMessageDirections[number];
+
+export const chatMessageStatuses = ["pending", "sent", "delivered", "read", "failed"] as const;
+export type ChatMessageStatus = typeof chatMessageStatuses[number];
+
+export const chatMessages = pgTable("chat_messages", {
+  id: serial("id").primaryKey(),
+  conversationId: integer("conversation_id").notNull().references(() => chatConversations.id, { onDelete: "cascade" }),
+  platformMessageId: varchar("platform_message_id", { length: 100 }), // Platform's message ID
+  direction: varchar("direction", { length: 10 }).$type<ChatMessageDirection>().notNull(),
+  status: varchar("status", { length: 20 }).$type<ChatMessageStatus>().default("sent"),
+  content: text("content").notNull(),
+  // Attachments stored as JSON array
+  attachments: jsonb("attachments").$type<{
+    type: "image" | "file" | "video" | "audio" | "link";
+    url: string;
+    name?: string;
+    size?: number;
+    mimeType?: string;
+  }[]>(),
+  // Reply/thread info
+  replyToMessageId: integer("reply_to_message_id"),
+  // Platform-specific metadata
+  metadata: jsonb("metadata"),
+  isEdited: boolean("is_edited").default(false),
+  isDeleted: boolean("is_deleted").default(false),
+  sentAt: timestamp("sent_at").defaultNow(),
+  deliveredAt: timestamp("delivered_at"),
+  readAt: timestamp("read_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertChatMessageSchema = createInsertSchema(chatMessages).omit({ 
+  id: true, 
+  createdAt: true,
+  deliveredAt: true,
+  readAt: true,
+  isEdited: true,
+  isDeleted: true,
+});
+export type InsertChatMessage = z.infer<typeof insertChatMessageSchema>;
+export type ChatMessage = typeof chatMessages.$inferSelect;
+
+// Pinned Contacts - priority contacts always shown at top
+export const pinnedContacts = pgTable("pinned_contacts", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  contactId: integer("contact_id").notNull().references(() => chatContacts.id, { onDelete: "cascade" }),
+  order: integer("order").default(0), // For drag-to-reorder
+  pinnedAt: timestamp("pinned_at").defaultNow(),
+});
+
+export const insertPinnedContactSchema = createInsertSchema(pinnedContacts).omit({ 
+  id: true, 
+  pinnedAt: true,
+});
+export type InsertPinnedContact = z.infer<typeof insertPinnedContactSchema>;
+export type PinnedContact = typeof pinnedContacts.$inferSelect;
+
+// Daily Digests - generated summaries
+export const dailyDigests = pgTable("daily_digests", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  digestDate: varchar("digest_date", { length: 10 }).notNull(), // YYYY-MM-DD
+  // Summary stats
+  totalNewMessages: integer("total_new_messages").default(0),
+  totalConversations: integer("total_conversations").default(0),
+  pinnedContactMessages: integer("pinned_contact_messages").default(0),
+  // Breakdown by platform
+  platformBreakdown: jsonb("platform_breakdown").$type<{
+    platform: ChatPlatformType;
+    messageCount: number;
+    conversationCount: number;
+  }[]>(),
+  // Top contacts summary
+  topContacts: jsonb("top_contacts").$type<{
+    contactId: number;
+    displayName: string;
+    platform: ChatPlatformType;
+    messageCount: number;
+    isPinned: boolean;
+  }[]>(),
+  // Rendered content
+  summaryHtml: text("summary_html"),
+  summaryText: text("summary_text"),
+  // Delivery status
+  emailSentAt: timestamp("email_sent_at"),
+  viewedAt: timestamp("viewed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertDailyDigestSchema = createInsertSchema(dailyDigests).omit({ 
+  id: true, 
+  createdAt: true,
+  emailSentAt: true,
+  viewedAt: true,
+});
+export type InsertDailyDigest = z.infer<typeof insertDailyDigestSchema>;
+export type DailyDigest = typeof dailyDigests.$inferSelect;
+
+// Chat Digest Preferences - user settings for daily digest
+export const chatDigestPreferences = pgTable("chat_digest_preferences", {
+  id: serial("id").primaryKey(),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }).unique(),
+  isEnabled: boolean("is_enabled").default(true),
+  deliveryTime: varchar("delivery_time", { length: 5 }).default("08:00"), // HH:mm format
+  emailEnabled: boolean("email_enabled").default(true),
+  inAppEnabled: boolean("in_app_enabled").default(true),
+  onlyIfUnreadPinned: boolean("only_if_unread_pinned").default(false), // Only send if pinned contacts have unreads
+  includePlatforms: jsonb("include_platforms").$type<ChatPlatformType[]>().default(["discord", "telegram", "farcaster"]),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const insertChatDigestPreferencesSchema = createInsertSchema(chatDigestPreferences).omit({ 
+  id: true, 
+  createdAt: true,
+  updatedAt: true,
+});
+export type InsertChatDigestPreferences = z.infer<typeof insertChatDigestPreferencesSchema>;
+export type ChatDigestPreferences = typeof chatDigestPreferences.$inferSelect;

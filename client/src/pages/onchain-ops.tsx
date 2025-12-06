@@ -25,6 +25,7 @@ import {
   CopyCheck,
   Music,
   Box,
+  MessageSquare,
 } from "lucide-react";
 import { format } from "date-fns";
 import { useAuth } from "@/hooks/useAuth";
@@ -286,6 +287,15 @@ export default function OnchainOps() {
                       description="Generate 3D models from text prompts using AI"
                       icon={Box}
                       href="/model-generator"
+                      variant="primary"
+                    />
+                  )}
+                  {isAdmin && (
+                    <QuickActionCard
+                      title="Chat Terminal"
+                      description="Unified inbox for Discord, Telegram & Farcaster DMs"
+                      icon={MessageSquare}
+                      href="/chat-terminal"
                       variant="primary"
                     />
                   )}

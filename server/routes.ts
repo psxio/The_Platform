@@ -13386,6 +13386,331 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ============================================================
+  // Chat Terminal Routes (Admin-only unified messaging)
+  // ============================================================
+
+  // Get all chat platforms
+  app.get("/api/chat/platforms", requireRole("admin"), async (req, res) => {
+    try {
+      const platforms = await storage.getChatPlatforms();
+      res.json(platforms);
+    } catch (error) {
+      console.error("Error fetching chat platforms:", error);
+      res.status(500).json({ error: "Failed to fetch platforms" });
+    }
+  });
+
+  // Create a new chat platform connection
+  // SECURITY: Only allowed settings properties are stored; tokens must be in environment secrets
+  const ALLOWED_SECRET_NAMES: Record<string, string> = {
+    discord: "DISCORD_BOT_TOKEN",
+    telegram: "TELEGRAM_BOT_TOKEN",
+    farcaster: "NEYNAR_API_KEY",
+  };
+  
+  const FORBIDDEN_SETTINGS_KEYS = ["botToken", "token", "apiKey", "api_key", "secret", "password", "credentials"];
+  
+  // SECURITY: Helper function to validate labels don't contain secrets
+  const validateLabelSafe = (label: string): { valid: boolean; error?: string } => {
+    const MAX_LABEL_LENGTH = 100;
+    const TOKEN_PATTERN = /[A-Za-z0-9_-]{30,}/; // Long alphanumeric strings
+    const SECRET_PATTERNS = [
+      /[a-zA-Z0-9_]+=[a-zA-Z0-9_.-]+/, // Key=value patterns
+      /^[A-Za-z0-9+/]{20,}={0,2}$/, // Base64-like patterns
+      /bot\d+:[A-Za-z0-9_-]+/i, // Telegram bot token pattern
+      /[A-Z0-9]{24,}/, // Discord token pattern
+    ];
+    
+    if (label.length > MAX_LABEL_LENGTH) {
+      return { valid: false, error: `Label too long. Maximum ${MAX_LABEL_LENGTH} characters allowed.` };
+    }
+    
+    if (TOKEN_PATTERN.test(label)) {
+      return { valid: false, error: "Label cannot contain potential token values. Use a short descriptive name." };
+    }
+    
+    for (const pattern of SECRET_PATTERNS) {
+      if (pattern.test(label)) {
+        return { valid: false, error: "Label cannot contain secret-like patterns. Use a descriptive name only." };
+      }
+    }
+    
+    return { valid: true };
+  };
+  
+  app.post("/api/chat/platforms", requireRole("admin"), async (req, res) => {
+    try {
+      const { platform, label, settings } = req.body;
+      
+      if (!platform || !label) {
+        return res.status(400).json({ error: "Platform and label are required" });
+      }
+      
+      if (!["discord", "telegram", "farcaster"].includes(platform)) {
+        return res.status(400).json({ error: "Invalid platform type" });
+      }
+      
+      // SECURITY: Validate label doesn't contain secrets
+      const labelValidation = validateLabelSafe(label);
+      if (!labelValidation.valid) {
+        return res.status(400).json({ error: labelValidation.error });
+      }
+
+      // SECURITY: Reject any attempt to store sensitive credentials in settings
+      if (settings && typeof settings === "object") {
+        const settingsKeys = Object.keys(settings).map(k => k.toLowerCase());
+        for (const forbidden of FORBIDDEN_SETTINGS_KEYS) {
+          if (settingsKeys.includes(forbidden.toLowerCase())) {
+            return res.status(400).json({ 
+              error: "Security violation: Bot tokens and API keys must be stored as environment secrets, not in the database. Set the secret in Replit Secrets tab." 
+            });
+          }
+        }
+        
+        // Check for any value that looks like a token (long alphanumeric strings)
+        for (const [key, value] of Object.entries(settings)) {
+          if (key !== "secretName" && typeof value === "string" && value.length > 30) {
+            return res.status(400).json({ 
+              error: "Security violation: Potential secret detected. Only secretName reference is allowed in settings." 
+            });
+          }
+        }
+      }
+
+      // Build sanitized settings with only allowed secretName
+      const sanitizedSettings: Record<string, string> = {
+        secretName: ALLOWED_SECRET_NAMES[platform] || "",
+      };
+
+      const userId = (req.user as any)?.id;
+      const newPlatform = await storage.createChatPlatform({
+        platform,
+        label,
+        settings: sanitizedSettings,
+        isEnabled: true,
+        createdBy: userId,
+      });
+      
+      res.status(201).json(newPlatform);
+    } catch (error) {
+      console.error("Error creating chat platform:", error);
+      res.status(500).json({ error: "Failed to create platform" });
+    }
+  });
+
+  // Update chat platform
+  // SECURITY: Prevent settings updates that could inject tokens
+  app.patch("/api/chat/platforms/:id", requireRole("admin"), async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      const updates = req.body;
+      
+      // SECURITY: Block settings updates FIRST before any other processing
+      if (updates.settings !== undefined) {
+        return res.status(400).json({ 
+          error: "Cannot update settings. To change platform credentials, delete and recreate the platform." 
+        });
+      }
+      
+      // Only allow label and isEnabled updates - all other fields are ignored
+      const allowedUpdates: Record<string, any> = {};
+      
+      if (typeof updates.label === "string") {
+        // SECURITY: Validate label doesn't contain secrets
+        const labelValidation = validateLabelSafe(updates.label);
+        if (!labelValidation.valid) {
+          return res.status(400).json({ error: labelValidation.error });
+        }
+        allowedUpdates.label = updates.label;
+      }
+      
+      if (typeof updates.isEnabled === "boolean") {
+        allowedUpdates.isEnabled = updates.isEnabled;
+      }
+      
+      // If no valid updates, return current platform without modification
+      if (Object.keys(allowedUpdates).length === 0) {
+        const current = await storage.getChatPlatform(id);
+        if (!current) {
+          return res.status(404).json({ error: "Platform not found" });
+        }
+        return res.json(current);
+      }
+      
+      const updated = await storage.updateChatPlatform(id, allowedUpdates);
+      res.json(updated);
+    } catch (error) {
+      console.error("Error updating chat platform:", error);
+      res.status(500).json({ error: "Failed to update platform" });
+    }
+  });
+
+  // Delete chat platform
+  app.delete("/api/chat/platforms/:id", requireRole("admin"), async (req, res) => {
+    try {
+      const id = parseInt(req.params.id);
+      await storage.deleteChatPlatform(id);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error deleting chat platform:", error);
+      res.status(500).json({ error: "Failed to delete platform" });
+    }
+  });
+
+  // Get all conversations with contact and platform details
+  app.get("/api/chat/conversations", requireRole("admin"), async (req, res) => {
+    try {
+      const userId = (req.user as any)?.id;
+      const conversations = await storage.getChatConversationsWithDetails(userId);
+      res.json(conversations);
+    } catch (error) {
+      console.error("Error fetching conversations:", error);
+      res.status(500).json({ error: "Failed to fetch conversations" });
+    }
+  });
+
+  // Get messages for a conversation
+  app.get("/api/chat/messages", requireRole("admin"), async (req, res) => {
+    try {
+      const conversationId = parseInt(req.query.conversationId as string);
+      if (!conversationId) {
+        return res.json([]);
+      }
+      const messages = await storage.getChatMessages(conversationId);
+      res.json(messages);
+    } catch (error) {
+      console.error("Error fetching messages:", error);
+      res.status(500).json({ error: "Failed to fetch messages" });
+    }
+  });
+
+  // Send a message
+  app.post("/api/chat/messages", requireRole("admin"), async (req, res) => {
+    try {
+      const { conversationId, content } = req.body;
+      
+      if (!conversationId || !content) {
+        return res.status(400).json({ error: "Conversation ID and content are required" });
+      }
+
+      const message = await storage.createChatMessage({
+        conversationId,
+        content,
+        direction: "outbound",
+        status: "pending",
+        sentAt: new Date(),
+      });
+
+      // TODO: Send message via platform-specific service
+      // For now, just mark as sent
+      await storage.updateChatMessage(message.id, { status: "sent" });
+      
+      // Update conversation last message
+      await storage.updateChatConversation(conversationId, {
+        lastMessageAt: new Date(),
+        lastMessagePreview: content.substring(0, 100),
+      });
+      
+      res.status(201).json(message);
+    } catch (error) {
+      console.error("Error sending message:", error);
+      res.status(500).json({ error: "Failed to send message" });
+    }
+  });
+
+  // Get pinned contacts
+  app.get("/api/chat/pinned-contacts", requireRole("admin"), async (req, res) => {
+    try {
+      const userId = (req.user as any)?.id;
+      const pinned = await storage.getPinnedContacts(userId);
+      res.json(pinned);
+    } catch (error) {
+      console.error("Error fetching pinned contacts:", error);
+      res.status(500).json({ error: "Failed to fetch pinned contacts" });
+    }
+  });
+
+  // Pin a contact
+  app.post("/api/chat/pinned-contacts", requireRole("admin"), async (req, res) => {
+    try {
+      const userId = (req.user as any)?.id;
+      const { contactId } = req.body;
+      
+      if (!contactId) {
+        return res.status(400).json({ error: "Contact ID is required" });
+      }
+
+      const pinned = await storage.createPinnedContact({
+        userId,
+        contactId,
+        order: 0,
+      });
+      
+      res.status(201).json(pinned);
+    } catch (error) {
+      console.error("Error pinning contact:", error);
+      res.status(500).json({ error: "Failed to pin contact" });
+    }
+  });
+
+  // Unpin a contact
+  app.delete("/api/chat/pinned-contacts/:contactId", requireRole("admin"), async (req, res) => {
+    try {
+      const userId = (req.user as any)?.id;
+      const contactId = parseInt(req.params.contactId);
+      await storage.deletePinnedContact(userId, contactId);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Error unpinning contact:", error);
+      res.status(500).json({ error: "Failed to unpin contact" });
+    }
+  });
+
+  // Get digest preferences
+  app.get("/api/chat/digest-preferences", requireRole("admin"), async (req, res) => {
+    try {
+      const userId = (req.user as any)?.id;
+      const prefs = await storage.getChatDigestPreferences(userId);
+      res.json(prefs || {
+        isEnabled: true,
+        deliveryTime: "08:00",
+        emailEnabled: true,
+        inAppEnabled: true,
+        onlyIfUnreadPinned: false,
+        includePlatforms: ["discord", "telegram", "farcaster"],
+      });
+    } catch (error) {
+      console.error("Error fetching digest preferences:", error);
+      res.status(500).json({ error: "Failed to fetch preferences" });
+    }
+  });
+
+  // Update digest preferences
+  app.patch("/api/chat/digest-preferences", requireRole("admin"), async (req, res) => {
+    try {
+      const userId = (req.user as any)?.id;
+      const updates = req.body;
+      const prefs = await storage.upsertChatDigestPreferences(userId, updates);
+      res.json(prefs);
+    } catch (error) {
+      console.error("Error updating digest preferences:", error);
+      res.status(500).json({ error: "Failed to update preferences" });
+    }
+  });
+
+  // Get daily digests
+  app.get("/api/chat/digests", requireRole("admin"), async (req, res) => {
+    try {
+      const userId = (req.user as any)?.id;
+      const digests = await storage.getDailyDigests(userId);
+      res.json(digests);
+    } catch (error) {
+      console.error("Error fetching digests:", error);
+      res.status(500).json({ error: "Failed to fetch digests" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

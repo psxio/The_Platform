@@ -166,6 +166,14 @@ import {
   // 3D Model Generation
   type ModelGenerationJob, type InsertModelGenerationJob, modelGenerationJobs,
   type ModelGenerationStatus,
+  // Chat Terminal (Unified Messaging)
+  type ChatPlatform, type InsertChatPlatform, chatPlatforms,
+  type ChatContact, type InsertChatContact, chatContacts,
+  type ChatConversation, type InsertChatConversation, chatConversations,
+  type ChatMessage, type InsertChatMessage, chatMessages,
+  type PinnedContact, type InsertPinnedContact, pinnedContacts,
+  type ChatDigestPreferences, type InsertChatDigestPreferences, chatDigestPreferences,
+  type DailyDigest, type InsertDailyDigest, dailyDigests,
 } from "@shared/schema";
 import { db } from "./db";
 import { desc, eq, and, sql, or, isNull } from "drizzle-orm";
@@ -1027,6 +1035,48 @@ export interface IStorage {
   createWatcherAutoAddRule(rule: InsertWatcherAutoAddRule): Promise<WatcherAutoAddRule>;
   updateWatcherAutoAddRule(id: number, updates: Partial<InsertWatcherAutoAddRule>): Promise<WatcherAutoAddRule | undefined>;
   deleteWatcherAutoAddRule(id: number): Promise<boolean>;
+
+  // ==================== CHAT TERMINAL (UNIFIED MESSAGING) ====================
+
+  // Chat Platforms
+  getChatPlatforms(): Promise<ChatPlatform[]>;
+  getChatPlatform(id: number): Promise<ChatPlatform | undefined>;
+  createChatPlatform(platform: InsertChatPlatform): Promise<ChatPlatform>;
+  updateChatPlatform(id: number, updates: Partial<InsertChatPlatform>): Promise<ChatPlatform | undefined>;
+  deleteChatPlatform(id: number): Promise<boolean>;
+
+  // Chat Contacts
+  getChatContacts(platformId: number): Promise<ChatContact[]>;
+  getChatContact(id: number): Promise<ChatContact | undefined>;
+  createChatContact(contact: InsertChatContact): Promise<ChatContact>;
+  updateChatContact(id: number, updates: Partial<InsertChatContact>): Promise<ChatContact | undefined>;
+
+  // Chat Conversations
+  getChatConversations(platformId?: number): Promise<ChatConversation[]>;
+  getChatConversationsWithDetails(userId: string): Promise<Array<ChatConversation & { contact: ChatContact; platform: ChatPlatform; isPinned: boolean }>>;
+  getChatConversation(id: number): Promise<ChatConversation | undefined>;
+  createChatConversation(conversation: InsertChatConversation): Promise<ChatConversation>;
+  updateChatConversation(id: number, updates: Partial<InsertChatConversation>): Promise<ChatConversation | undefined>;
+
+  // Chat Messages
+  getChatMessages(conversationId: number, limit?: number): Promise<ChatMessage[]>;
+  getChatMessage(id: number): Promise<ChatMessage | undefined>;
+  createChatMessage(message: InsertChatMessage): Promise<ChatMessage>;
+  updateChatMessage(id: number, updates: Partial<InsertChatMessage>): Promise<ChatMessage | undefined>;
+
+  // Pinned Contacts
+  getPinnedContacts(userId: string): Promise<Array<PinnedContact & { contact: ChatContact }>>;
+  createPinnedContact(pinned: InsertPinnedContact): Promise<PinnedContact>;
+  deletePinnedContact(userId: string, contactId: number): Promise<boolean>;
+
+  // Digest Preferences
+  getChatDigestPreferences(userId: string): Promise<ChatDigestPreferences | undefined>;
+  upsertChatDigestPreferences(userId: string, prefs: Partial<InsertChatDigestPreferences>): Promise<ChatDigestPreferences>;
+
+  // Daily Digests
+  getDailyDigests(userId: string, limit?: number): Promise<DailyDigest[]>;
+  createDailyDigest(digest: InsertDailyDigest): Promise<DailyDigest>;
+  markDailyDigestRead(id: number): Promise<DailyDigest | undefined>;
 }
 
 export class DbStorage implements IStorage {
@@ -6868,6 +6918,244 @@ export class DbStorage implements IStorage {
   async deleteModelGenerationJob(id: number): Promise<boolean> {
     await db.delete(modelGenerationJobs).where(eq(modelGenerationJobs.id, id));
     return true;
+  }
+
+  // ==================== CHAT TERMINAL (UNIFIED MESSAGING) ====================
+
+  // Chat Platforms
+  async getChatPlatforms(): Promise<ChatPlatform[]> {
+    return db.select().from(chatPlatforms).orderBy(chatPlatforms.platform);
+  }
+
+  async getChatPlatform(id: number): Promise<ChatPlatform | undefined> {
+    const [platform] = await db.select().from(chatPlatforms)
+      .where(eq(chatPlatforms.id, id));
+    return platform;
+  }
+
+  async createChatPlatform(platform: InsertChatPlatform): Promise<ChatPlatform> {
+    const [created] = await db.insert(chatPlatforms).values(platform).returning();
+    return created;
+  }
+
+  async updateChatPlatform(id: number, updates: Partial<InsertChatPlatform>): Promise<ChatPlatform | undefined> {
+    // SECURITY: Only allow label and isEnabled updates - explicitly pick allowed fields
+    // This prevents any unexpected fields from being persisted even if route validation regresses
+    const safeUpdates: { label?: string; isEnabled?: boolean; updatedAt: Date } = {
+      updatedAt: new Date()
+    };
+    
+    if (typeof updates.label === "string") {
+      // SECURITY: Additional validation - reject labels that look like tokens
+      const MAX_LABEL_LENGTH = 100;
+      const TOKEN_PATTERN = /[A-Za-z0-9_-]{30,}/;
+      
+      if (updates.label.length > MAX_LABEL_LENGTH || TOKEN_PATTERN.test(updates.label)) {
+        throw new Error("Invalid label: too long or contains token-like patterns");
+      }
+      safeUpdates.label = updates.label;
+    }
+    if (typeof updates.isEnabled === "boolean") {
+      safeUpdates.isEnabled = updates.isEnabled;
+    }
+    
+    const [updated] = await db.update(chatPlatforms)
+      .set(safeUpdates)
+      .where(eq(chatPlatforms.id, id))
+      .returning();
+    return updated;
+  }
+
+  async deleteChatPlatform(id: number): Promise<boolean> {
+    await db.delete(chatPlatforms).where(eq(chatPlatforms.id, id));
+    return true;
+  }
+
+  // Chat Contacts
+  async getChatContacts(platformId: number): Promise<ChatContact[]> {
+    return db.select().from(chatContacts)
+      .where(eq(chatContacts.platformId, platformId))
+      .orderBy(chatContacts.displayName);
+  }
+
+  async getChatContact(id: number): Promise<ChatContact | undefined> {
+    const [contact] = await db.select().from(chatContacts)
+      .where(eq(chatContacts.id, id));
+    return contact;
+  }
+
+  async createChatContact(contact: InsertChatContact): Promise<ChatContact> {
+    const [created] = await db.insert(chatContacts).values(contact).returning();
+    return created;
+  }
+
+  async updateChatContact(id: number, updates: Partial<InsertChatContact>): Promise<ChatContact | undefined> {
+    const [updated] = await db.update(chatContacts)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(chatContacts.id, id))
+      .returning();
+    return updated;
+  }
+
+  // Chat Conversations
+  async getChatConversations(platformId?: number): Promise<ChatConversation[]> {
+    if (platformId) {
+      return db.select().from(chatConversations)
+        .where(eq(chatConversations.platformId, platformId))
+        .orderBy(desc(chatConversations.lastMessageAt));
+    }
+    return db.select().from(chatConversations)
+      .orderBy(desc(chatConversations.lastMessageAt));
+  }
+
+  async getChatConversationsWithDetails(userId: string): Promise<Array<ChatConversation & { contact: ChatContact; platform: ChatPlatform; isPinned: boolean }>> {
+    const conversations = await db.select().from(chatConversations)
+      .orderBy(desc(chatConversations.lastMessageAt));
+    
+    const result = [];
+    for (const conv of conversations) {
+      const [contact] = await db.select().from(chatContacts)
+        .where(eq(chatContacts.id, conv.contactId));
+      const [platform] = await db.select().from(chatPlatforms)
+        .where(eq(chatPlatforms.id, conv.platformId));
+      const [pinned] = await db.select().from(pinnedContacts)
+        .where(and(
+          eq(pinnedContacts.userId, userId),
+          eq(pinnedContacts.contactId, conv.contactId)
+        ));
+      
+      if (contact && platform) {
+        result.push({
+          ...conv,
+          contact,
+          platform,
+          isPinned: !!pinned,
+        });
+      }
+    }
+    return result;
+  }
+
+  async getChatConversation(id: number): Promise<ChatConversation | undefined> {
+    const [conversation] = await db.select().from(chatConversations)
+      .where(eq(chatConversations.id, id));
+    return conversation;
+  }
+
+  async createChatConversation(conversation: InsertChatConversation): Promise<ChatConversation> {
+    const [created] = await db.insert(chatConversations).values(conversation).returning();
+    return created;
+  }
+
+  async updateChatConversation(id: number, updates: Partial<InsertChatConversation>): Promise<ChatConversation | undefined> {
+    const [updated] = await db.update(chatConversations)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(chatConversations.id, id))
+      .returning();
+    return updated;
+  }
+
+  // Chat Messages
+  async getChatMessages(conversationId: number, limit: number = 100): Promise<ChatMessage[]> {
+    return db.select().from(chatMessages)
+      .where(eq(chatMessages.conversationId, conversationId))
+      .orderBy(chatMessages.sentAt)
+      .limit(limit);
+  }
+
+  async getChatMessage(id: number): Promise<ChatMessage | undefined> {
+    const [message] = await db.select().from(chatMessages)
+      .where(eq(chatMessages.id, id));
+    return message;
+  }
+
+  async createChatMessage(message: InsertChatMessage): Promise<ChatMessage> {
+    const [created] = await db.insert(chatMessages).values(message).returning();
+    return created;
+  }
+
+  async updateChatMessage(id: number, updates: Partial<InsertChatMessage>): Promise<ChatMessage | undefined> {
+    const [updated] = await db.update(chatMessages)
+      .set(updates)
+      .where(eq(chatMessages.id, id))
+      .returning();
+    return updated;
+  }
+
+  // Pinned Contacts
+  async getPinnedContacts(userId: string): Promise<Array<PinnedContact & { contact: ChatContact }>> {
+    const pinned = await db.select().from(pinnedContacts)
+      .where(eq(pinnedContacts.userId, userId))
+      .orderBy(pinnedContacts.order);
+    
+    const result = [];
+    for (const pin of pinned) {
+      const [contact] = await db.select().from(chatContacts)
+        .where(eq(chatContacts.id, pin.contactId));
+      if (contact) {
+        result.push({ ...pin, contact });
+      }
+    }
+    return result;
+  }
+
+  async createPinnedContact(pinned: InsertPinnedContact): Promise<PinnedContact> {
+    const [created] = await db.insert(pinnedContacts).values(pinned).returning();
+    return created;
+  }
+
+  async deletePinnedContact(userId: string, contactId: number): Promise<boolean> {
+    await db.delete(pinnedContacts)
+      .where(and(
+        eq(pinnedContacts.userId, userId),
+        eq(pinnedContacts.contactId, contactId)
+      ));
+    return true;
+  }
+
+  // Digest Preferences
+  async getChatDigestPreferences(userId: string): Promise<ChatDigestPreferences | undefined> {
+    const [prefs] = await db.select().from(chatDigestPreferences)
+      .where(eq(chatDigestPreferences.userId, userId));
+    return prefs;
+  }
+
+  async upsertChatDigestPreferences(userId: string, prefs: Partial<InsertChatDigestPreferences>): Promise<ChatDigestPreferences> {
+    const existing = await this.getChatDigestPreferences(userId);
+    
+    if (existing) {
+      const [updated] = await db.update(chatDigestPreferences)
+        .set({ ...prefs, updatedAt: new Date() })
+        .where(eq(chatDigestPreferences.userId, userId))
+        .returning();
+      return updated;
+    }
+    
+    const [created] = await db.insert(chatDigestPreferences)
+      .values({ userId, ...prefs } as InsertChatDigestPreferences)
+      .returning();
+    return created;
+  }
+
+  // Daily Digests
+  async getDailyDigests(userId: string, limit: number = 30): Promise<DailyDigest[]> {
+    return db.select().from(dailyDigests)
+      .where(eq(dailyDigests.userId, userId))
+      .orderBy(desc(dailyDigests.createdAt))
+      .limit(limit);
+  }
+
+  async createDailyDigest(digest: InsertDailyDigest): Promise<DailyDigest> {
+    const [created] = await db.insert(dailyDigests).values(digest).returning();
+    return created;
+  }
+
+  async markDailyDigestRead(id: number): Promise<DailyDigest | undefined> {
+    const [updated] = await db.update(dailyDigests)
+      .set({ viewedAt: new Date() })
+      .where(eq(dailyDigests.id, id))
+      .returning();
+    return updated;
   }
 }
 

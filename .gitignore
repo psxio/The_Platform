@@ -4,3 +4,8 @@ dist
 server/public
 vite.config.ts.*
 *.tar.gz
+
+# Google Cloud service account credentials - never commit these
+attached_assets/*-*-*.json
+**/service-account*.json
+**/*credentials*.json

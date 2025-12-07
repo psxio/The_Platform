@@ -9,6 +9,7 @@ import express, {
 
 import { registerRoutes } from "./routes";
 import { setupLiveStreamServer } from "./live-stream";
+import { bootstrapServices } from "./bootstrap";
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
@@ -72,6 +73,12 @@ export default async function runApp(
 
   // Set up live stream WebSocket server
   setupLiveStreamServer(server);
+
+  // Bootstrap microservices architecture
+  // This initializes the new service-based architecture alongside legacy routes
+  log('Initializing microservices architecture...', 'bootstrap');
+  await bootstrapServices(app);
+  log('Microservices ready', 'bootstrap');
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
